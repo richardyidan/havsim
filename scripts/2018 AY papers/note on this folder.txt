@@ -1,0 +1,12 @@
+in the main folder are the main scripts which were used to generate data/results 
+which were used in the adjoint and relaxation paper. 
+the results are saved in pkl files which are located in one drive > important misc > datasets > pickle 
+or something like that. 
+in folder figures are the scripts that were used to generate tables/figures for the papers. 
+
+There are also many random scripts, which are in misc and useful misc. 
+in misc there are miscalanneous scripts, mainly things for testing/debugging purposes. 
+probalby everythign in misc is useless
+any scripts we thought might be useful (other than the ones in main and figures) are in useful misc.
+we have recorded in that file the bounds/guesses we empirically found to work well 
+for calibration. 

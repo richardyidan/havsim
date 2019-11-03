@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Oct 27 00:14:15 2019
+@author: rlk268
+
+created to debug the exception 'tracer can't be used with raw numpy functions' 
+when taking the jax derivative of a function which uses linspace. 
+"""
+
+import jax.numpy as jnp
+import jax 
+
+def testlinspace(x, *args): #does not work 
+    out = jnp.linspace(x[0],10,50) #linspace depends on parameters 
+    
+    out = x[2]*jnp.square(out)
+    out = jnp.sum(out)
+    
+    return out 
+
+def testlinspace2(x, *args): #works 
+    out = jnp.linspace(1.,50.,50) #linspace is just some array of numbers 
+    
+    out = x[2]*jnp.square(out)+x[0]*x[1]
+    out = jnp.sum(out)
+    
+    return out 
+
+x = [2.,3.,1.5]
+testobj = testlinspace(x)
+testgrad = jax.grad(testlinspace)
+testobj2 = testlinspace2(x)
+testgrad2 = jax.grad(testlinspace2)
+
+print(testgrad(x)) #throws exception, note gradient using finite differences is DeviceArray([174.48979293, 200.51020897, 316.83673001])
+#print(testgrad2(x)) #works, gives DeviceArray([  149.99968698,    99.99930626, 42924.99943404])
+
+
+#%%
+##for debugging purposes, finite difference gradient included 
+#import numpy as np 
+#
+#def fin_dif_wrapper(p,args, *eargs, eps = 1e-8, **kwargs):   
+#    #returns the gradient for function with call signature obj = objfun(p, *args)
+#    #note you should pass in 'objfun' as the last entry in the tuple for args
+#    #so objfun = args[-1]
+#    #uses first order forward difference with step size eps to compute the gradient 
+#    out = np.zeros((len(p),))
+#    objfun = args[-1]
+#    #modified
+#    args = args[:-1]
+#    obj = objfun(p,*args)
+#    for i in range(len(out)):
+#        curp = p.copy()
+#        curp[i] += eps
+#        out[i] = objfun(curp,*args)
+#    return (out-obj)/eps
+#
+#fin_dif_wrapper(x,(None,testlinspace))
+#fin_dif_wrapper(x,(None,testlinspace2))
