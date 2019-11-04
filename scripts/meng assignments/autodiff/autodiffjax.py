@@ -32,8 +32,16 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 
 #%% examples 
-def eg1(x, *args):
+def intdiv(x,n):
+    #integer divide x by n 
+    out = x / n
+    out = jnp.floor(out)
+    return out
 
+def eg1(x, *args):
+#    x[0] = x[0] // 2
+#    x = index_update(x,0,intdiv(x[0],2))
+    x[0] = x[0] // 2
     return jnp.tanh(x[0] ** 2)
 
 
@@ -87,23 +95,23 @@ def eg5(p,testdata,*args):
 
     #testdata2[0:halfway] = testdata[10:10+halfway] #set data using slices...does this break things?
 
-    index_update(testdata2, index[0:halfway], testdata[10:10+halfway])
+    testdata2 = index_update(testdata2, index[0:halfway], testdata[10:10+halfway])
 
     #testdata2[halfway:] = testdata[35:35+halfway]
 
-    index_update(testdata2, index[halfway:], testdata[35:35+halfway])
+    testdata2 = index_update(testdata2, index[halfway:], testdata[35:35+halfway])
 
 
     #out[0] = p[0] #in place setting of array
 
-    index_update(out, index[0], p[0])
+    out = index_update(out, index[0], p[0])
     
 
     out = jnp.append(out, testdata2) #concatenation of nd arrays
 
     #out[1:] = out[1:] + p #more slices and also array addition
 
-    index_update(out, index[1:], out[1:])
+    out = index_update(out, index[1:], out[1:]+p)
 
     return sum(out) #here we use default sum instead of np.sum
 
@@ -170,7 +178,7 @@ def finaleg(p,eg2, testdata2,testdata3, testdata4, testdata5, *args):
 
     #sim[0] = lead[0]
 
-    index_update(sim, index[0], lead[0])
+    sim = index_update(sim, index[0], lead[0])
 
     for i in range(testdata5-1):
 
@@ -221,7 +229,21 @@ def finaleg_jax(p, eg2, testdata2, testdata3, testdata4, testdata5, *args):
 
     # now get relax
 
-    num = testdata4[0] // p[2]
+    num = testdata4[0] // p[2] #old 
+    """
+    originally thought integer division was doing bad things. Actually I think that part is fine, the problem is linspace can't handle the gradient in this
+    case because the inputs to linspace are depending on the parameters. Interesting it didn't throw an error, but this is a good illustration of why 
+    its super important to write the code in regular python and differentiate using finite differneces/adjoint method first before
+    then converting to auto diff. Because otherwise its very easy to miss things which go wrong!
+    """
+#    #test manually doing integer division using numpy.floor
+#    num = testdata4[0] / p[2]
+#    num = jnp.floor(num)
+#    #results of test - doesn't work still
+    
+    #test only doing division
+#    num = testdata4[0]/p[2]
+    #throws typeerror ``abstract value passed to 'int' '' 
 
     end = testdata4[0] - num * p[2]
 
@@ -241,14 +263,14 @@ def finaleg_jax(p, eg2, testdata2, testdata3, testdata4, testdata5, *args):
 
     # sim[0] = lead[0]
 
-    index_update(sim, index[0], lead[0])
+    sim = index_update(sim, index[0], lead[0])
 
     for i in range(testdata5 - 1):
         # sim[i+1] = sim[i] + p[0]*eg2([lead[i],p[1],relax[i]])
 
         #modified
-        sim = index_update(sim, index[i + 1], sim[i] + p[0].primal.pval[1] * eg2(np.array([lead[i], p[1].primal.pval[1], relax[i]])))
-
+        # sim = index_update(sim, index[i + 1], sim[i] + p[0].primal.pval[1] * eg2(np.array([lead[i], p[1].primal.pval[1], relax[i]])))
+        sim = index_update(sim, index[i+1], sim[i] + p[0]*eg2(jnp.array([lead[i],p[1],relax[i]])))
     # return output
 
     out = lead - sim
@@ -337,9 +359,17 @@ def fin_dif_wrapper(p,args, *eargs, eps = 1e-8, **kwargs):
         out[i] = objfun(curp,*args)
     return (out-obj)/eps
 
-with open('autodiffeg.pkl','rb') as f:
+with open('/home/rlk268/Downloads/hav-sim-master(1)/hav-sim-master/autodiffeg.pkl','rb') as f:
     x1,x2,p,pfinal, testdata,testdata2,testdata3,testdata4,testdata5,X,Y,times,p7 = pickle.load(f)
     
+    
+#modify pfinal for test 
+#pfinal[2] = 5
+    
+#testobj1
+x1[0] = 2.4
+#woops I accidently broke obj3 and 4, it's not important don't worry about it 
+
 #get all objectives
 obj1 = eg1(x1)
 obj2 = eg2(x2)
@@ -358,13 +388,13 @@ fgrad5 = fin_dif_wrapper(p,(testdata,eg5))
 fgrad6 = fin_dif_wrapper(pfinal,(eg2,testdata2,testdata3,testdata4,testdata5,finaleg))
 fgrad7 = fin_dif_wrapper(p7,(X,Y,times,eg7))
 
-print(obj1)
-print(obj2)
-print(obj3)
-print(obj4)
-print(obj5)
-print(obj6)
-print(obj7)
+print('obj1 = '+str(obj1))
+print('obj2 = '+str(obj2))
+print('obj3 = '+str(obj3))
+print('obj4 = '+str(obj4))
+print('obj5 = '+str(obj5))
+print('obj6 = '+str(obj6))
+print('obj7 = '+str(obj7))
 
 def getDiff(grad1, grad2):
     print("jax_grad:", grad1)

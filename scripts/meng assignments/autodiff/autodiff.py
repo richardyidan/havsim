@@ -7,13 +7,15 @@ Created on Sun Sep 22 20:10:10 2019
 #from jax import grad #we want to use jax's grad function
 
 #import numpy as np #note using np and scipy functions shouldn't work; you have to use the jax versions
-#import jax.numpy as np 
+import numpy as np
+import pickle
 import scipy.interpolate as sci
 #first examples
 def eg2(x, *args):
     return np.sum(np.square(x))
 
 def eg1(x, *args):
+    x[0] = x[0] // 2
     return np.tanh(x[0]**2)
 
 
@@ -177,9 +179,14 @@ def fin_dif_wrapper(p,args, *eargs, eps = 1e-8, **kwargs):
         out[i] = objfun(curp,*args)
     return (out-obj)/eps
 
-with open('autodiffeg.pkl','rb') as f:
+with open('/home/rlk268/Downloads/hav-sim-master(1)/hav-sim-master/autodiffeg.pkl','rb') as f:
     x1,x2,p,pfinal, testdata,testdata2,testdata3,testdata4,testdata5,X,Y,times,p7 = pickle.load(f)
     
+    
+#testobj1
+x1[0] = 2.4
+
+
 #get all objectives
 obj1 = eg1(x1)
 obj2 = eg2(x2)
@@ -188,6 +195,14 @@ obj4 = eg4(p,testdata)
 obj5 = eg5(p,testdata)
 obj6 = finaleg(pfinal,eg2,testdata2,testdata3,testdata4,testdata5)
 obj7 = eg7(p7,X,Y,times)
+print('obj1 = '+str(obj1))
+print('obj2 = '+str(obj2))
+print('obj3 = '+str(obj3))
+print('obj4 = '+str(obj4))
+print('obj5 = '+str(obj5))
+print('obj6 = '+str(obj6))
+print('obj7 = '+str(obj7))
+
 
 #get all gradients using finite differences
 fgrad1 = fin_dif_wrapper(x1,(0,eg1))

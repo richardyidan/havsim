@@ -5,7 +5,7 @@
 
 import setuptools
 
-with open('README.README', 'r') as fh: 
+with open('README.readme', 'r') as fh: 
     long_description = fh.read()
     
 setuptools.setup(
