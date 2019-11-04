@@ -137,10 +137,10 @@ make it so you can plot just 1 set of data (currently both meas and sim must be 
 
 #animatevhd_list(meas,sim,platooninfo,[898, 905, 909],effective_headway=True,rp=15,show_sim=False, start = 2900, end=3000) #show measurements and simulation
 #
-animatevhd_list(meas,None,platooninfo,[898, 905, 909],effective_headway=True,rp=15,show_sim=False, start = 2900, end=3000) #show measurements and simulation
+#animatevhd_list(meas,None,platooninfo,[898, 905, 909],effective_headway=True,rp=15,show_sim=False, start = 2900, end=3000) #show measurements and simulation
 
 
-#animatevhd(meas,sim,platooninfo,[705],effective_headway=True,rp=15,show_sim=False)  #show only measurements, make sure effective_headway is working 
+animatevhd(meas,sim,platooninfo,[705],effective_headway=True,rp=15,show_sim=False)  #show only measurements, make sure effective_headway is working 
 
 #%%
 

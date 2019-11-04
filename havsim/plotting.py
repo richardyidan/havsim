@@ -869,9 +869,9 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
 
 		# animation in the velocity headway plane
 		if effective_headway:
-			leadinfo, folinfo, rinfo = makeleadfolinfo_r3([[], id], platooninfo, meas)
+			leadinfo, folinfo, rinfo = helper.makeleadfolinfo_r3([[], id], platooninfo, meas)
 		else:
-			leadinfo, folinfo, rinfo = makeleadfolinfo([[], id], platooninfo, meas)
+			leadinfo, folinfo, rinfo = helper.makeleadfolinfo([[], id], platooninfo, meas)
 
 		if end == None:
 			end = T_nm1
@@ -1077,8 +1077,8 @@ def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsi
 	# vehicle IDs.
 	from mpl_toolkits.axes_grid1 import make_axes_locatable
 	if platoon != []:
-		followerchain = platoononly(followerchain, platoon)
-	platoontraj, mytime = arraytraj(meas, followerchain, presim, postsim, datalen)
+		followerchain = helper.platoononly(followerchain, platoon)
+	platoontraj, mytime = helper.arraytraj(meas, followerchain, presim, postsim, datalen)
 	if not usetime:
 		usetime = mytime
 
