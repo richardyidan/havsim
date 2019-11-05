@@ -16,6 +16,7 @@ vectorized is doing all vehicles at the same time, sequential is doing vehicles 
 \\TO DO\\
 would like to test this in jax as well so we can figure out what the best way to integrate stuff in jax is. 
 
+There are also some tests in autodiffjax which are similar to this 
 """
 
 import time
@@ -40,6 +41,13 @@ def testtime1():
             x.append(newx)
             curx = newx
         allx.append(x)
+    if True: 
+        obj = 0
+        for i in range(len(allx)):
+            cur = np.array(allx[i])
+            obj = obj + np.mean(cur[:,0] - np.ones((201,)))
+    
+        
     return allx
             
 start = time.time()
@@ -47,7 +55,7 @@ for i in range(100):
     testtime1()
 end=  time.time()
 print('in sequential code the time was '+str(end-start))
-
+#%%
 def testtime2():
     allx = []
     curx = [[1,1] for i in range(20)]
@@ -105,3 +113,31 @@ for j in range(100):
     testtime21()
 end = time.time()
 print('in vectorized code the time was '+str(end-start))
+
+#%%
+#test using in place index assignment in numpy 
+def testtime31(): 
+    allx = []
+    for i in range(20):
+        x = np.zeros((201,2))
+        x[0,:] = np.array([1,1])
+        curx = x[0,:]
+        for i in range(200):
+            out = testnp(curx)
+            newx = curx+out
+            x[i+1,:] = newx
+            curx = newx
+        allx.append(x)
+        
+    if True: 
+        obj = 0
+        for i in range(len(allx)):
+            cur = np.array(allx[i])
+            obj = obj + np.mean(cur[:,0] - np.ones((201,)))
+    return allx
+
+start = time.time()
+for j in range(100):
+    testtime31()
+end = time.time()
+print('in place numpy code the time was '+str(end-start))
