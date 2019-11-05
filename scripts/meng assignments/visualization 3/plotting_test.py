@@ -230,9 +230,9 @@ plotflows(testmeas,[[200,400],[800,1000]],[0,1000],300,'line')
 
 testmeas2 = {}
 for i in range(3):
-    testmeas[i] = np.zeros((1001,3))
-    testmeas[i][:,1] = np.linspace(0+100*i,1000+100*i,1001)
-    testmeas[i][:,2] = np.linspace(0,1000,1001)
+    testmeas2[i] = np.zeros((1001,3))
+    testmeas2[i][:,1] = np.linspace(0+100*i,1000+100*i,1001) #equivalent to list(range(1001+100*i))[100*i:]
+    testmeas2[i][:,2] = np.linspace(0,1000,1001)
 
 """
 TO DO
