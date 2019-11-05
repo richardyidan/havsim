@@ -29,7 +29,7 @@ import pickle
 
 from jax.config import config
 
-config.update("jax_enable_x64", True)
+#config.update("jax_enable_x64", True) #if you want float 64 in jax this is the command 
 
 #%% examples 
 def intdiv(x,n):
@@ -543,3 +543,43 @@ print('obj is '+str(testobj)+' calculated in '+str(objtime))
 print('jax grad is '+str(testgrad)+' calculated in '+str(gradtime))
 print('normed residual is '+str(jnp.array([testgrad[0]-testfin[0],testgrad[1]-testfin[1]]/jnp.linalg.norm(testfin))))
 
+#%%
+#test a program in jax when it is using in place assignments in numpy
+
+def testnp(x):
+    return jnp.array([x[1],x[0]**.5+x[1]**.5+.01*x[1]+.02*x[0]])
+
+def testtime31(p,*args): 
+    allx = []
+    for i in range(20):
+        x = jnp.zeros((201,2))
+#        x[0,:] = jnp.array([1,1])
+        x = index_update(x, index[0,:],jnp.array([p[0],p[1]]))
+        curx = x[0,:]
+        for i in range(200):
+            out = testnp(curx)
+            newx = curx+out
+#            x[i+1,:] = newx
+            x = index_update(x,index[i+1,:],newx)
+            curx = newx
+        allx.append(x)
+        
+    if True: 
+        obj = 0
+        for i in range(len(allx)):
+            cur = jnp.array(allx[i])
+            obj = obj + jnp.mean(cur[:,0] - jnp.ones((201,)))
+    return obj
+p = [1.,1.]
+start = time.time()
+testobj = testtime31(p)
+end = time.time()
+print('obj time is '+str(end-start))
+
+gradtest = grad(testtime31)
+start = time.time()
+testgrad = gradtest(p)
+end = time.time()
+print('grad time is '+str(end-start))
+
+testfin = fin_dif_wrapper(p,(0,testtime31))
