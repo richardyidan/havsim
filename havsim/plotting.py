@@ -625,6 +625,14 @@ def platoonplot(meas, sim, followerchain, platoon=[], Colors=False, speed=False,
 def calculateflows(meas, spacea, timea, agg):
 	q = [[] for i in spacea]
 	k = [[] for i in spacea]
+    #ronan modification - calculate minimum and maximum space, minimum and maximum time
+#spacealist = []
+#for i in spacea: 
+#    spacealist.extend(i)
+#spacemin = min(spacealist)
+#spacemax = max(spacealist)
+#timemin = min(timea)
+#timemax = max(timea)
 
 	intervals = []
 	start = timea[0]
@@ -643,6 +651,10 @@ def calculateflows(meas, spacea, timea, agg):
 
 	for id in meas:
 		data = meas[id]
+        #ronan modification  - prune data so we don't have to look over as many datapoints
+#data = data[np.all([data[:,1] < timemax, data[:,1]>timemin], axis=0)]
+#data = data[np.all([data[:,2] < spacemax, data[:,2]>spacemin], axis=0)]
+        
 		region_contained = []
 		region_data = {}
 		for i in data:
@@ -651,7 +663,7 @@ def calculateflows(meas, spacea, timea, agg):
 			t_id = -1
 			s_id = -1
 			for j in range(len(intervals)):
-				if t<=intervals[j][1] and t>=intervals[j][0]:
+				if t<=intervals[j][1] and t>=intervals[j][0]: 
 					t_id = j
 			for j in range(len(spacea)):
 				if s<=spacea[j][1] and s>=spacea[j][0]:
@@ -686,7 +698,8 @@ def plotflows(meas, spacea, timea, agg, type = 'FD', FDagg= None):
 	"""
 	aggregates microscopic data into macroscopic quantities based on Edie's generalized ... definitions of traffic variables
 	meas = measurements, in usual format (dictionary where keys are vehicle IDs, values ... are numpy arrays)
-	spacea = reads as ``space A'' (where A is the region where the macroscopic quantities ... are being calculated). list of lists, each nested list is a length 2 list which ... represents the starting and ending location on road. So if len(spacea) >1 there ... will be multiple regions on the road which we are tracking
+	spacea = reads as ``space A'' (where A is the region where the macroscopic quantities ... are being calculated). 
+    list of lists, each nested list is a length 2 list which ... represents the starting and ending location on road. So if len(spacea) >1 there ... will be multiple regions on the road which we are tracking
 	e.g. spacea = [[200,400],[800,1000]], calculate the flows in regions 200 to 400 and ... 800 to 1000 in meas.
 	timea = reads as ``time A'', should be a list of the times (in the local time of the ... data). E.g. timea = [1000,3000] calculate times between 1000 and 3000.
 	agg = aggregation length, float number which is the length of each aggregation ... interval. E.g. agg = 300 each measurement of the macroscopic quantities is over ... 300 time units in the data, so in NGSim where each time is a frameID with length ... .1s, we are aggregating every 30 seconds.
@@ -2369,12 +2382,12 @@ def overlaphelp(meas1, meas2):
     #uses functions sequential and indjumps from calibration 
     
     #get indices of the sequential data 
-    ind1 = sequential(meas1)
-    ind2 = sequential(meas2)
+    ind1 = helper.sequential(meas1)
+    ind2 = helper.sequential(meas2)
     
     #change the indices into times 
-    times1 = indtotimes(ind1,meas1)
-    times2 = indtotimes(ind2,meas2)
+    times1 = helper.indtotimes(ind1,meas1)
+    times2 = helper.indtotimes(ind2,meas2)
     #booking keeping, output will be the parts of meas we can use to compute the distance 
     outtimes = []
     outind1 = []

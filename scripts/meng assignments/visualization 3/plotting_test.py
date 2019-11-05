@@ -185,13 +185,58 @@ vehlist = []
 
 # calculateflows(meas,[[200,400], [800, 1000]], [1000, 3000], 300)
 
-meas_test = {}
-count = 0
-maxCount = 500
-for i in meas:
-    meas_test[i] = meas[i]
-    count+=1
-    if count == maxCount:
-        break
+#with open('/Users/qiwuzou/Documents/assignment/M.Eng/follow_up/hav-sim-master/visualization/plottingtesting.pkl','rb') as f:
 
-plotflows(meas_test,[[200,400], [800, 1000]], [1000, 3000], 100, 'FD')
+import pickle 
+with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/plottingtesting.pkl','rb') as f:
+    meas, platooninfo, platoonlist, sim = pickle.load(f)
+
+vehlist = []
+[vehlist.extend(i[1:]) for i in platoonlist]
+
+from havsim.plotting import platoonplot, calculateflows, plotflows
+
+#meas_test = {}
+#count = 0
+#maxCount = 500
+#for i in meas:
+#    meas_test[i] = meas[i]
+#    count+=1
+#    if count == maxCount:
+#        break
+
+#heres a better way to test meas: 
+for i in meas: 
+    meas[i] = meas[i][meas[i][:,1]<3000] #only keep trajectories with time less than 3000
+    
+
+plotflows(meas,[[400,600], [800, 1000]], [1000, 3000], 300, 'line') 
+
+#test easy example to make sure things are working right 
+#%%
+import numpy as np 
+testmeas = {}
+for i in range(0):
+    testmeas[i] = np.zeros((1001,3))
+    testmeas[i][:,1] = np.linspace(0,1000,1001)
+    testmeas[i][:,2] = np.linspace(0,1000,1001)
+#3 vehicles, all of them have s = 0-1000. the times are 0-1000 for vehicle 0
+
+plotflows(testmeas,[[200,400],[800,1000]],[0,1000],300,'line')
+#first line should be made up of points (100/60000, 100/60000, 0, 0) on times (0,300,600,900)
+#second line should be made up of points (0, 0, 100/60000,100/20000)
+#see paper for work done to get this. 
+#may want to also look at output from calculate flows 
+
+testmeas2 = {}
+for i in range(3):
+    testmeas[i] = np.zeros((1001,3))
+    testmeas[i][:,1] = np.linspace(0+100*i,1000+100*i,1001)
+    testmeas[i][:,2] = np.linspace(0,1000,1001)
+
+"""
+TO DO
+figure out what the right values should be for the below example and verify that the function is giving the correct values. 
+"""
+
+plotflows(testmeas2, [[200,400],[800,1000]],[0,1000],300,'line')
