@@ -24,12 +24,13 @@ from jax.ops import *
 
 from jax import jit
 import pickle
-
+from jax import lax 
+import copy 
 
 
 from jax.config import config
 
-#config.update("jax_enable_x64", True) #if you want float 64 in jax this is the command 
+config.update("jax_enable_x64", True) #if you want float 64 in jax this is the command 
 
 #%% examples 
 def intdiv(x,n):
@@ -57,7 +58,7 @@ def eg3(p, *args):
 
     for i in range(len(p)):
 
-        out += eg1([p[i]]) #note += is not allowed
+        out = out + eg1([p[i]]) #note += is not allowed
 
     return out 
 
@@ -78,8 +79,29 @@ def eg4(p,testdata, *args):
             out = out + eg1([p[i]])
 
     return out 
-
-
+ 
+#Code for a jax friendly linspace graciously provided by levskaya, contributor to jax package 
+    #note that this functino uses both ordinary and jax numpy. Be careful. 
+def linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, 
+             axis=0):
+  """Implementation of linspace differentiable w.r.t. start and stop args."""
+  lax._check_user_dtype_supported(dtype, "linspace")
+  dtype = np.float32 if dtype is None else dtype
+  bounds_shape = list(lax.broadcast_shapes(np.shape(start), np.shape(stop)))
+  axis = len(bounds_shape) if axis == -1 else axis
+  bounds_shape.insert(axis, 1)
+  iota_shape = [1,] * len(bounds_shape)
+  iota_shape[axis] = num
+  delta = (stop - start) / num
+  if endpoint:
+    delta *= num / (num - 1)
+  out = (jnp.reshape(start, bounds_shape) + 
+         jnp.reshape(lax.iota(dtype, num), iota_shape) * 
+         jnp.reshape(delta, bounds_shape))
+  if retstep:
+    return jnp.array(out, dtype=dtype), delta
+  else:
+    return jnp.array(out, dtype=dtype)
 
 def eg5(p,testdata,*args):
 
@@ -157,10 +179,12 @@ def finaleg(p,eg2, testdata2,testdata3, testdata4, testdata5, *args):
     #now get relax
 
     num = testdata4[0] // p[2]
+#    print(num)
+#    temp = copy.deepcopy(num)
 
     end = testdata4[0] - num*p[2]
 
-    temp = jnp.linspace(testdata4[0], end, int(num + 1))
+    temp = linspace(testdata4[0], end, int(num + 1))
 
     lenrelax = len(relax[5:])
 
@@ -184,7 +208,7 @@ def finaleg(p,eg2, testdata2,testdata3, testdata4, testdata5, *args):
 
         #sim[i+1] = sim[i] + p[0]*eg2([lead[i],p[1],relax[i]])
 
-        sim = index_update(sim, index[i+1], sim[i] + p[0]*eg2(np.array([lead[i],p[1],relax[i]])))
+        sim = index_update(sim, index[i+1], sim[i] + p[0]*eg2(jnp.array([lead[i],p[1],relax[i]])))
 
         
 
@@ -343,7 +367,7 @@ def eg7(p,X,Y,times):
 
 #%% you can test your gradient is correct like this 
 
-def fin_dif_wrapper(p,args, *eargs, eps = 1e-8, **kwargs):   
+def fin_dif_wrapper(p,args, *eargs, eps = 1e-4, **kwargs):   
     #returns the gradient for function with call signature obj = objfun(p, *args)
     #note you should pass in 'objfun' as the last entry in the tuple for args
     #so objfun = args[-1]
@@ -441,6 +465,8 @@ p7 = list(map(float, p7))
 jaxgrad7 = grad(eg7)(p7, X,Y,times)
 print("eg7")
 getDiff(jaxgrad7,fgrad7)
+
+
 """
 \\ TO DO \\
 get gradient of all examples using jax
@@ -450,136 +476,18 @@ np.linalg.norm(jaxgrad1-fgrad1)/np.linalg.norm(fgrad1)
 and 
 np.divide(jaxgrad1-fgrad1,fgrad1)
 """
-#%%
-#extra tests by ronan 
-
-import jax
-from jax import grad 
-from jax.ops import *
-from jax import jit
-import jax.numpy as jnp
-
-def fin_dif_wrapper(p,args, *eargs, eps = 1e-4, **kwargs):   
-    #returns the gradient for function with call signature obj = objfun(p, *args)
-    #note you should pass in 'objfun' as the last entry in the tuple for args
-    #so objfun = args[-1]
-    #uses first order forward difference with step size eps to compute the gradient 
-    out = np.zeros((len(p),))
-    objfun = args[-1]
-    #modified
-    args = args[:-1]
-    obj = objfun(p,*args)
-    for i in range(len(out)):
-        curp = p.copy()
-        curp[i] += eps
-        out[i] = objfun(curp,*args)
-    return (out-obj)/eps
-
-
-def test(p):
-    out = []
-    for i in p:
-        out.append(i**2)
-    out = jnp.array(out)
-    return jnp.mean(out)*3
-
-p = [1.,2.,3.]
-
-testobj =test(p)
-
-gradtest = grad(test)
-testgrad = gradtest(p)
-
-
-#surprisingly...it works? So default lists are supported by jax it looks like
-#%%
-#test a program that has the same structure as euler integration scheme
-import time 
-
-def testfun(x):
-    return [x[1],x[0]**.5+x[1]**.5+.01*x[1]+.02*x[0]]
-
-#def testnp(x):
-#    return np.array([x[1],x[0]**.5+x[1]**.5+.01*x[1]+.02*x[0]])
-
-def testtime1(p, *args): 
-    allx = []
-    obj = 0
-    for i in range(20):
-        x = [[p[0],p[1]]]
-        curx = x[0]
-        newx = [None,None]
-        for i in range(200):
-            out = testfun(curx)
-            newx[0] = curx[0]+out[0]
-            newx[1] = curx[1]+out[1]
-            x.append(newx)
-            curx = newx
-        allx.append(x)
-    for i in range(len(allx)):
-        cur = jnp.array(allx[i])
-        obj = obj + jnp.mean(cur[:,0] - jnp.ones((201,)))
-        
-    
-        
-    return obj
-
-p= [1.,1.]
-start = time.time()
-testobj = testtime1(p)
-end = time.time()
-objtime = end-start
-
-
-gradtest = grad(testtime1)
-start = time.time()
-testgrad = gradtest(p)
-end = time.time()
-gradtime = end-start
-
-testfin = fin_dif_wrapper(p,(0,testtime1))
-testfin = jnp.array(testfin)
-print('obj is '+str(testobj)+' calculated in '+str(objtime))
-print('jax grad is '+str(testgrad)+' calculated in '+str(gradtime))
-print('normed residual is '+str(jnp.array([testgrad[0]-testfin[0],testgrad[1]-testfin[1]]/jnp.linalg.norm(testfin))))
 
 #%%
-#test a program in jax when it is using in place assignments in numpy
+#test only finaleg6
+##this version is working!!!!! :)
+obj6 = finaleg(pfinal,eg2,testdata2,testdata3,testdata4,testdata5)
+print(obj6)
+fgrad6 = fin_dif_wrapper(pfinal,(eg2,testdata2,testdata3,testdata4,testdata5,finaleg))
+jaxgrad6 = grad(finaleg)(pfinal, eg2,testdata2,testdata3,testdata4,testdata5)
+print("finaleg")
+getDiff(jaxgrad6, fgrad6)
 
-def testnp(x):
-    return jnp.array([x[1],x[0]**.5+x[1]**.5+.01*x[1]+.02*x[0]])
 
-def testtime31(p,*args): 
-    allx = []
-    for i in range(20):
-        x = jnp.zeros((201,2))
-#        x[0,:] = jnp.array([1,1])
-        x = index_update(x, index[0,:],jnp.array([p[0],p[1]]))
-        curx = x[0,:]
-        for i in range(200):
-            out = testnp(curx)
-            newx = curx+out
-#            x[i+1,:] = newx
-            x = index_update(x,index[i+1,:],newx)
-            curx = newx
-        allx.append(x)
-        
-    if True: 
-        obj = 0
-        for i in range(len(allx)):
-            cur = jnp.array(allx[i])
-            obj = obj + jnp.mean(cur[:,0] - jnp.ones((201,)))
-    return obj
-p = [1.,1.]
-start = time.time()
-testobj = testtime31(p)
-end = time.time()
-print('obj time is '+str(end-start))
+#%%
+#extra tests by ronan - moved to fall 2019 folder for random tests 
 
-gradtest = grad(testtime31)
-start = time.time()
-testgrad = gradtest(p)
-end = time.time()
-print('grad time is '+str(end-start))
-
-testfin = fin_dif_wrapper(p,(0,testtime31))

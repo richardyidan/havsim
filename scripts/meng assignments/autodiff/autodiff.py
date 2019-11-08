@@ -212,6 +212,13 @@ fgrad4 = fin_dif_wrapper(p,(testdata,eg4))
 fgrad5 = fin_dif_wrapper(p,(testdata,eg5))
 fgrad6 = fin_dif_wrapper(pfinal,(eg2,testdata2,testdata3,testdata4,testdata5,finaleg))
 fgrad7 = fin_dif_wrapper(p7,(X,Y,times,eg7))
+print('grad = '+str(fgrad1))
+print('grad = '+str(fgrad2))
+print('grad = '+str(fgrad3))
+print('grad = '+str(fgrad4))
+print('grad = '+str(fgrad5))
+print('grad = '+str(fgrad6))
+print('grad = '+str(fgrad7))
 
 """
 \\ TO DO \\
