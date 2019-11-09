@@ -11,6 +11,8 @@ All calibration related functions which set up optimization problems, including 
 		
 	HIGH PRIORITY 
 		-being able to use autodifferentiation so we don't have to rely on adjoint calculation 
+		-want to rewrite the platoonobjfn to use python lists and be vectorized - should have similar construction to simulation code
+        	-function for delay and LL model needs to be tested/debugged still
 	
 	
     general features/QOL 
