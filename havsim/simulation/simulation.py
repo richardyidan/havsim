@@ -4,17 +4,20 @@
 houses the main code for running simulations 
 
 TO DO //
-    update model to use for testing purposes
     test and debug simulate_cir and simulate_step. 
 
     implementing boundary conditions
     
     getting networks working
     
+    add some control models and write extended abstract
+    
+    adding lane changing and multi lane 
+    
     how to do the adjoint calculation
     
-    some tool for creating custom models out of modular parts, which should be part of models subpackage. 
     
+    some tool for creating custom models out of modular parts, which should be part of models subpackage. 
     need to think about how to use modelinfo to implement all the parts of models that we need
     
 """
@@ -44,10 +47,17 @@ def simulate_cir(curstate, auxinfo, modelinfo, L, timesteps, dt) :
         #update states
         nextstate, auxinfo, modelinfo = simulate_step(curstate,auxinfo,modelinfo,dt)
         
-        #check for wraparound 
+        #check for wraparound and if we need to update any special states for circular 
+        #modelinfo[ID][1] is True if leader has wrapped around but follower has not 
         for i in curstate.keys():
-            if curstate[i][0] > L:
-                curstate[i][0] = curstate[i][0] - L
+            if modelinfo[i][1]: #if in activated 
+                if curstate[i][0] > L: #follower wraps around so can reset 
+                    curstate[i][0] = curstate[i][0] - L
+                    modelinfo[i][1] = 0
+            else: 
+                if curstate[auxinfo[i][1]][0] > L: #if leader wraps around
+                    if curstate[i][0] <= L:
+                        modelinfo[i][1] = 1 #active wrap around state for i 
         
         #update iteration
         curstate = nextstate
@@ -95,7 +105,7 @@ def simulate_step(curstate, auxinfo, modelinfo, dt):
         leadlen = auxinfo[leadid][0]
         
         #call model for vehicle
-        out = auxinfo[i][4](curstate[i],lead,auxinfo[i][3],leadlen, dt=dt)
+        out = auxinfo[i][4](curstate[i],lead,auxinfo[i][3],leadlen, modelinfo[i], dt=dt)
         
         #update position in nextstate for vehicle
         nextstate[i] = [curstate[i][0] + dt* out[0], curstate[i][1] + dt*out[1]]
