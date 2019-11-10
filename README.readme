@@ -7,8 +7,10 @@ The two main use cases are
 compared to other available software packages/traffic microsimulators, hav-sim has the following unique characteristics
 	-being able to take the gradient of traffic simulations makes it well suited for solving optimization problems.
 	-state of the art methodology for calibration and control uses convex optimization, deep learning, and reinforcement learning
+	
+Some other nice things about the package are as follows
+	-open source and modular design written all in python makes it simple to trace exactly what is happening and implement your own models and algorithms 
 	-easily interface with software packages such as tensorflow, garage, nlopt, jax 
 	-implements and benchmarks many recent models and algorithms
-	-open source and modular design written all in python makes it simple to trace exactly what is happening and implement your own models and algorithms 
 	-built in functionality for loading data and working with modern traffic datasets
 	-detailed plotting and animation api to visualize datasets and results 
