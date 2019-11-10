@@ -4,13 +4,15 @@
 houses the main code for running simulations 
 
 TO DO //
-    test and debug simulate_cir and simulate_step. 
-
-    implementing boundary conditions
+    implementing boundary conditions (for now do the simplest possible)
     
-    getting networks working
+    getting networks working (need to handle changing roads, some rule for merging)
     
     add some control models and write extended abstract
+    
+    may want to add follower to auxinfo
+    
+    model with persistent noise added, model which takes in a specified perturbation
     
     adding lane changing and multi lane 
     
@@ -46,21 +48,26 @@ def simulate_cir(curstate, auxinfo, modelinfo, L, timesteps, dt) :
     sim = {i:[curstate[i]] for i in curstate.keys()}
     
     
-    for j in timesteps: 
+    for j in range(timesteps): 
         #update states
         nextstate, auxinfo, modelinfo = simulate_step(curstate,auxinfo,modelinfo,dt)
         
         #check for wraparound and if we need to update any special states for circular 
         #modelinfo[ID][1] is True if leader has wrapped around but follower has not 
+        temp = [] #keep track of vehicles which wrap-around in next timestep
         for i in nextstate.keys():
             if modelinfo[i][1]: #if in activated 
                 if nextstate[i][0] > L: #follower wraps around so can reset 
-                    nextstate[i][0] = nextstate[i][0] - L
+                    temp.append(i)
                     modelinfo[i][1] = 0
             else: 
                 if nextstate[auxinfo[i][1]][0] > L: #if leader wraps around
                     if nextstate[i][0] <= L:
                         modelinfo[i][1] = 1 #active wrap around state for i 
+                    else:  #edge case where both leader and vehicle wrap around in same time step
+                        temp.append(i)
+        for i in temp: 
+            nextstate[i][0] = nextstate[i][0] - L
         
         #update iteration
         curstate = nextstate
@@ -108,7 +115,7 @@ def simulate_step(curstate, auxinfo, modelinfo, dt):
         leadlen = auxinfo[leadid][0]
         
         #call model for vehicle
-        out = auxinfo[i][4](curstate[i],lead,auxinfo[i][3],leadlen, modelinfo[i], dt=dt)
+        out = auxinfo[i][4](curstate[i],lead,auxinfo[i][3],leadlen, *modelinfo[i], dt=dt)
         
         #update position in nextstate for vehicle
         nextstate[i] = [curstate[i][0] + dt* out[0], curstate[i][1] + dt*out[1]]
@@ -142,9 +149,9 @@ def eq_circular(p, length, model, eqlfun, n, L = None, v = None, perturb = 1e-2)
         return
     elif L == None: 
         s = eqlfun(p,None,v,find='s')
-        L = s*n
+        L = (s+length)*n
     elif v == None: 
-        s = L / n 
+        s = L / n - length
         v = eqlfun(p,s,None,find='v')
         
     #initialize based on equilibrium
@@ -153,9 +160,8 @@ def eq_circular(p, length, model, eqlfun, n, L = None, v = None, perturb = 1e-2)
     initstate[0][1] = initstate[0][1] + perturb
     
     #create auxinfo
-    auxinfo = {0: [length, n-1, 0, p, model, 1, 1, []]}
-    for i in range(n-1):
-        auxinfo[i+1] = [length, i, 0, p, model, 1, 1, []]
+    auxinfo = {i: [length, i+1, 0, p, model, 1, 1, []] for i in range(n)}
+    auxinfo[n-1][1] = 0 #last vehicle needs to follow first 
         
     #create modelinfo
     modelinfo = {i: [L, 0] for i in range(n)}

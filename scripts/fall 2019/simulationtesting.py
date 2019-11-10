@@ -21,8 +21,9 @@ oscillation growth has been given
 
 @author: rlk268
 """
-from simulation import * 
-from calibration import optimalvelocity
+from havsim.simulation.simulationold import * 
+from havsim.simulation.modelsold import * 
+from havsim.plotting import vehplot, hd
 
 #simulation results from large simulation 
 #with open('simeg33.33-1.1-2-.9-1.5IDMb3.pkl','rb') as f:
@@ -35,12 +36,13 @@ from calibration import optimalvelocity
 #CHOOSE A DISTURBANCE TYPE FROM THE COMMENTS BELOW. DEFAULT EQUILIBRIUM SPEED IS 30 FT/S. CHANGE BY CHANGING SPEEDOFFSET. 
 #CHOOSE SIMLEN AND N TO MAKE BIGGER SIMULATIONS WHICH TAKE LONGER TO RUN 
 #CAN ALSO CHANGE THE MODEL USED AND THE MODEL PARAMETERS. 
-simlen = 20000
-N = 800
+simlen = 3000
+N = 80
 speedoffset = -15
 length = 5
 velocity = [30 for i in range(simlen)]
-velocity[0:200] = [1/10*(.1*(i)-10)**2+20 for i in range(200)] #polynomial disturbance 
+#velocity[0:200] = [1/10*(.1*(i)-10)**2+20 for i in range(200)] #polynomial disturbance 
+velocity[0] = 30.1
 
 #velocity[2300:3300] = [18 for i in range(1000)]
 
@@ -85,7 +87,7 @@ universe = [v1]
 
 
 #IDM ####################
-p = [33.33,1.5,2,1.1,1.5] #33.33, 1.5, 2, 1.1, 1.5
+p = [33.33,1.5,2,.9,1.5] #33.33, 1.5, 2, 1.1, 1.5
 headway = eql(IDM_b3,30+speedoffset,p, length)
 prev = 0
 for i in range(N):
@@ -133,7 +135,7 @@ hd(universe[2],universe[3])
 
 #%% test example of finding autonomous vehicle best strategy 
 
-from simulation import * 
+#from simulation import * 
 #model= OVM_lb2 
 #model = IDM_b3
 #prate = [0,4,5,9,14,15,19,24,25,29]
