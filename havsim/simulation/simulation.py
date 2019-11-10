@@ -18,7 +18,8 @@ TO DO //
     
     
     some tool for creating custom models out of modular parts, which should be part of models subpackage. 
-    need to think about how to use modelinfo to implement all the parts of models that we need
+    need to think about how to use modelinfo to implement all the parts of models that we need, and how
+    to automatically get the gradient as easily as possible 
     
 """
 
@@ -37,7 +38,9 @@ def simulate_cir(curstate, auxinfo, modelinfo, L, timesteps, dt) :
     outputs - 
     sim - all simulated states 
     auxinfo - updated auxinfo
-    modelinfo - updated modelinfo
+    modelinfo - updated modelinfo, first entry is L, second entry is whether we are in wrap-around state. 
+    The wraparound state happens when our leader wraps around the road, but we haven't yet. 
+    Thus the headway calculation needs to have L added to it. 
     """
     #initialize
     sim = {i:[curstate[i]] for i in curstate.keys()}
@@ -49,14 +52,14 @@ def simulate_cir(curstate, auxinfo, modelinfo, L, timesteps, dt) :
         
         #check for wraparound and if we need to update any special states for circular 
         #modelinfo[ID][1] is True if leader has wrapped around but follower has not 
-        for i in curstate.keys():
+        for i in nextstate.keys():
             if modelinfo[i][1]: #if in activated 
-                if curstate[i][0] > L: #follower wraps around so can reset 
-                    curstate[i][0] = curstate[i][0] - L
+                if nextstate[i][0] > L: #follower wraps around so can reset 
+                    nextstate[i][0] = nextstate[i][0] - L
                     modelinfo[i][1] = 0
             else: 
-                if curstate[auxinfo[i][1]][0] > L: #if leader wraps around
-                    if curstate[i][0] <= L:
+                if nextstate[auxinfo[i][1]][0] > L: #if leader wraps around
+                    if nextstate[i][0] <= L:
                         modelinfo[i][1] = 1 #active wrap around state for i 
         
         #update iteration
@@ -64,7 +67,7 @@ def simulate_cir(curstate, auxinfo, modelinfo, L, timesteps, dt) :
         for i in curstate.keys(): 
             sim[i].append(curstate[i])
             
-    return sim,auxinfo,modelinfo
+    return sim,curstate, auxinfo,modelinfo
 
 def simulate_net():
     """
@@ -112,3 +115,50 @@ def simulate_step(curstate, auxinfo, modelinfo, dt):
         
         
     return nextstate, auxinfo, modelinfo
+
+def eq_circular(p, length, model, eqlfun, n, L = None, v = None, perturb = 1e-2):
+    #given circular road with length L with n vehicles which follow model model with parameters p, 
+    #solves for the equilibrium solution and initializes vehicles in this circular road in the eql solution, 
+    #with the perturbation perturb applied to one of the vehicles. 
+    #you can eithe initialize L, in which case it will solve for v, or you can 
+    #initialize v, and it will solve for the L. 
+    #inputs - 
+    #p- model parameters (scalar)
+    #length - length of vehicles (scalar)
+    #model - function for the model 
+    #n - number of vehicles
+    #l = None - length of circular test track
+    #v = None - eq'l speed used 
+    #perturb = 1e-2 - how much to perturb from the eql solution
+    
+    #outputs - 
+    #curstate - state of the eql solution with perturbation
+    #auxinfo - initialized auxiliary info for simulation
+    #modelinfo - initialized model info for simulation 
+    
+    #first we need to solve for the equilibrium solution which forms the basis for the IC. 
+    if L == None and v == None: 
+        print('you need to specify either L or v to create the equilibrium solution')
+        return
+    elif L == None: 
+        s = eqlfun(p,None,v,find='s')
+        L = s*n
+    elif v == None: 
+        s = L / n 
+        v = eqlfun(p,s,None,find='v')
+        
+    #initialize based on equilibrium
+    initstate = {i: [s*i,v] for i in range(n)}
+    initstate[0][0] = initstate[0][0] + perturb #apply perturbation
+    initstate[0][1] = initstate[0][1] + perturb
+    
+    #create auxinfo
+    auxinfo = {0: [length, n-1, 0, p, model, 1, 1, []]}
+    for i in range(n-1):
+        auxinfo[i+1] = [length, i, 0, p, model, 1, 1, []]
+        
+    #create modelinfo
+    modelinfo = {i: [L, 0] for i in range(n)}
+    modelinfo[n-1][1] = 1 #last vehicle starts in wrap-around state. 
+    
+    return initstate, auxinfo, modelinfo, L

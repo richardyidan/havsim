@@ -10,6 +10,16 @@ bounds on velocity/acceleration, or extra regimes, or have something like
 random noise added or not. 
 
 Something like a wrapper function which can accept different parts and combine them into one single thing
+
+models should have the following call signature: 
+    veh - list of state of vehicle model is being applied to
+    lead - list of state for vehicle's leader
+    p - parameters
+    leadlen - length of lead vehicle
+    *args - additional inputs should be stored in modelinfo dict, and passed through *args
+    dt = .1 - timestep 
+    
+    they return the derivative of the state i.e. how to update in the next timestep 
 """
 
 import numpy as np 
@@ -34,3 +44,55 @@ def IDM_b3(veh, lead, p,leadlen, *args,dt=.1):
         outddx = -veh[1]/dt
     
     return [outdx, outddx]
+
+def IDM_b3_eql(p, s, v, find = 's', maxs = 1e4):
+    #finds equilibrium solution for s or v, given the other
+    
+    #find = s - finds equilibrium headway (s) given speed v, 
+    #find = v - finds equilibrium velocity (v) given s 
+    
+    if find == 's':
+        s = ((p[2]+p[1]*v)**2/(1- (v/p[0])**4))**.5
+        return s 
+    if find == 'v':
+        eqlfun = lambda x: ((p[2]+p[1]*x)**2/(1- (x/p[0])**4))**.5 - s
+        v = sc.bisect(eqlfun, 0, maxs)
+        return v
+
+"""
+in general, I think it is better to just manually solve for the equilibrium solution when possible
+instead of using root finding on the model naively. 
+I also think eql might be better if it uses bisection instead of newton since bisection 
+is more robust, and assuming we are just looking for headway or velocity
+we can give bracketing bounds based on intuition
+"""
+def eql(model, v, p, length, tol=1e-4): 
+    #finds equilibrium headway for a given speed and parameters value for second order model 
+    #there should only be a single root 
+    def wrapperfun(x):
+        dx, ddx = model(0,v,x,v,p,length)
+        return ddx
+    
+    guess = 10
+    headway = 0
+    try:
+#        headway = sc.newton(wrapperfun, x0=guess,maxiter = 50) #note might want to switch newton to bisection with arbitrarily large headway 
+        headway = sc.bisect(wrapperfun, 0, 1e4)
+    except RuntimeError: 
+        pass
+    counter = 0
+    
+    while abs(wrapperfun(headway)) > tol and counter < 20: 
+        guess = guess + 10
+        try:
+            headway = sc.newton(wrapperfun, x0=guess,maxiter = 50)
+        except RuntimeError: 
+            pass
+        counter = counter + 1
+        
+        testout = model(0,v,headway,v,p,length)
+        if testout[1] ==0:
+            return headway 
+        
+    return headway
+
