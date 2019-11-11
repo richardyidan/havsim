@@ -8,16 +8,13 @@ TO DO //
     
     getting networks working (need to handle changing roads, some rule for merging)
     
+    some quick modifications to get plotting api to work on sim format would be great
+    
     add some control models and write extended abstract
-    
-    may want to add follower to auxinfo
-    
-    model with persistent noise added, model which takes in a specified perturbation
     
     adding lane changing and multi lane 
     
     how to do the adjoint calculation
-    
     
     some tool for creating custom models out of modular parts, which should be part of models subpackage. 
     need to think about how to use modelinfo to implement all the parts of models that we need, and how
@@ -168,3 +165,32 @@ def eq_circular(p, length, model, eqlfun, n, L = None, v = None, perturb = 1e-2)
     modelinfo[n-1][1] = 1 #last vehicle starts in wrap-around state. 
     
     return initstate, auxinfo, modelinfo, L
+
+def simcir_obj(p, initstate, auxinfo, modelinfo, L, timesteps, idlist, model, objfun, dt = .1):
+    #p - parameters for AV 
+    #idlist - vehicle IDs which will be controlled 
+    #model - parametrization for AV 
+    for i in idlist: 
+        auxinfo[i][3] = p
+        auxinfo[i][4] = model
+        
+    sim, curstate, auxinfo, modelinfo = simulate_cir(initstate, auxinfo, modelinfo, L, timesteps, dt)
+    obj = sv_obj(sim, auxinfo)
+    
+    return obj
+
+def sv_obj(sim, auxinfo):
+    #maximize squared velocity = sv 
+    obj = 0 
+    for i in sim.keys(): 
+        for j in sim[i]: #squared velocity 
+            obj = obj - [j][1]**2
+        for j in range(len(sim[i])): #penality for collisions
+            lead = auxinfo[i][1]
+            leadx = sim[lead][j][0]
+            leadlen = auxinfo[lead][0]
+            s = leadx - leadlen - sim[i][j][0]
+            if s < .5:
+                obj = obj + 2**(-10*(s-.5)) - 1
+    return obj 
+
