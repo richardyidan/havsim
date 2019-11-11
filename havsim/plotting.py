@@ -622,17 +622,93 @@ def platoonplot(meas, sim, followerchain, platoon=[], Colors=False, speed=False,
 
 
 
+# def calculateflows(meas, spacea, timea, agg):
+# 	q = [[] for i in spacea]
+# 	k = [[] for i in spacea]
+#     #ronan modification - calculate minimum and maximum space, minimum and maximum time
+# #spacealist = []
+# #for i in spacea:
+# #    spacealist.extend(i)
+# #spacemin = min(spacealist)
+# #spacemax = max(spacealist)
+# #timemin = min(timea)
+# #timemax = max(timea)
+#
+# 	intervals = []
+# 	start = timea[0]
+# 	end = timea[1]
+# 	temp1 = start
+# 	temp2 = start+agg
+# 	while temp2 < end:
+# 		intervals.append((temp1, temp2))
+# 		temp1 = temp2
+# 		temp2 += agg
+# 	intervals.append((temp1, end))
+#
+#
+# 	# ([time frame], [space])
+# 	regions = [[([],[]) for j in intervals] for i in spacea]
+#
+# 	for id in meas:
+# 		data = meas[id]
+#         #ronan modification  - prune data so we don't have to look over as many datapoints
+# #data = data[np.all([data[:,1] < timemax, data[:,1]>timemin], axis=0)]
+# #data = data[np.all([data[:,2] < spacemax, data[:,2]>spacemin], axis=0)]
+#
+# 		region_contained = []
+# 		region_data = {}  # key: tid, sid
+# 		for i in data:
+# 			t = i[1]
+# 			s = i[2]
+# 			t_id = -1
+# 			s_id = -1
+#
+# 			for j in range(len(intervals)):
+# 				if t<=intervals[j][1] and t>=intervals[j][0]:
+# 					t_id = j
+# 					break
+# 			for j in range(len(spacea)):
+# 				if s<=spacea[j][1] and s>=spacea[j][0]:
+# 					s_id = j
+# 					break
+# 			if t_id == -1 or s_id == -1:
+# 				continue
+# 			id_key = str(t_id)+" "+str(s_id)
+# 			if id_key not in region_data:
+# 				# in t, in s, out t, out s
+# 				region_data[id_key] = [t,s,-1,-1]
+# 			else:
+# 				region_data[id_key][2] = t
+# 				region_data[id_key][3] = s
+# 		for i in region_data:
+# 			t_id, s_id = i.split(" ")
+# 			t_id = int(t_id)
+# 			s_id = int(s_id)
+#
+#
+# 			regions[s_id][t_id][0].append(region_data[i][2]-region_data[i][0])
+# 			regions[s_id][t_id][1].append(region_data[i][3] - region_data[i][1])
+#
+# 	for i in range(len(regions)):
+# 		for j in range(len(regions[0])):
+# 			area = (spacea[i][1]-spacea[i][0]) * (intervals[j][1]-intervals[j][0])
+# 			q[i].append(sum(regions[i][j][1])/area)
+# 			k[i].append(sum(regions[i][j][0])/area)
+# 	return q, k
+
+from havsim.calibration.helper import binaryint
+import bisect
 def calculateflows(meas, spacea, timea, agg):
 	q = [[] for i in spacea]
 	k = [[] for i in spacea]
     #ronan modification - calculate minimum and maximum space, minimum and maximum time
-#spacealist = []
-#for i in spacea: 
-#    spacealist.extend(i)
-#spacemin = min(spacealist)
-#spacemax = max(spacealist)
-#timemin = min(timea)
-#timemax = max(timea)
+	spacealist = []
+	for i in spacea:
+	   spacealist.extend(i)
+	spacemin = min(spacealist)
+	spacemax = max(spacealist)
+	timemin = min(timea)
+	timemax = max(timea)
 
 	intervals = []
 	start = timea[0]
@@ -652,46 +728,35 @@ def calculateflows(meas, spacea, timea, agg):
 	for id in meas:
 		data = meas[id]
         #ronan modification  - prune data so we don't have to look over as many datapoints
-#data = data[np.all([data[:,1] < timemax, data[:,1]>timemin], axis=0)]
-#data = data[np.all([data[:,2] < spacemax, data[:,2]>spacemin], axis=0)]
-        
+		# data = data[np.all([data[:,1] < timemax, data[:,1]>timemin], axis=0)]
+		# data = data[np.all([data[:,2] < spacemax, data[:,2]>spacemin], axis=0)]
+
 		region_contained = []
-		region_data = {}
-		for i in data:
-			t = i[1]
-			s = i[2]
-			t_id = -1
-			s_id = -1
-			for j in range(len(intervals)):
-				if t<=intervals[j][1] and t>=intervals[j][0]: 
-					t_id = j
+		region_data = {}  # key: tid, sid
+
+		for i in range(len(intervals)):
+			start = intervals[i][0]-data[0][1]
+			end = intervals[i][1]-data[0][1]
+
+			start = int(start)
+			end = int(end)
+
+			dataInterval = data[start:end]
+			spaceInterval = [j[2] for j in dataInterval]
+
 			for j in range(len(spacea)):
-				if s<=spacea[j][1] and s>=spacea[j][0]:
-					s_id = j
-			id_key = str(t_id)+" "+str(s_id)
-			if id_key not in region_data:
-				# in t, in s, out t, out s
-				region_data[id_key] = [t,s,-1,-1]
-			else:
-				region_data[id_key][2] = t
-				region_data[id_key][3] = s
-		for i in region_data:
-			t_id, s_id = i.split(" ")
-			t_id = int(t_id)
-			s_id = int(s_id)
+				start = bisect.bisect_left(spaceInterval, spacea[j][0])
+				end = bisect.bisect_left(spaceInterval, spacea[j][1])
+				regions[j][i][0].append(data[end][1]-data[start][1])
+				regions[j][i][1].append(data[end][2]-data[start][2])
 
-
-			regions[s_id][t_id][0].append(region_data[i][2]-region_data[i][0])
-			regions[s_id][t_id][1].append(region_data[i][3] - region_data[i][1])
 
 	for i in range(len(regions)):
 		for j in range(len(regions[0])):
-			area = (spacea[i][1]-spacea[i][0]) * (intervals[i][1]-intervals[i][0])
+			area = (spacea[i][1]-spacea[i][0]) * (intervals[j][1]-intervals[j][0])
 			q[i].append(sum(regions[i][j][1])/area)
 			k[i].append(sum(regions[i][j][0])/area)
 	return q, k
-
-
 
 
 def plotflows(meas, spacea, timea, agg, type = 'FD', FDagg= None):
@@ -749,6 +814,7 @@ def plotflows(meas, spacea, timea, agg, type = 'FD', FDagg= None):
 	elif type == 'line':
 		for i in range(len(spacea)):
 			plt.plot(time_sequence_for_line, q[i])
+		print(q)
 		plt.xlabel("time")
 		plt.ylabel("flow")
 		plt.show()
