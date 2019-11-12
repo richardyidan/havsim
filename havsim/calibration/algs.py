@@ -730,6 +730,11 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
         #one thing I don't like about this is that the first vehicle in vehs is not included, when really I want it to be. 
         #also any other vehicles designated as `leaders` aren't included either. It's a small thing but could be nice to change. 
         
+        """
+        #note to self: another way to implement this is to use the new sort vehicle function :) 
+        looks like you could just do lanvehlist(data, lane, vehs), and then sortveh3(). 
+        """
+        
         vehlist, unused = helper.lanevehlist(data,lane,vehs) #special functions gets only the vehicles we want to simulate out of the whole dataset
         #after having gotten only the vehicles we want to simulate, we modify the platooninfo, leaders , totfollist, to reflect this
         #lastly we can seed curlead as the vehs[0] to start
