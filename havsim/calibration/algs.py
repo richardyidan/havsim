@@ -500,7 +500,7 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
 #    other thing is that I think we can also just try something super simple where instead of 1-2 we just have 1 strategy where we iterate over all the followers, 
 #    and if we can add any of them do add them. so in total that's 3 similar versions of this program we can try. 
     #####################
-    platoons = [[]] #current followers list for platoon; these are the vehicles which have been successfully added to the platoon
+    platoons = [] #current followers list for platoon; these are the vehicles which have been successfully added to the platoon
 #    totfollist = [] #list of every single follower of leaders; followers variables only has leaders that are in curleadlist
     curn = 0 #current n value
     
@@ -775,10 +775,10 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
             platoonlist.append(platoons)
         else: 
             for j in platoons[0]:
-                newplatoon = [[]]
+                newplatoon = []
                 newplatoon.append(j[0])
                 platoonlist.append(newplatoon) #append all the loop vehicles as 
-            newplatoon = [[]]
+            newplatoon = []
             newplatoon = newplatoon + platoons[1:]
             platoonlist.append(newplatoon)
     
@@ -800,7 +800,7 @@ def makeplatoonlist_s(data, n = 1, lane = 1, vehs = []):
     nvehs = len(sortedvehID)
     cur, n = 0, 5
     while cur < nvehs: 
-        curplatoon = [[]]
+        curplatoon = []
         curplatoon.extend(sortedvehID[cur:cur+n])
         sortedplatoons.append(curplatoon)
         cur = cur + n

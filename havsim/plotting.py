@@ -719,8 +719,10 @@ def calculateflows(meas, spacea, timea, agg):
 	for id in meas:
 		data = meas[id]
         
-		data = data[np.all([data[:,1] < timemax, data[:,1]>timemin], axis=0)]
-		data = data[np.all([data[:,2] < spacemax, data[:,2]>spacemin], axis=0)]
+#        data = data[np.all([data[:,1] < timemax, data[:,1]>timemin], axis=0)]
+#        data = data[np.all([data[:,2] < spacemax, data[:,2]>spacemin], axis=0)]
+#        if len(data) == 0:
+#            continue
 
 		region_contained = []
 		region_data = {}  # key: tid, sid

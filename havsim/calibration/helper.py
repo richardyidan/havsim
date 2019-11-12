@@ -895,12 +895,12 @@ def platoononly(platooninfo, platoon):
     if len(platoon) == 1: 
         useplatoon = platoon[0]
     elif type(platoon[1]) == list:  #list of platoons 
-        useplatoon = [[]]
+        useplatoon = []
         for i in platoon:
-            useplatoon.extend(i[1:])
+            useplatoon.extend(i[:])
     else: 
         useplatoon = platoon
-    for i in useplatoon[1:]:
+    for i in useplatoon[:]:
         ans[i] = platooninfo[i]
     return ans
 
