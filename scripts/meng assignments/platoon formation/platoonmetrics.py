@@ -27,12 +27,13 @@ unused, unused, sortedplatoons = makeplatoonlist_s(data,n=5,lane=6)
 
 from havsim.calibration.helper import makeleadfolinfo
 
-testplatoon = [[], 381.0, 391.0, 335.0, 326.0, 334.0]
+testplatoon = [381.0, 391.0, 335.0, 326.0, 334.0]
 leadinfo, folinfo, unused = makeleadfolinfo(testplatoon, platooninfo, meas)
 
 #leadinfo[2] = [[316.0, 1302, 1616], [318.0, 1617, 1644]]
 #this means second vehicle in the platoon (testplatoon[1], which is 391)
 #follows vehicle 316 from time 1302 to 1616, and it follows 318 from 1617 to 1644. 
+#folinfo has the same information but for followers instead of leaders. 
 
 """
 TO DO 
