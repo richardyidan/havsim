@@ -3,12 +3,12 @@
 @author: rlk268@cornell.edu
 houses the main code for running simulations 
 
-TO DO //
+TO DO /
     implementing boundary conditions (for now do the simplest possible)
     
     getting networks working (need to handle changing roads, some rule for merging)
     
-    some quick modifications to get plotting api to work on sim format would be great
+    some quick modifications to get plotting api to work on sim format so we can properly debug/make pretty pictures
     
     add some control models and write extended abstract
     
@@ -152,21 +152,21 @@ def eq_circular(p, length, model, eqlfun, n, L = None, v = None, perturb = 1e-2)
         v = eqlfun(p,s,None,find='v')
         
     #initialize based on equilibrium
-    initstate = {i: [s*i,v] for i in range(n)}
-    initstate[0][0] = initstate[0][0] + perturb #apply perturbation
-    initstate[0][1] = initstate[0][1] + perturb
+    initstate = {n-i-1: [(s+length)*i,v] for i in range(n)}
+    initstate[n-1][0] = initstate[n-1][0] + perturb #apply perturbation
+    initstate[n-1][1] = initstate[n-1][1] + perturb
     
     #create auxinfo
-    auxinfo = {i: [length, i+1, 0, p, model, 1, 1, []] for i in range(n)}
-    auxinfo[n-1][1] = 0 #last vehicle needs to follow first 
+    auxinfo = {i: [length, i-1, 0, p, model, 1, 1, []] for i in range(n)}
+    auxinfo[0][1] = n-1 #first vehicle needs to follow last vehicle
         
     #create modelinfo
     modelinfo = {i: [L, 0] for i in range(n)}
-    modelinfo[n-1][1] = 1 #last vehicle starts in wrap-around state. 
+    modelinfo[0][1] = 1 #first vehicle starts in wrap-around state. 
     
     return initstate, auxinfo, modelinfo, L
 
-def simcir_obj(p, initstate, auxinfo, modelinfo, L, timesteps, idlist, model, objfun, dt = .1):
+def simcir_obj(p, initstate, auxinfo, modelinfo, L, timesteps, idlist, model, objfun, objonly = True, dt = .1):
     #p - parameters for AV 
     #idlist - vehicle IDs which will be controlled 
     #model - parametrization for AV 
@@ -177,20 +177,25 @@ def simcir_obj(p, initstate, auxinfo, modelinfo, L, timesteps, idlist, model, ob
     sim, curstate, auxinfo, modelinfo = simulate_cir(initstate, auxinfo, modelinfo, L, timesteps, dt)
     obj = sv_obj(sim, auxinfo)
     
-    return obj
+    if objonly:
+        return obj
+    else: 
+        return obj, sim, curstate, auxinfo, modelinfo
 
-def sv_obj(sim, auxinfo):
+def sv_obj(sim, auxinfo, cons = 1e-4):
     #maximize squared velocity = sv 
     obj = 0 
     for i in sim.keys(): 
         for j in sim[i]: #squared velocity 
-            obj = obj - [j][1]**2
+            obj = obj - j[1]**2
+    obj = obj * cons
+    for i in sim.keys():
         for j in range(len(sim[i])): #penality for collisions
             lead = auxinfo[i][1]
             leadx = sim[lead][j][0]
             leadlen = auxinfo[lead][0]
             s = leadx - leadlen - sim[i][j][0]
-            if s < .5:
-                obj = obj + 2**(-10*(s-.5)) - 1
+            if s < .2:
+                obj = obj + 2**(-5*(s-.2)) - 1
     return obj 
 

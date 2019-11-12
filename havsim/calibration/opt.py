@@ -14,7 +14,8 @@ All calibration related functions which set up optimization problems, including 
 		-want to rewrite the platoonobjfn to use python lists and be vectorized - should have similar construction to simulation code
         should use auxinfo/modelinfo and take up less memory as well ; will need to modify plotting functions to work with 
         this updated format
-        	-function for delay and LL model needs to be tested/debugged still
+        	-function for delay and LL model needs to be tested/debugged still, implement LL as DE, implement other models  
+            and update the documentation in model info pdf 
 	
 	
     general features/QOL 
@@ -45,22 +46,6 @@ All calibration related functions which set up optimization problems, including 
     
     
     \\ TO DO 
-    
-TO DO
-Test delay model and LL model. 
-
-add the feature to choose timestep into the delay and platoon obj functions.
-convert LL model into DE formulation; now we can solve the LL model using the DE formulation and this should work a lot better. 
-
-test new function variable timesteps and the new LL DE formulation. 
-
-need new function for stochastic models
-
-either need to get auto diff working, or implement adjoint method for DDE case
-
-queueing models? implement all the models etc. 
-
-
 
 
 @author: rlk268@cornell.edu
