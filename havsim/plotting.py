@@ -8,6 +8,7 @@ where all the plotting functions go
 import numpy as np
 import copy 
 import math
+import bisect
 
 import matplotlib.pyplot as plt 
 from matplotlib.collections import LineCollection
@@ -360,7 +361,7 @@ def plotColorLines(X, Y, SPEED, speed_limit):
 	return line
 
 
-def platoonplot(meas, sim, followerchain, platoon=[], Colors=False, speed=False, newfig=True, clr=['C0', 'C1'],
+def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C1'],
                 fulltraj=True, lane=None, opacity=.4, colorCode=True, speed_limit=[]):  # plot platoon in space-time
 	# CURRENT DOCUMENTATION 
 	# meas - measurements in np array, rows are observations
@@ -378,23 +379,6 @@ def platoonplot(meas, sim, followerchain, platoon=[], Colors=False, speed=False,
 
 	# plots a platoon of vehicles in space-time plot. 
 
-	# OLD DOCUMENTATION
-	# this will plot everything in followerchain.keys() if platoon is empty. 
-	# otherwise this plots only everything in platoon[1:] 
-	# if Colors = True this will color the pre, sim, and post trajectories in different colors. Otherwise 
-	# it only shows the simulation time in a single color. 
-	# this plots everything on the same plot, so if you have stuff in different lanes you will get crisscrossing type stuff. 
-	# you can make some nice plots with this if you make a platoon using makefollowerchain (which will put everything in a single lane).
-	# I have an example of that in makeposter.py I believe. 
-
-	# this does not handle delay currently. plotspeed/plotdist do, but those only do single vehicles. 
-
-	# this function works for making a platoon in a single lane  #old output has variable 'lead', we just have 'meas' now
-	# if using makefollowerchain leave platoon as empty array, otherwise you need to put in the platoon made from makeplatoon
-	# can pass either meas or sim
-	#    x = lead[:,1] #time 
-	#    y = lead[:,dataind[0]] #space 
-	#    plt.plot(x,y)
 
 	c = None
 
@@ -402,8 +386,7 @@ def platoonplot(meas, sim, followerchain, platoon=[], Colors=False, speed=False,
 	artist2veh = []
 
 	indcounter = np.asarray([], dtype=np.int64)  # keeps track of which artists correspond to which vehicle
-	if speed:
-		ind = 3
+
 	if platoon != []:
 		followerchain = helper.platoononly(followerchain, platoon)
 	followerlist = followerchain.keys()  # list of vehicle ID
@@ -411,27 +394,27 @@ def platoonplot(meas, sim, followerchain, platoon=[], Colors=False, speed=False,
 	if newfig:
 		fig = plt.figure()
 
-	# this is all deprecated now 
-	if Colors:  # these colors are pretty ugly imo 
-		for i in followerlist:  # iterate over each vehicle
-			veh = meas[i]
-			t_nstar, t_n, T_nm1, T_n = followerchain[i][0:4]
-			#        t_n = int(followerchain[i][1])
-			#        T_nm1 = int(followerchain[i][2])
-			#        T_n = int(followerchain[i][3])
-			x1 = range(t_nstar, t_n)  # vehicle has leader during this time so we will color it differently in plots 
-			x2 = range(t_n, T_nm1 + 1)  # this is the portion of the trajectory that will be shifted during calibration 
-			x3 = range(T_nm1 + 1, T_n + 1)
+#	# this is all deprecated now 
+#	if Colors:  # these colors are pretty ugly imo 
+#		for i in followerlist:  # iterate over each vehicle
+#			veh = meas[i]
+#			t_nstar, t_n, T_nm1, T_n = followerchain[i][0:4]
+#			#        t_n = int(followerchain[i][1])
+#			#        T_nm1 = int(followerchain[i][2])
+#			#        T_n = int(followerchain[i][3])
+#			x1 = range(t_nstar, t_n)  # vehicle has leader during this time so we will color it differently in plots 
+#			x2 = range(t_n, T_nm1 + 1)  # this is the portion of the trajectory that will be shifted during calibration 
+#			x3 = range(T_nm1 + 1, T_n + 1)
+#
+#			y1 = veh[0:t_n - t_nstar, ind]
+#			y2 = veh[t_n - t_nstar:T_nm1 - t_nstar + 1:, ind]
+#			y3 = veh[T_nm1 - t_nstar + 1:T_n - t_nstar + 1, ind]
+#
+#			plt.plot(x1, y1, 'k', x2, y2, 'b', x3, y3, 'r')
+#	#        plt.plot(x2,y2)
+#	#        plt.plot(x3,y3)
 
-			y1 = veh[0:t_n - t_nstar, ind]
-			y2 = veh[t_n - t_nstar:T_nm1 - t_nstar + 1:, ind]
-			y3 = veh[T_nm1 - t_nstar + 1:T_n - t_nstar + 1, ind]
-
-			plt.plot(x1, y1, 'k', x2, y2, 'b', x3, y3, 'r')
-	#        plt.plot(x2,y2)
-	#        plt.plot(x3,y3)
-
-	if not Colors:
+	if True:
 		# fig, axs = plt.subplots(1, 1, sharex=True, sharey=True)
 
 		counter = 0
@@ -600,8 +583,8 @@ def platoonplot(meas, sim, followerchain, platoon=[], Colors=False, speed=False,
 
 	plt.xlabel('time (frameID )')
 	plt.ylabel('space (ft)')
-	if speed:
-		plt.ylabel('speed (ft/s)')
+#	if speed:
+#		plt.ylabel('speed (ft/s)')
 
 	if colorCode:
 		fig.colorbar(line, ax=axs)
@@ -696,12 +679,11 @@ def platoonplot(meas, sim, followerchain, platoon=[], Colors=False, speed=False,
 # 			k[i].append(sum(regions[i][j][0])/area)
 # 	return q, k
 
-from havsim.calibration.helper import binaryint
-import bisect
+
 def calculateflows(meas, spacea, timea, agg):
 	q = [[] for i in spacea]
 	k = [[] for i in spacea]
-    #ronan modification - calculate minimum and maximum space, minimum and maximum time
+    
 	spacealist = []
 	for i in spacea:
 	   spacealist.extend(i)
@@ -727,9 +709,9 @@ def calculateflows(meas, spacea, timea, agg):
 
 	for id in meas:
 		data = meas[id]
-        #ronan modification  - prune data so we don't have to look over as many datapoints
-		# data = data[np.all([data[:,1] < timemax, data[:,1]>timemin], axis=0)]
-		# data = data[np.all([data[:,2] < spacemax, data[:,2]>spacemin], axis=0)]
+        
+		data = data[np.all([data[:,1] < timemax, data[:,1]>timemin], axis=0)]
+		data = data[np.all([data[:,2] < spacemax, data[:,2]>spacemin], axis=0)]
 
 		region_contained = []
 		region_data = {}  # key: tid, sid

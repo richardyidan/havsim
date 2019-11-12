@@ -35,13 +35,13 @@ import matplotlib.pyplot as plt
 from matplotlib import cm 
 
 
-with open('/home/rlk268/Downloads/hav-sim-master(1)/hav-sim-master/visualization/plottingtesting.pkl','rb') as f: 
-    meas, platooninfo, platoonlist, sim = pickle.load(f)
-
-vehlist = []
-[vehlist.extend(i[1:]) for i in platoonlist]
-
-from havsim.plotting import platoonplot, animatevhd_list, animatetraj
+#with open('/home/rlk268/Downloads/hav-sim-master(1)/hav-sim-master/visualization/plottingtesting.pkl','rb') as f: 
+#    meas, platooninfo, platoonlist, sim = pickle.load(f)
+#
+#vehlist = []
+#[vehlist.extend(i[1:]) for i in platoonlist]
+#
+#from havsim.plotting import platoonplot, animatevhd_list, animatetraj
 
 """
 TO DO 
