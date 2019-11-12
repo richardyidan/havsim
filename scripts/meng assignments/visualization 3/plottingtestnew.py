@@ -68,12 +68,16 @@ plt.plot([2800, 2800, 3000, 3000, 2800], [400, 800, 800, 400, 400], 'k-')
 q, k = calculateflows(testmeas2, [[400, 800]], [2600, 3000], 200)
 """
 TO DO 
-add feature where you can select only a particular lane to take the flow on. IN this case if a vehicle is not in the specified lane 
+add feature where you can select only a particular lane to take the flow on (lane = X) keyword where X is the lane. IN this case if a vehicle is not in the specified lane 
 it will not count towards the flow and density counts. 
 Again record what the right values are and show your work. 
+
+hint on easy way to implement lanes: to select only a particular lane, you could use boolean masking to select only trajectories in that lane. 
+Then you can use checksequential helper function to split up the masked trajectories into the correct pieces. 
+Each piece of trajectory can be treated as seperate vehicles from the perspective of calculate flows. 
+
+hint on getting the q, k by hand: I drew the areas for you, just estimate them by hand. In spyder 
+you can mouse over area of a graph and it will show the coordinate. 
+
+
 """
-#%%
-vehlist = []
-for i in platoonlist: 
-    vehlist.extend(i[1:])
-platoonplot(meas,sim,platooninfo, vehlist, lane=2,opacity =.1, colorCode= False, speed_limit = [10,35]) 
