@@ -363,21 +363,30 @@ def plotColorLines(X, Y, SPEED, speed_limit):
 
 def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C1'],
                 fulltraj=True, lane=None, opacity=.4, colorCode=True, speed_limit=[]):  # plot platoon in space-time
-	# CURRENT DOCUMENTATION 
+	# CURRENT DOCUMENTATION 11/11
 	# meas - measurements in np array, rows are observations
 	# sim - simulation in same format as meas. can pass in None and only meas will be shown, or can pass in the data and they will be plotted together
 	# in different colors. 
 	# followerchain (platooninfo) - dictionary containing information on each vehicle ID
 	# platoon - default is [], in which case all keys of followerchain are plotted. If passed in as a platoon (list of vehicle ID as [1:] so first entry not included)
 	# only those vehicles will be plotted. 
-	# Colors = False - if True, the different parts of each trajectory (pre simulation, simulation, shifted end) will be plotted as different colors
-	# speed = False - if True will plot the speed instead of position
+
 	# newfig = True - if True will create a new figure, otherwise it will use the current figure 
 	# clr = 'C0', assuming Colors = False, clr will control what colors will be used. Default is ['C0','C1'] which are the default matplotlib colors
-	# fulltraj = True - assuming Colors = False, if True, will plot the entire trajectory, if False, will plot only the simulation 
+    #this is used is sim is not None and colorcode = False
+	# fulltraj = True controls how much of each trajectory to plot
+    
 	# lane = None - If passed in as a laneID, the parts of trajectories not in the lane ID given will be made opaque 
-
+    # colorcode = True - if colorcode is True, sim must be None, and we will plot the trajectories
+    #colorcoded based on their speeds. It looks nice!
+    #speed_limit = [] - only used when colorcode is True, if empty we will find the minimum and maximum speeds
+    #and colorcode based on those speeds. Otherwise you can specify the min/max, and anything below/above
+    #those limits will be colorcoded according to the limits
+    
 	# plots a platoon of vehicles in space-time plot. 
+    #features - can click on vehicles to display their IDs. Can compare meas and sim when colorcode is False. 
+    #can specify a lane, and make trajectories outside of that lane opaque. 
+    #can colorcode trajectories based on their speeds to easily see shockwaves and other structures. 
 
 
 	c = None
