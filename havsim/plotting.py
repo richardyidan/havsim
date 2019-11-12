@@ -8,6 +8,7 @@ where all the plotting functions go
 import numpy as np
 import copy 
 import math
+import bisect
 
 import matplotlib.pyplot as plt 
 from matplotlib.collections import LineCollection
@@ -360,41 +361,33 @@ def plotColorLines(X, Y, SPEED, speed_limit):
 	return line
 
 
-def platoonplot(meas, sim, followerchain, platoon=[], Colors=False, speed=False, newfig=True, clr=['C0', 'C1'],
+def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C1'],
                 fulltraj=True, lane=None, opacity=.4, colorCode=True, speed_limit=[]):  # plot platoon in space-time
-	# CURRENT DOCUMENTATION 
+	# CURRENT DOCUMENTATION 11/11
 	# meas - measurements in np array, rows are observations
 	# sim - simulation in same format as meas. can pass in None and only meas will be shown, or can pass in the data and they will be plotted together
 	# in different colors. 
 	# followerchain (platooninfo) - dictionary containing information on each vehicle ID
 	# platoon - default is [], in which case all keys of followerchain are plotted. If passed in as a platoon (list of vehicle ID as [1:] so first entry not included)
 	# only those vehicles will be plotted. 
-	# Colors = False - if True, the different parts of each trajectory (pre simulation, simulation, shifted end) will be plotted as different colors
-	# speed = False - if True will plot the speed instead of position
+
 	# newfig = True - if True will create a new figure, otherwise it will use the current figure 
 	# clr = 'C0', assuming Colors = False, clr will control what colors will be used. Default is ['C0','C1'] which are the default matplotlib colors
-	# fulltraj = True - assuming Colors = False, if True, will plot the entire trajectory, if False, will plot only the simulation 
+    #this is used is sim is not None and colorcode = False
+	# fulltraj = True controls how much of each trajectory to plot
+    
 	# lane = None - If passed in as a laneID, the parts of trajectories not in the lane ID given will be made opaque 
-
+    # colorcode = True - if colorcode is True, sim must be None, and we will plot the trajectories
+    #colorcoded based on their speeds. It looks nice!
+    #speed_limit = [] - only used when colorcode is True, if empty we will find the minimum and maximum speeds
+    #and colorcode based on those speeds. Otherwise you can specify the min/max, and anything below/above
+    #those limits will be colorcoded according to the limits
+    
 	# plots a platoon of vehicles in space-time plot. 
+    #features - can click on vehicles to display their IDs. Can compare meas and sim when colorcode is False. 
+    #can specify a lane, and make trajectories outside of that lane opaque. 
+    #can colorcode trajectories based on their speeds to easily see shockwaves and other structures. 
 
-	# OLD DOCUMENTATION
-	# this will plot everything in followerchain.keys() if platoon is empty. 
-	# otherwise this plots only everything in platoon[1:] 
-	# if Colors = True this will color the pre, sim, and post trajectories in different colors. Otherwise 
-	# it only shows the simulation time in a single color. 
-	# this plots everything on the same plot, so if you have stuff in different lanes you will get crisscrossing type stuff. 
-	# you can make some nice plots with this if you make a platoon using makefollowerchain (which will put everything in a single lane).
-	# I have an example of that in makeposter.py I believe. 
-
-	# this does not handle delay currently. plotspeed/plotdist do, but those only do single vehicles. 
-
-	# this function works for making a platoon in a single lane  #old output has variable 'lead', we just have 'meas' now
-	# if using makefollowerchain leave platoon as empty array, otherwise you need to put in the platoon made from makeplatoon
-	# can pass either meas or sim
-	#    x = lead[:,1] #time 
-	#    y = lead[:,dataind[0]] #space 
-	#    plt.plot(x,y)
 
 	c = None
 
@@ -402,8 +395,7 @@ def platoonplot(meas, sim, followerchain, platoon=[], Colors=False, speed=False,
 	artist2veh = []
 
 	indcounter = np.asarray([], dtype=np.int64)  # keeps track of which artists correspond to which vehicle
-	if speed:
-		ind = 3
+
 	if platoon != []:
 		followerchain = helper.platoononly(followerchain, platoon)
 	followerlist = followerchain.keys()  # list of vehicle ID
@@ -411,27 +403,27 @@ def platoonplot(meas, sim, followerchain, platoon=[], Colors=False, speed=False,
 	if newfig:
 		fig = plt.figure()
 
-	# this is all deprecated now 
-	if Colors:  # these colors are pretty ugly imo 
-		for i in followerlist:  # iterate over each vehicle
-			veh = meas[i]
-			t_nstar, t_n, T_nm1, T_n = followerchain[i][0:4]
-			#        t_n = int(followerchain[i][1])
-			#        T_nm1 = int(followerchain[i][2])
-			#        T_n = int(followerchain[i][3])
-			x1 = range(t_nstar, t_n)  # vehicle has leader during this time so we will color it differently in plots 
-			x2 = range(t_n, T_nm1 + 1)  # this is the portion of the trajectory that will be shifted during calibration 
-			x3 = range(T_nm1 + 1, T_n + 1)
+#	# this is all deprecated now 
+#	if Colors:  # these colors are pretty ugly imo 
+#		for i in followerlist:  # iterate over each vehicle
+#			veh = meas[i]
+#			t_nstar, t_n, T_nm1, T_n = followerchain[i][0:4]
+#			#        t_n = int(followerchain[i][1])
+#			#        T_nm1 = int(followerchain[i][2])
+#			#        T_n = int(followerchain[i][3])
+#			x1 = range(t_nstar, t_n)  # vehicle has leader during this time so we will color it differently in plots 
+#			x2 = range(t_n, T_nm1 + 1)  # this is the portion of the trajectory that will be shifted during calibration 
+#			x3 = range(T_nm1 + 1, T_n + 1)
+#
+#			y1 = veh[0:t_n - t_nstar, ind]
+#			y2 = veh[t_n - t_nstar:T_nm1 - t_nstar + 1:, ind]
+#			y3 = veh[T_nm1 - t_nstar + 1:T_n - t_nstar + 1, ind]
+#
+#			plt.plot(x1, y1, 'k', x2, y2, 'b', x3, y3, 'r')
+#	#        plt.plot(x2,y2)
+#	#        plt.plot(x3,y3)
 
-			y1 = veh[0:t_n - t_nstar, ind]
-			y2 = veh[t_n - t_nstar:T_nm1 - t_nstar + 1:, ind]
-			y3 = veh[T_nm1 - t_nstar + 1:T_n - t_nstar + 1, ind]
-
-			plt.plot(x1, y1, 'k', x2, y2, 'b', x3, y3, 'r')
-	#        plt.plot(x2,y2)
-	#        plt.plot(x3,y3)
-
-	if not Colors:
+	if True:
 		# fig, axs = plt.subplots(1, 1, sharex=True, sharey=True)
 
 		counter = 0
@@ -600,8 +592,8 @@ def platoonplot(meas, sim, followerchain, platoon=[], Colors=False, speed=False,
 
 	plt.xlabel('time (frameID )')
 	plt.ylabel('space (ft)')
-	if speed:
-		plt.ylabel('speed (ft/s)')
+#	if speed:
+#		plt.ylabel('speed (ft/s)')
 
 	if colorCode:
 		fig.colorbar(line, ax=axs)
@@ -619,6 +611,207 @@ def platoonplot(meas, sim, followerchain, platoon=[], Colors=False, speed=False,
 #	plt.savefig('platoonspacetime.png')
 #	plt.show()
 	return
+
+
+
+# def calculateflows(meas, spacea, timea, agg):
+# 	q = [[] for i in spacea]
+# 	k = [[] for i in spacea]
+#     #ronan modification - calculate minimum and maximum space, minimum and maximum time
+# #spacealist = []
+# #for i in spacea:
+# #    spacealist.extend(i)
+# #spacemin = min(spacealist)
+# #spacemax = max(spacealist)
+# #timemin = min(timea)
+# #timemax = max(timea)
+#
+# 	intervals = []
+# 	start = timea[0]
+# 	end = timea[1]
+# 	temp1 = start
+# 	temp2 = start+agg
+# 	while temp2 < end:
+# 		intervals.append((temp1, temp2))
+# 		temp1 = temp2
+# 		temp2 += agg
+# 	intervals.append((temp1, end))
+#
+#
+# 	# ([time frame], [space])
+# 	regions = [[([],[]) for j in intervals] for i in spacea]
+#
+# 	for id in meas:
+# 		data = meas[id]
+#         #ronan modification  - prune data so we don't have to look over as many datapoints
+# #data = data[np.all([data[:,1] < timemax, data[:,1]>timemin], axis=0)]
+# #data = data[np.all([data[:,2] < spacemax, data[:,2]>spacemin], axis=0)]
+#
+# 		region_contained = []
+# 		region_data = {}  # key: tid, sid
+# 		for i in data:
+# 			t = i[1]
+# 			s = i[2]
+# 			t_id = -1
+# 			s_id = -1
+#
+# 			for j in range(len(intervals)):
+# 				if t<=intervals[j][1] and t>=intervals[j][0]:
+# 					t_id = j
+# 					break
+# 			for j in range(len(spacea)):
+# 				if s<=spacea[j][1] and s>=spacea[j][0]:
+# 					s_id = j
+# 					break
+# 			if t_id == -1 or s_id == -1:
+# 				continue
+# 			id_key = str(t_id)+" "+str(s_id)
+# 			if id_key not in region_data:
+# 				# in t, in s, out t, out s
+# 				region_data[id_key] = [t,s,-1,-1]
+# 			else:
+# 				region_data[id_key][2] = t
+# 				region_data[id_key][3] = s
+# 		for i in region_data:
+# 			t_id, s_id = i.split(" ")
+# 			t_id = int(t_id)
+# 			s_id = int(s_id)
+#
+#
+# 			regions[s_id][t_id][0].append(region_data[i][2]-region_data[i][0])
+# 			regions[s_id][t_id][1].append(region_data[i][3] - region_data[i][1])
+#
+# 	for i in range(len(regions)):
+# 		for j in range(len(regions[0])):
+# 			area = (spacea[i][1]-spacea[i][0]) * (intervals[j][1]-intervals[j][0])
+# 			q[i].append(sum(regions[i][j][1])/area)
+# 			k[i].append(sum(regions[i][j][0])/area)
+# 	return q, k
+
+
+def calculateflows(meas, spacea, timea, agg):
+	q = [[] for i in spacea]
+	k = [[] for i in spacea]
+    
+	spacealist = []
+	for i in spacea:
+	   spacealist.extend(i)
+	spacemin = min(spacealist)
+	spacemax = max(spacealist)
+	timemin = min(timea)
+	timemax = max(timea)
+
+	intervals = []
+	start = timea[0]
+	end = timea[1]
+	temp1 = start
+	temp2 = start+agg
+	while temp2 < end:
+		intervals.append((temp1, temp2))
+		temp1 = temp2
+		temp2 += agg
+	intervals.append((temp1, end))
+
+
+	# ([time frame], [space])
+	regions = [[([],[]) for j in intervals] for i in spacea]
+
+	for id in meas:
+		data = meas[id]
+        
+		data = data[np.all([data[:,1] < timemax, data[:,1]>timemin], axis=0)]
+		data = data[np.all([data[:,2] < spacemax, data[:,2]>spacemin], axis=0)]
+
+		region_contained = []
+		region_data = {}  # key: tid, sid
+
+		for i in range(len(intervals)):
+			start = intervals[i][0]-data[0][1]
+			end = intervals[i][1]-data[0][1]
+
+			start = int(start)
+			end = int(end)
+
+			dataInterval = data[start:end]
+			spaceInterval = [j[2] for j in dataInterval]
+
+			for j in range(len(spacea)):
+				start = bisect.bisect_left(spaceInterval, spacea[j][0])
+				end = bisect.bisect_left(spaceInterval, spacea[j][1])
+				regions[j][i][0].append(data[end][1]-data[start][1])
+				regions[j][i][1].append(data[end][2]-data[start][2])
+
+
+	for i in range(len(regions)):
+		for j in range(len(regions[0])):
+			area = (spacea[i][1]-spacea[i][0]) * (intervals[j][1]-intervals[j][0])
+			q[i].append(sum(regions[i][j][1])/area)
+			k[i].append(sum(regions[i][j][0])/area)
+	return q, k
+
+
+def plotflows(meas, spacea, timea, agg, type = 'FD', FDagg= None):
+	"""
+	aggregates microscopic data into macroscopic quantities based on Edie's generalized ... definitions of traffic variables
+	meas = measurements, in usual format (dictionary where keys are vehicle IDs, values ... are numpy arrays)
+	spacea = reads as ``space A'' (where A is the region where the macroscopic quantities ... are being calculated). 
+    list of lists, each nested list is a length 2 list which ... represents the starting and ending location on road. So if len(spacea) >1 there ... will be multiple regions on the road which we are tracking
+	e.g. spacea = [[200,400],[800,1000]], calculate the flows in regions 200 to 400 and ... 800 to 1000 in meas.
+	timea = reads as ``time A'', should be a list of the times (in the local time of the ... data). E.g. timea = [1000,3000] calculate times between 1000 and 3000.
+	agg = aggregation length, float number which is the length of each aggregation ... interval. E.g. agg = 300 each measurement of the macroscopic quantities is over ... 300 time units in the data, so in NGSim where each time is a frameID with length ... .1s, we are aggregating every 30 seconds.
+	type = `FD', if type is `FD', plot data in flow-density plane. Otherwise, plot in ... flow-time plane.
+	FDagg = None - If FDagg is None and len(spacea) > 1, aggregate q and k measurements ... together. Otherwise if FDagg is an int, only show the q and k measurements for the ... corresponding spacea[int]
+	`"""
+	intervals = []
+	start = timea[0]
+	end = timea[1]
+	temp1 = start
+	temp2 = start + agg
+	while temp2 < end:
+		intervals.append((temp1, temp2))
+		temp1 = temp2
+		temp2 += agg
+	intervals.append((temp1, end))
+
+	q, k = calculateflows(meas, spacea, timea, agg)
+	time_sequence = []
+	time_sequence_for_line = []
+
+	if len(q)>1 and FDagg != None:
+		q = [q[FDagg]]
+		k = [k[FDagg]]
+
+
+	for i in range(len(q)):
+		for j in range(len(intervals)):
+			time_sequence.append(intervals[j][0])
+
+	for i in range(len(intervals)):
+		time_sequence_for_line.append(intervals[i][0])
+	unzipped_q = []
+	for i in q:
+		unzipped_q += i
+	unzipped_k = []
+	for i in k:
+		unzipped_k += i
+
+	if type == 'FD':
+		plt.scatter(unzipped_k, unzipped_q, c=time_sequence, cmap=cm.get_cmap('viridis'))
+		plt.colorbar()
+		plt.xlabel("density")
+		plt.ylabel("flow")
+		plt.show()
+
+	elif type == 'line':
+		for i in range(len(spacea)):
+			plt.plot(time_sequence_for_line, q[i])
+		print(q)
+		plt.xlabel("time")
+		plt.ylabel("flow")
+		plt.show()
+
+	return
+
 
 
 
@@ -2091,7 +2284,6 @@ def autoscale_based_on(ax, lines): #doesn't work right see selectvehID you can r
         xy = np.vstack(line.get_data()).T
         ax.dataLim.update_from_data_xy(xy, ignore=False)
     ax.autoscale_view()
-
 
 
 

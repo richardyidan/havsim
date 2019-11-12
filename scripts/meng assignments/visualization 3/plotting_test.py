@@ -4,7 +4,6 @@ Created on Sat Oct 19 15:14:48 2019
 
 @author: rlk268
 """
-#from calibration import *
 
 #%% for reproducing data 
 #get data for testing purposes 
@@ -32,16 +31,16 @@ Created on Sat Oct 19 15:14:48 2019
 import pickle
 import numpy as np 
 import matplotlib.pyplot as plt 
-from matplotlib import cm 
+from matplotlib import cm
 
 
-#with open('/home/rlk268/Downloads/hav-sim-master(1)/hav-sim-master/visualization/plottingtesting.pkl','rb') as f: 
-#    meas, platooninfo, platoonlist, sim = pickle.load(f)
+# with open('/Users/qiwuzou/Documents/assignment/M.Eng/follow_up/hav-sim-master/visualization/plottingtesting.pkl','rb') as f:
+#     meas, platooninfo, platoonlist, sim = pickle.load(f)
 #
-#vehlist = []
-#[vehlist.extend(i[1:]) for i in platoonlist]
-#
-#from havsim.plotting import platoonplot, animatevhd_list, animatetraj
+# vehlist = []
+# [vehlist.extend(i[1:]) for i in platoonlist]
+
+from havsim.plotting import platoonplot, calculateflows, plotflows
 
 """
 TO DO 
@@ -93,8 +92,8 @@ Lastly, the speed_limit keyword doesn't seem to be being used at all. Refer to t
 
 
 """
-platoonplot(meas,None,platooninfo,platoon=vehlist, lane=2,opacity =.1, colorCode= True) #opacity doesn't work
-platoonplot(meas,None,platooninfo,platoon=vehlist, lane=2,opacity =.1, colorCode= False) #opacity works
+# platoonplot(meas,None,platooninfo,platoon=vehlist, lane=2,opacity =.1, colorCode= True) #opacity doesn't work
+# platoonplot(meas,None,platooninfo,platoon=vehlist, lane=2,opacity =.1, colorCode= False) #opacity works
 
 # platoonplot(meas,None,platooninfo,platoon=[[],672], lane=2,opacity =1, colorCode= True) #why is there a weird gap in some of the trajectories? Like this one
 # plt.figure()
@@ -114,9 +113,8 @@ platoonplot(meas,None,platooninfo,platoon=vehlist, lane=2,opacity =.1, colorCode
 #     if mymax < curmax:
 #         mymax = curmax
 
-platoonplot(meas,None,platooninfo,platoon=vehlist, lane=2,opacity =.1, colorCode= True, speed_limit = [10,35]) #can't explicitly set speed_limit to being between (10,35)
+# platoonplot(meas,None,platooninfo,platoon=vehlist, lane=2,opacity =.1, colorCode= True, speed_limit = [10,35]) #can't explicitly set speed_limit to being between (10,35)
 #%%
-
 """
 TO DO 
 The below function animates a trajectory in the speed-headway plane. I want you to make the following improvements to it - 
@@ -135,15 +133,14 @@ make it so you can plot just 1 set of data (currently both meas and sim must be 
 """
 #animatevhd_list(meas,sim,platooninfo,[898, 905, 909, 916, 920],effective_headway=True,rp=15,show_sim=False, start = 2900, end=3000) #show measurements and simulation
 
-#animatevhd_list(meas,sim,platooninfo,[898, 905, 909],effective_headway=True,rp=15,show_sim=False, start = 2900, end=3000) #show measurements and simulation
-#
-#animatevhd_list(meas,None,platooninfo,[898, 905, 909],effective_headway=True,rp=15,show_sim=False, start = 2900, end=3000) #show measurements and simulation
+# animatevhd_list(meas,sim,platooninfo,[898, 905, 909],effective_headway=True,rp=15,show_sim=False, start = 2900, end=3000) #show measurements and simulation
+# #
+# animatevhd_list(meas,None,platooninfo,[898, 905, 909],effective_headway=True,rp=15,show_sim=False, start = 2900, end=3000) #show measurements and simulation
 
 
-animatevhd(meas,sim,platooninfo,[705],effective_headway=True,rp=15,show_sim=False)  #show only measurements, make sure effective_headway is working 
+#animatevhd(meas,sim,platooninfo,[705],effective_headway=True,rp=15,show_sim=False)  #show only measurements, make sure effective_headway is working 
 
 #%%
-
 """
 TO DO 
 animatetraj will animate the positions of vehicles, so it is like if you have a bird's eye view on the road looking down at the vehicles. 
@@ -162,9 +159,9 @@ of all the current artists shown, and I believe this will make it faster.
 make it so the usetime keyword works to give the times you want to animate. Usetime should be a list of all frames to animate. 
 colorbar is getting cutoff in the figure; make it so you can see the entire colorbar. 
 """
-vehlist = []
-[vehlist.extend(i[1:]) for i in platoonlist]
-animatetraj(meas,platooninfo,vehlist,usetime=list(range(2600,2700))) #the usetime keyword no longer works, fix this
+# vehlist = []
+# [vehlist.extend(i[1:]) for i in platoonlist]
+# animatetraj(meas,platooninfo,vehlist,usetime=list(range(2600,2700))) #the usetime keyword no longer works, fix this
 
 # animatetraj(meas,platooninfo) #plot all vehicles 
 
@@ -174,8 +171,8 @@ animatetraj(meas,platooninfo,vehlist,usetime=list(range(2600,2700))) #the usetim
 # For Test
 
 # Set up formatting for the movie files
-Writer = animation.writers['ffmpeg']
-writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
+# Writer = animation.writers['ffmpeg']
+# writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
 
 # platoonplot(meas,None,platooninfo,platoon=vehlist, lane=2,opacity =0, colorCode= True) #replace meas with sim you can see what the simulation looks like
 # anim = animatevhd_list(meas,sim,platooninfo,[898, 905, 909, 916, 920],effective_headway=False,rp=15,show_sim=True, start=2700, end=3000) #show measurements and simulation
@@ -184,3 +181,66 @@ writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
 
 # anim = animatevhd_list(meas,sim,platooninfo,[898, 905, 909, 916, 920],effective_headway=False,rp=15,show_sim=True, start=2700, end=3000) #show measurements and simulation
 # platoonplot(meas,None,platooninfo,platoon=vehlist, lane=2,opacity =0, colorCode= False) #replace meas with sim you can see what the simulation looks like
+
+
+# calculateflows(meas,[[200,400], [800, 1000]], [1000, 3000], 300)
+
+#with open('/Users/qiwuzou/Documents/assignment/M.Eng/follow_up/hav-sim-master/visualization/plottingtesting.pkl','rb') as f:
+
+import pickle 
+with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/plottingtesting.pkl','rb') as f:
+     meas, platooninfo, platoonlist, sim = pickle.load(f)
+
+#with open('D:/assignment/Meng/plottingtesting.pkl','rb') as f:
+#    meas, platooninfo, platoonlist, sim = pickle.load(f)
+
+
+vehlist = []
+[vehlist.extend(i[1:]) for i in platoonlist]
+
+from havsim.plotting import platoonplot, calculateflows, plotflows
+
+#meas_test = {}
+#count = 0
+#maxCount = 500
+#for i in meas:
+#    meas_test[i] = meas[i]
+#    count+=1
+#    if count == maxCount:
+#        break
+
+#heres a better way to test meas: 
+for i in meas: 
+    meas[i] = meas[i][meas[i][:,1]<3000] #only keep trajectories with time less than 3000
+    
+
+plotflows(meas,[[400,600], [800, 1000]], [1000, 3000], 300, 'line')
+
+#test easy example to make sure things are working right 
+#%%
+# import numpy as np
+# testmeas = {}
+# for i in range(1):
+#     testmeas[i] = np.zeros((1001,3))
+#     testmeas[i][:,1] = np.linspace(0,1000,1001)
+#     testmeas[i][:,2] = np.linspace(0,1000,1001)
+# #3 vehicles, all of them have s = 0-1000. the times are 0-1000 for vehicle 0
+##
+## plotflows(testmeas,[[200,400],[800,1000]],[0,1000],300,'line')
+##first line should be made up of points (100/60000, 100/60000, 0, 0) on times (0,300,600,900)
+##second line should be made up of points (0, 0, 100/60000,100/20000)
+##see paper for work done to get this. 
+##may want to also look at output from calculate flows 
+#
+#testmeas2 = {}
+#for i in range(3):
+#    testmeas2[i] = np.zeros((1001,3))
+#    testmeas2[i][:,1] = np.linspace(0+100*i,1000+100*i,1001) #equivalent to list(range(1001+100*i))[100*i:]
+#    testmeas2[i][:,2] = np.linspace(0,1000,1001)
+##
+## """
+## TO DO
+## figure out what the right values should be for the below example and verify that the function is giving the correct values.
+## """
+##
+#plotflows(testmeas2, [[200,400],[800,1000]],[0,1000],300,'line')
