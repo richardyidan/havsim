@@ -17,19 +17,30 @@ TO DO /
     how to do the adjoint calculation
     
     some tool for creating custom models out of modular parts, which should be part of models subpackage. 
-    need to think about how to use modelinfo to implement all the parts of models that we need, and how
-    to automatically get the gradient as easily as possible 
+    
+    reinforcement learning/rewriting calibration code
+
     
 """
+#need to think about how to use modelinfo to implement all the parts of models that we need, and how
+#to automatically get the gradient as easily as possible.
+#Also some things seem difficult to differentiate. Like the relaxation amount for example,
+#potentially complicated to differentiate if you are including the time varying thing
+#I think the way you can do this is to have something where you keep track of the regime
+#of the model, and then you can also augment the state space. 
+#Like for example for the relaxation example you would have a 
+#special state when you experience a change, and record the value as a seperate entry in the state. 
+#then when you are doing the gradient calculation everything just sort of falls into place automatically. 
+#no messing around with all the funny business yourself. 
 
-def simulate_cir(curstate, auxinfo, modelinfo, L, timesteps, dt) :
+def simulate_cir(curstate, auxinfo, roadinfo, updatefun = update_cir, timesteps=1000, dt=.25 ):
     """
     simulates vehicles on a circular test track
     
     inputs -
     curstate - dict, gives initial state
     auxinfo - dict, initialized auxinfo, see simulate step
-    modelinfo - dict, any things which may apply, see simulate step
+    roadinfo - dict
     L - float, length of road
     timesteps - int, number of timesteps to simulate
     dt - float, length of timestep
@@ -37,41 +48,20 @@ def simulate_cir(curstate, auxinfo, modelinfo, L, timesteps, dt) :
     outputs - 
     sim - all simulated states 
     auxinfo - updated auxinfo
-    modelinfo - updated modelinfo, first entry is L, second entry is whether we are in wrap-around state. 
-    The wraparound state happens when our leader wraps around the road, but we haven't yet. 
-    Thus the headway calculation needs to have L added to it. 
     """
     #initialize
     sim = {i:[curstate[i]] for i in curstate.keys()}
     
-    
     for j in range(timesteps): 
         #update states
-        nextstate, auxinfo, modelinfo = simulate_step(curstate,auxinfo,modelinfo,dt)
-        
-        #check for wraparound and if we need to update any special states for circular 
-        #modelinfo[ID][1] is True if leader has wrapped around but follower has not 
-        temp = [] #keep track of vehicles which wrap-around in next timestep
-        for i in nextstate.keys():
-            if modelinfo[i][1]: #if in activated 
-                if nextstate[i][0] > L: #follower wraps around so can reset 
-                    temp.append(i)
-                    modelinfo[i][1] = 0
-            else: 
-                if nextstate[auxinfo[i][1]][0] > L: #if leader wraps around
-                    if nextstate[i][0] <= L:
-                        modelinfo[i][1] = 1 #active wrap around state for i 
-                    else:  #edge case where both leader and vehicle wrap around in same time step
-                        temp.append(i)
-        for i in temp: 
-            nextstate[i][0] = nextstate[i][0] - L
+        nextstate, auxinfo= simulate_step(curstate,auxinfo,roadinfo, updatefun, dt)
         
         #update iteration
         curstate = nextstate
         for i in curstate.keys(): 
             sim[i].append(curstate[i])
             
-    return sim,curstate, auxinfo,modelinfo
+    return sim,curstate, auxinfo
 
 def simulate_net():
     """
@@ -79,7 +69,7 @@ def simulate_net():
     """
     pass
 
-def simulate_step(curstate, auxinfo, modelinfo, dt): 
+def simulate_step(curstate, auxinfo, roadinfo, updatefun, dt): 
     """
     does a step of the simulation
     
@@ -89,36 +79,98 @@ def simulate_step(curstate, auxinfo, modelinfo, dt):
     So for 2nd order model the state of a vehicle is a list of position and speed
     
     
-    auxinfo - dictionary where keys are IDs, the values are length (0), curleader (1), init entry time (2), 
-    parameters (3), model (4), lane (5), road (6), past lead info (7); this is information that we will always have
+    auxinfo - dictionary where keys are IDs, the values are 
+    0 - current model regime 
+    1 - current leader
+    2 - current lane
+    3 - current road 
+    4 - length
+    5 - parameters
+    6 - model 
+    7 - init entry time
+    8 - past model reg info
+    9 - past leader info
+    10 - past lane info 
+    11 - past road info
+    this is information that we will always have
     
-    modelinfo - dictionary where keys are IDs, the values are special extra parts which 
-    are only needed for certain models. The values in here are specific to the model we are using 
+    roadinfo - dictionary
+    
+    updatefun - 
     
     dt - timestep
     
     outputs - 
     nextstate - current state in the next timestep
     
-    auxinfo - auxinfo and modelinfo may be changed during the timestep
-    modelinfo - 
+    auxinfo - auxinfo may be changed during the timestep
+    
+    loss - loss calculated at the current step 
     
     """
     nextstate = {}
-    for i in curstate.keys(): 
-        #get necessary info for update
+    a = {}
+    
+    #get actions
+    for i in curstate.keys():
+        a[i] = auxinfo[i][6](auxinfo[5], curstate[i], curstate[auxinfo[i][1]], dt = dt)
+        
+    #update current state 
+    nextstate = updatefun(curstate, a, auxinfo, roadinfo, dt)
+    
+    return nextstate, auxinfo
+
+        #old code 
+#    for i in curstate.keys(): 
+#        #get necessary info for update
+#        leadid = auxinfo[i][1]
+#        lead = curstate[leadid]
+#        leadlen = auxinfo[leadid][0]
+#        
+#        #call model for vehicle
+#        out = auxinfo[i][4](curstate[i],lead,auxinfo[i][3],leadlen, *modelinfo[i], dt=dt)
+#        
+#        #update position in nextstate for vehicle
+#        nextstate[i] = [curstate[i][0] + dt* out[0], curstate[i][1] + dt*out[1]]
+
+def update_cir(state, action, auxinfo, roadinfo, dt):
+    #given states and actions returns next state 
+    
+    nextstate = {}
+    
+    #update states
+    for i in state.keys():
+        nextstate[i] = [state[i][0] + dt*action[i][0], state[i][1] + dt*action[i][1], None ]
+        
+    #update headway, which is part of state      
+    for i in state.keys(): 
+        #calculate headway
         leadid = auxinfo[i][1]
-        lead = curstate[leadid]
-        leadlen = auxinfo[leadid][0]
+        nextstate[i][2] = nextstate[leadid][0] - nextstate[i][0] - auxinfo[leadid][4]
         
-        #call model for vehicle
-        out = auxinfo[i][4](curstate[i],lead,auxinfo[i][3],leadlen, *modelinfo[i], dt=dt)
+        #check for wraparound and if we need to update any special states for circular 
+        if nextstate[i][2] < roadinfo[1]: 
+            nextstate[i][2] = nextstate[i][2] + roadinfo[0]
         
-        #update position in nextstate for vehicle
-        nextstate[i] = [curstate[i][0] + dt* out[0], curstate[i][1] + dt*out[1]]
-        
-        
-    return nextstate, auxinfo, modelinfo
+    return nextstate
+
+    #this is one way to update the headway where we explicitly track if vehicles have a leader
+    #which has wrapped around. But you know you could just make this so much simpler if you just
+    #assume that if the headway is extremely negative, it's because you wrapped around. 
+#    temp = [] #keep track of vehicles which wrap-around in next timestep
+#    for i in nextstate.keys():
+#        if auxinfo[i][1]: #if in activated 
+#            if nextstate[i][0] > L: #follower wraps around so can reset 
+#                temp.append(i)
+#                auxinfo[i][1] = 0
+#        else: 
+#            if nextstate[auxinfo[i][1]][0] > L: #if leader wraps around
+#                if nextstate[i][0] <= L:
+#                    auxinfo[i][1] = 1 #active wrap around state for i 
+#                else:  #edge case where both leader and vehicle wrap around in same time step
+#                    temp.append(i)
+#        for i in temp: 
+#            nextstate[i][0] = nextstate[i][0] - L
 
 def eq_circular(p, length, model, eqlfun, n, L = None, v = None, perturb = 1e-2):
     #given circular road with length L with n vehicles which follow model model with parameters p, 
@@ -138,7 +190,7 @@ def eq_circular(p, length, model, eqlfun, n, L = None, v = None, perturb = 1e-2)
     #outputs - 
     #curstate - state of the eql solution with perturbation
     #auxinfo - initialized auxiliary info for simulation
-    #modelinfo - initialized model info for simulation 
+    #roadinfo - initialized road info for simulation 
     
     #first we need to solve for the equilibrium solution which forms the basis for the IC. 
     if L == None and v == None: 
@@ -160,11 +212,11 @@ def eq_circular(p, length, model, eqlfun, n, L = None, v = None, perturb = 1e-2)
     auxinfo = {i: [length, i-1, 0, p, model, 1, 1, []] for i in range(n)}
     auxinfo[0][1] = n-1 #first vehicle needs to follow last vehicle
         
-    #create modelinfo
-    modelinfo = {i: [L, 0] for i in range(n)}
-    modelinfo[0][1] = 1 #first vehicle starts in wrap-around state. 
+    #create roadinfo
+    roadinfo = {i: [L, 0] for i in range(n)}
+    roadinfo[0][1] = 1 #first vehicle starts in wrap-around state. 
     
-    return initstate, auxinfo, modelinfo, L
+    return initstate, auxinfo, roadinfo, L
 
 def simcir_obj(p, initstate, auxinfo, modelinfo, L, timesteps, idlist, model, objfun, objonly = True, dt = .1):
     #p - parameters for AV 
@@ -181,21 +233,4 @@ def simcir_obj(p, initstate, auxinfo, modelinfo, L, timesteps, idlist, model, ob
         return obj
     else: 
         return obj, sim, curstate, auxinfo, modelinfo
-
-def sv_obj(sim, auxinfo, cons = 1e-4):
-    #maximize squared velocity = sv 
-    obj = 0 
-    for i in sim.keys(): 
-        for j in sim[i]: #squared velocity 
-            obj = obj - j[1]**2
-    obj = obj * cons
-    for i in sim.keys():
-        for j in range(len(sim[i])): #penality for collisions
-            lead = auxinfo[i][1]
-            leadx = sim[lead][j][0]
-            leadlen = auxinfo[lead][0]
-            s = leadx - leadlen - sim[i][j][0]
-            if s < .2:
-                obj = obj + 2**(-5*(s-.2)) - 1
-    return obj 
 

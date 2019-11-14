@@ -25,20 +25,20 @@ models should have the following call signature:
 import numpy as np 
 import scipy.optimize as sc 
 
-def IDM_b3(veh, lead, p,leadlen, *args,dt=.1):
+def IDM_b3(p, veh, lead, *args,dt=.1):
+    #state is defined as [x,v,s] triples
     #IDM with bounded velocity for circular road
     
-    s = lead[0]-leadlen-veh[0]
-    
+    #old code 
+#    s = lead[0]-leadlen-veh[0]
 #    if s < 0: #wrap around in circular can cause negative headway values; in this case we add an extra L to headway
 #        s = s + args[0]
-    
     #check if need to modify the headway 
-    if args[1]:
-        s = s + args[0]
+#    if args[1]:
+#        s = s + args[0]
 
     outdx = veh[1]
-    outddx = p[3]*(1-(veh[1]/p[0])**4-((p[2]+veh[1]*p[1]+(veh[1]*(veh[1]-lead[1]))/(2*(p[3]*p[4])**(1/2)))/(s))**2)
+    outddx = p[3]*(1-(veh[1]/p[0])**4-((p[2]+veh[1]*p[1]+(veh[1]*(veh[1]-lead[1]))/(2*(p[3]*p[4])**(1/2)))/(veh[2]))**2)
     
     if veh[1]+dt*outddx < 0:
         outddx = -veh[1]/dt
@@ -58,6 +58,34 @@ def IDM_b3_eql(p, s, v, find = 's', maxs = 1e4):
         eqlfun = lambda x: ((p[2]+p[1]*x)**2/(1- (x/p[0])**4))**.5 - s
         v = sc.bisect(eqlfun, 0, maxs)
         return v
+    
+    
+def sv_obj(sim, auxinfo):
+    #maximize squared velocity = sv 
+    obj = 0 
+    for i in sim.keys(): 
+        for j in sim[i]: #squared velocity 
+            obj = obj - j[1]**2
+            if j[2] < .2:
+                obj = obj + 2**(-5*(j[2]-.2)) - 1
+    return obj 
+
+#def sv_obj(sim, auxinfo, cons = 1e-4):
+#    #maximize squared velocity = sv 
+#    obj = 0 
+#    for i in sim.keys(): 
+#        for j in sim[i]: #squared velocity 
+#            obj = obj - j[1]**2
+#    obj = obj * cons
+#    for i in sim.keys():
+#        for j in range(len(sim[i])): #penality for collisions
+#            lead = auxinfo[i][1]
+#            leadx = sim[lead][j][0]
+#            leadlen = auxinfo[lead][0]
+#            s = leadx - leadlen - sim[i][j][0]
+#            if s < .2:
+#                obj = obj + 2**(-5*(s-.2)) - 1
+#    return obj 
 
 """
 in general, I think it is better to just manually solve for the equilibrium solution when possible
@@ -95,4 +123,7 @@ def eql(model, v, p, length, tol=1e-4):
             return headway 
         
     return headway
+
+def noloss(*args):
+    pass
 
