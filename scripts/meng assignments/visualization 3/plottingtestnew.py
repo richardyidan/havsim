@@ -60,8 +60,11 @@ meas[905][150:250,7] = 3
 platoonplot(meas,None,platooninfo,platoon=[[],898, 905, 909, 916, 920], lane=2,opacity =.1, colorCode= True, speed_limit = [10,35]) 
 plt.plot([2600, 2600, 2800, 2800, 2600], [400, 800, 800, 400, 400], 'k-')
 plt.plot([2800, 2800, 3000, 3000, 2800], [400, 800, 800, 400, 400], 'k-')
+testmeas3 = {}
+for i in [898, 905, 909, 916, 920]:
+    testmeas3 = meas[i].copy()
 
-q, k = calculateflows(testmeas2, [[400, 800]], [2600, 3000], 200)
+q, k = calculateflows(testmeas3, [[400, 800]], [2600, 3000], 200, lane = 2)
 """
 TO DO 
 add feature where you can select only a particular lane to take the flow on (lane = X) keyword where X is the lane. IN this case if a vehicle is not in the specified lane 
