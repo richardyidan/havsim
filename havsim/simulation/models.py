@@ -45,6 +45,33 @@ def IDM_b3(p, veh, lead, *args,dt=.1):
     
     return [outdx, outddx]
 
+def IDM_b3_sh(p, veh, lead, *args,dt=.1):
+    #state is defined as [x,v,s] triples
+    #IDM with bounded velocity for circular road
+    #we add a speed harmonization thing that says you can't go above w/e
+    
+    #old code 
+#    s = lead[0]-leadlen-veh[0]
+#    if s < 0: #wrap around in circular can cause negative headway values; in this case we add an extra L to headway
+#        s = s + args[0]
+    #check if need to modify the headway 
+#    if args[1]:
+#        s = s + args[0]
+
+    outdx = veh[1]
+    outddx = p[3]*(1-(veh[1]/p[0])**4-((p[2]+veh[1]*p[1]+(veh[1]*(veh[1]-lead[1]))/(2*(p[3]*p[4])**(1/2)))/(veh[2]))**2)
+    
+    if veh[1]+dt*outddx < 0:
+        outddx = -veh[1]/dt
+    
+    if veh[1] + dt*outddx > p[5]:
+        outddx = (p[5] - veh[1])/dt
+        
+    
+    return [outdx, outddx]
+
+
+
 def IDM_b3_eql(p, s, v, find = 's', maxs = 1e4):
     #finds equilibrium solution for s or v, given the other
     
@@ -59,6 +86,15 @@ def IDM_b3_eql(p, s, v, find = 's', maxs = 1e4):
         v = sc.bisect(eqlfun, 0, maxs)
         return v
     
+def FS(p, veh, lead, *args, dt = .1):
+    #follower stopper control model 
+    pass 
+
+def PIS(p, veh, lead, *args, dt = .1):
+    #partial integrator with saturation control model.
+    pass
+
+
     
 def sv_obj(sim, auxinfo):
     #maximize squared velocity = sv 
@@ -66,8 +102,8 @@ def sv_obj(sim, auxinfo):
     for i in sim.keys(): 
         for j in sim[i]: #squared velocity 
             obj = obj - j[1]**2
-            if j[2] < .2:
-                obj = obj + 2**(-5*(j[2]-.2)) - 1
+            if j[2] < .2: #penalty for having very small or negative headway. 
+                obj = obj + 2**(-5*(j[2]-.2)) - 1 #-1 guarentees piecewise smooth which is condition for continuous gradient
     return obj 
 
 #def sv_obj(sim, auxinfo, cons = 1e-4):
