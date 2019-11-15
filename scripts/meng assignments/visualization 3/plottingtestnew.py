@@ -18,14 +18,9 @@ with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle f
 #test on actual data
 plt.close('all')
 plt.figure()
-plotflows(meas,[[400,600], [800, 1000]], [1000, 3000], 300, 'line')
+plotflows(meas,[[600,1200]], [1000, 8000], 300, 'line')
 plt.figure()
-plotflows(meas,[[400,600], [800, 1000]], [1000, 3000], 300, 'FD')
-
-"""
-TO DO 
-The above functions throw errors; fix
-"""   
+plotflows(meas,[[600,1200]], [1000, 8000], 300, 'FD')
     
     
 #%%
@@ -38,9 +33,10 @@ for i in range(1):
     testmeas[i][:,2] = np.linspace(0,1000,1001)
  #3 vehicles, all of them have s = 0-1000. the times are 0-1000 for vehicle 0
 plt.figure()
-plotflows(testmeas,[[200,400],[800,1000]],[0,1000],300,'line')
-#first line should be made up of points (100/60000, 100/60000, 0, 0) on times (0,300,600,900)
-#second line should be made up of points (0, 0, 100/60000,100/20000)
+#plotflows(testmeas,[[200,400],[800,1000]],[0,1000],300,'line')
+q,k = calculateflows(testmeas,[[200,400],[800,1000]],[0,1000],300)
+#q = [.00166, .0166, 0, 0] for first region, [0, 0, .166, .005] for second. 
+#k is the same as q in this example. 
 
 
 testmeas2 = {}
@@ -54,8 +50,8 @@ TO DO
  figure out what the right values should be for the below example and verify that the function is giving the correct values.
  record what the right values are and show your work. 
 """
-plt.figure()
-plotflows(testmeas2, [[200,400],[800,1000]],[0,1000],300,'line')
+q,k = calculateflows(testmeas,[[200,400],[800,1000]],[0,1000],300)
+
 
 #%%
 #another toy example I want you to test on to verify on
