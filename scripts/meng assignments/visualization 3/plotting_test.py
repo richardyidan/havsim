@@ -188,11 +188,14 @@ colorbar is getting cutoff in the figure; make it so you can see the entire colo
 #with open('/Users/qiwuzou/Documents/assignment/M.Eng/follow_up/hav-sim-master/visualization/plottingtesting.pkl','rb') as f:
 
 import pickle 
-with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/plottingtesting.pkl','rb') as f:
-     meas, platooninfo, platoonlist, sim = pickle.load(f)
+# with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/plottingtesting.pkl','rb') as f:
+#      meas, platooninfo, platoonlist, sim = pickle.load(f)
 
 #with open('D:/assignment/Meng/plottingtesting.pkl','rb') as f:
 #    meas, platooninfo, platoonlist, sim = pickle.load(f)
+
+with open("/users/qiwuzou/Documents/assignment/M.Eng/follow_up/hav-sim-master/visualization/plottingtesting.pkl", 'rb') as f:
+    meas, platooninfo, platoonlist, sim = pickle.load(f)
 
 
 vehlist = []
@@ -210,11 +213,12 @@ from havsim.plotting import platoonplot, calculateflows, plotflows
 #        break
 
 #heres a better way to test meas: 
-for i in meas: 
-    meas[i] = meas[i][meas[i][:,1]<3000] #only keep trajectories with time less than 3000
-    
-
-plotflows(meas,[[400,600], [800, 1000]], [1000, 3000], 300, 'line')
+# for i in meas:
+#     meas[i] = meas[i][meas[i][:,1]<3000] #only keep trajectories with time less than 3000
+#
+#
+# plotflows(meas,[[400,600], [800, 1000]], [1000, 3000], 300, 'line')
+plotflows(meas,[[400,600], [800, 1000]], [1000, 3000], 30, 'FD')
 
 #test easy example to make sure things are working right 
 #%%
@@ -232,15 +236,33 @@ plotflows(meas,[[400,600], [800, 1000]], [1000, 3000], 300, 'line')
 ##see paper for work done to get this. 
 ##may want to also look at output from calculate flows 
 #
-#testmeas2 = {}
-#for i in range(3):
-#    testmeas2[i] = np.zeros((1001,3))
-#    testmeas2[i][:,1] = np.linspace(0+100*i,1000+100*i,1001) #equivalent to list(range(1001+100*i))[100*i:]
-#    testmeas2[i][:,2] = np.linspace(0,1000,1001)
-##
-## """
-## TO DO
-## figure out what the right values should be for the below example and verify that the function is giving the correct values.
-## """
-##
-#plotflows(testmeas2, [[200,400],[800,1000]],[0,1000],300,'line')
+testmeas2 = {}
+for i in range(3):
+   testmeas2[i] = np.zeros((1001,3))
+   testmeas2[i][:,1] = np.linspace(0+100*i,1000+100*i,1001) #equivalent to list(range(1001+100*i))[100*i:]
+   testmeas2[i][:,2] = np.linspace(0,1000*(i+1),1001)
+   plt.plot(testmeas2[i][:,1], testmeas2[i][:,2])
+
+
+plt.axhline(200, color='black', linestyle='--', linewidth='0.5')
+plt.axhline(400, color='black', linestyle='--', linewidth='0.5')
+
+plt.axhline(800, color='black', linestyle='--', linewidth='0.5')
+plt.axhline(1000, color='black', linestyle='--', linewidth='0.5')
+
+for i in range(0,1000,300):
+    plt.axvline(i, color='black', linestyle='--', linewidth='0.5')
+plt.axvline(1000, color='black', linestyle='--', linewidth='0.5')
+
+
+plt.show()
+plt.clf()
+
+#
+# """
+# TO DO
+# figure out what the right values should be for the below example and verify that the function is giving the correct values.
+# """
+#
+# plotflows(testmeas2, [[200,400],[800,1000]],[0,1000],300,'line')
+# plotflows(testmeas2, [[200,400],[800,1000]],[0,1000],300,'FD')
