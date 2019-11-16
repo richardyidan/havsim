@@ -207,7 +207,7 @@ def makeleadfolinfo(platoons, platooninfo, sim, *args):
     folinfo = []
     rinfo = [] #just empty stuff
     
-    for i in platoons[1:]: #iterate over each vehicle in the platoon
+    for i in platoons: #iterate over each vehicle in the platoon
         curleadinfo = [] #for each vehicle, we get these and then these are appeneded at the end so we have a list of the info for each vehicle in the platoon
         curfolinfo = []
         currinfo = []
@@ -226,14 +226,14 @@ def makeleadfolinfo(platoons, platooninfo, sim, *args):
         #only difference is that we only need to put things in if their follower is in platoons
         follist = sim[i][t_n-t_nstar:T_n-t_nstar+1,5] #list of followers
         curfol = follist[0]
-        if curfol in platoons[1:]: #if the current follower is in platoons we initialize
+        if curfol in platoons: #if the current follower is in platoons we initialize
             curfolinfo.append([curfol,t_n])
         for j in range(len(follist)): #check what we just made to see if we need to put stuff in folinfo
             if follist[j] != curfol: #if there is a new follower
                 curfol = follist[j]
                 if curfolinfo != []: #if there is anything in curfolinfo
                     curfolinfo[-1].append(t_n+j-1) #we finish the interval
-                if curfol in platoons[1:]: #if new follower is in platoons
+                if curfol in platoons: #if new follower is in platoons
                     curfolinfo.append([curfol,t_n+j]) #start the next interval
         if curfolinfo != []: #if there is anything to finish
             curfolinfo[-1].append(t_n+len(follist)-1) #finish it 
@@ -268,7 +268,7 @@ def makeleadfolinfo_r(platoons, platooninfo, sim,use_merge_constant=False):
     folinfo = []
     rinfo = []
     
-    for i in platoons[1:]: #iterate over each vehicle in the platoon
+    for i in platoons: #iterate over each vehicle in the platoon
         curleadinfo = [] #for each vehicle, we get these and then these are appeneded at the end so we have a list of the info for each vehicle in the platoon
         curfolinfo = []
         currinfo = []
@@ -302,14 +302,14 @@ def makeleadfolinfo_r(platoons, platooninfo, sim,use_merge_constant=False):
         #only difference is that we only need to put things in if their follower is in platoons
         follist = sim[i][t_n-t_nstar:T_n-t_nstar+1,5] #list of followers
         curfol = follist[0]
-        if curfol in platoons[1:]: #if the current follower is in platoons we initialize
+        if curfol in platoons: #if the current follower is in platoons we initialize
             curfolinfo.append([curfol,t_n])
         for j in range(len(follist)): #check what we just made to see if we need to put stuff in folinfo
             if follist[j] != curfol: #if there is a new follower
                 curfol = follist[j]
                 if curfolinfo != []: #if there is anything in curfolinfo
                     curfolinfo[-1].append(t_n+j-1) #we finish the interval
-                if curfol in platoons[1:]: #if new follower is in platoons
+                if curfol in platoons: #if new follower is in platoons
                     curfolinfo.append([curfol,t_n+j]) #start the next interval
         if curfolinfo != []: #if there is anything to finish
             curfolinfo[-1].append(t_n+len(follist)-1) #finish it 
@@ -345,7 +345,7 @@ def makeleadfolinfo_r2(platoons, platooninfo, sim,use_merge_constant=False):
     folinfo = []
     rinfo = []
     
-    for i in platoons[1:]: #iterate over each vehicle in the platoon
+    for i in platoons: #iterate over each vehicle in the platoon
         curleadinfo = [] #for each vehicle, we get these and then these are appeneded at the end so we have a list of the info for each vehicle in the platoon
         curfolinfo = []
         currinfo = []
@@ -379,14 +379,14 @@ def makeleadfolinfo_r2(platoons, platooninfo, sim,use_merge_constant=False):
         #only difference is that we only need to put things in if their follower is in platoons
         follist = sim[i][t_n-t_nstar:T_n-t_nstar+1,5] #list of followers
         curfol = follist[0]
-        if curfol in platoons[1:]: #if the current follower is in platoons we initialize
+        if curfol in platoons: #if the current follower is in platoons we initialize
             curfolinfo.append([curfol,t_n])
         for j in range(len(follist)): #check what we just made to see if we need to put stuff in folinfo
             if follist[j] != curfol: #if there is a new follower
                 curfol = follist[j]
                 if curfolinfo != []: #if there is anything in curfolinfo
                     curfolinfo[-1].append(t_n+j-1) #we finish the interval
-                if curfol in platoons[1:]: #if new follower is in platoons
+                if curfol in platoons: #if new follower is in platoons
                     curfolinfo.append([curfol,t_n+j]) #start the next interval
         if curfolinfo != []: #if there is anything to finish
             curfolinfo[-1].append(t_n+len(follist)-1) #finish it 
@@ -422,7 +422,7 @@ def makeleadfolinfo_r3(platoons, platooninfo, sim,use_merge_constant=False):
     folinfo = []
     rinfo = []
     
-    for i in platoons[1:]: #iterate over each vehicle in the platoon
+    for i in platoons: #iterate over each vehicle in the platoon
         curleadinfo = [] #for each vehicle, we get these and then these are appeneded at the end so we have a list of the info for each vehicle in the platoon
         curfolinfo = []
         currinfo = []
@@ -456,14 +456,14 @@ def makeleadfolinfo_r3(platoons, platooninfo, sim,use_merge_constant=False):
         #only difference is that we only need to put things in if their follower is in platoons
         follist = sim[i][t_n-t_nstar:T_n-t_nstar+1,5] #list of followers
         curfol = follist[0]
-        if curfol in platoons[1:]: #if the current follower is in platoons we initialize
+        if curfol in platoons: #if the current follower is in platoons we initialize
             curfolinfo.append([curfol,t_n])
         for j in range(len(follist)): #check what we just made to see if we need to put stuff in folinfo
             if follist[j] != curfol: #if there is a new follower
                 curfol = follist[j]
                 if curfolinfo != []: #if there is anything in curfolinfo
                     curfolinfo[-1].append(t_n+j-1) #we finish the interval
-                if curfol in platoons[1:]: #if new follower is in platoons
+                if curfol in platoons: #if new follower is in platoons
                     curfolinfo.append([curfol,t_n+j]) #start the next interval
         if curfolinfo != []: #if there is anything to finish
             curfolinfo[-1].append(t_n+len(follist)-1) #finish it 
@@ -501,7 +501,7 @@ def makeleadfolinfo_r4(platoons, platooninfo, sim,use_merge_constant=True):
     folinfo = []
     rinfo = []
     
-    for i in platoons[1:]: #iterate over each vehicle in the platoon
+    for i in platoons: #iterate over each vehicle in the platoon
         curleadinfo = [] #for each vehicle, we get these and then these are appeneded at the end so we have a list of the info for each vehicle in the platoon
         curfolinfo = []
         currinfo = []
@@ -535,14 +535,14 @@ def makeleadfolinfo_r4(platoons, platooninfo, sim,use_merge_constant=True):
         #only difference is that we only need to put things in if their follower is in platoons
         follist = sim[i][t_n-t_nstar:T_n-t_nstar+1,5] #list of followers
         curfol = follist[0]
-        if curfol in platoons[1:]: #if the current follower is in platoons we initialize
+        if curfol in platoons: #if the current follower is in platoons we initialize
             curfolinfo.append([curfol,t_n])
         for j in range(len(follist)): #check what we just made to see if we need to put stuff in folinfo
             if follist[j] != curfol: #if there is a new follower
                 curfol = follist[j]
                 if curfolinfo != []: #if there is anything in curfolinfo
                     curfolinfo[-1].append(t_n+j-1) #we finish the interval
-                if curfol in platoons[1:]: #if new follower is in platoons
+                if curfol in platoons: #if new follower is in platoons
                     curfolinfo.append([curfol,t_n+j]) #start the next interval
         if curfolinfo != []: #if there is anything to finish
             curfolinfo[-1].append(t_n+len(follist)-1) #finish it 
@@ -579,7 +579,7 @@ def makeleadfolinfo_r5(platoons, platooninfo, sim,use_merge_constant=True):
     folinfo = []
     rinfo = []
     
-    for i in platoons[1:]: #iterate over each vehicle in the platoon
+    for i in platoons: #iterate over each vehicle in the platoon
         curleadinfo = [] #for each vehicle, we get these and then these are appeneded at the end so we have a list of the info for each vehicle in the platoon
         curfolinfo = []
         currinfo = []
@@ -613,14 +613,14 @@ def makeleadfolinfo_r5(platoons, platooninfo, sim,use_merge_constant=True):
         #only difference is that we only need to put things in if their follower is in platoons
         follist = sim[i][t_n-t_nstar:T_n-t_nstar+1,5] #list of followers
         curfol = follist[0]
-        if curfol in platoons[1:]: #if the current follower is in platoons we initialize
+        if curfol in platoons: #if the current follower is in platoons we initialize
             curfolinfo.append([curfol,t_n])
         for j in range(len(follist)): #check what we just made to see if we need to put stuff in folinfo
             if follist[j] != curfol: #if there is a new follower
                 curfol = follist[j]
                 if curfolinfo != []: #if there is anything in curfolinfo
                     curfolinfo[-1].append(t_n+j-1) #we finish the interval
-                if curfol in platoons[1:]: #if new follower is in platoons
+                if curfol in platoons: #if new follower is in platoons
                     curfolinfo.append([curfol,t_n+j]) #start the next interval
         if curfolinfo != []: #if there is anything to finish
             curfolinfo[-1].append(t_n+len(follist)-1) #finish it 
@@ -657,7 +657,7 @@ def makeleadfolinfo_r6(platoons, platooninfo, sim,use_merge_constant=False,merge
     folinfo = []
     rinfo = []
     
-    for i in platoons[1:]: #iterate over each vehicle in the platoon
+    for i in platoons: #iterate over each vehicle in the platoon
         curleadinfo = [] #for each vehicle, we get these and then these are appeneded at the end so we have a list of the info for each vehicle in the platoon
         curfolinfo = []
         currinfo = []
@@ -695,14 +695,14 @@ def makeleadfolinfo_r6(platoons, platooninfo, sim,use_merge_constant=False,merge
         #only difference is that we only need to put things in if their follower is in platoons
         follist = sim[i][t_n-t_nstar:T_n-t_nstar+1,5] #list of followers
         curfol = follist[0]
-        if curfol in platoons[1:]: #if the current follower is in platoons we initialize
+        if curfol in platoons: #if the current follower is in platoons we initialize
             curfolinfo.append([curfol,t_n])
         for j in range(len(follist)): #check what we just made to see if we need to put stuff in folinfo
             if follist[j] != curfol: #if there is a new follower
                 curfol = follist[j]
                 if curfolinfo != []: #if there is anything in curfolinfo
                     curfolinfo[-1].append(t_n+j-1) #we finish the interval
-                if curfol in platoons[1:]: #if new follower is in platoons
+                if curfol in platoons: #if new follower is in platoons
                     curfolinfo.append([curfol,t_n+j]) #start the next interval
         if curfolinfo != []: #if there is anything to finish
             curfolinfo[-1].append(t_n+len(follist)-1) #finish it 
@@ -718,8 +718,8 @@ def makeleadfolinfo_r6(platoons, platooninfo, sim,use_merge_constant=False,merge
 
 
 def merge_rconstant(platoons, platooninfo, sim, leadinfo, rinfo, relax_constant = 100,merge_from_lane= 7,merge_lane = 6, datalen =9,h=.1):
-    for i in range(len(platoons[1:])):
-        curveh = platoons[i+1]
+    for i in range(len(platoons)):
+        curveh = platoons[i]
         t_nstar, t_n, T_nm1, T_n = platooninfo[curveh][0:4]
         lanelist = np.unique(sim[curveh][:t_n-t_nstar,7])
         
@@ -783,8 +783,8 @@ def merge_rconstant(platoons, platooninfo, sim, leadinfo, rinfo, relax_constant 
 def merge_rconstant2(platoons, platooninfo, sim, leadinfo, rinfo, relax_constant = 100,merge_from_lane= 7,merge_lane = 6, datalen =9,h=.1):
     #this one doesn't seem to work very well. use merge_rconstant (called by _r4 by default)
     
-    for i in range(len(platoons[1:])):
-        curveh = platoons[i+1]
+    for i in range(len(platoons)):
+        curveh = platoons[i]
         t_nstar, t_n, T_nm1, T_n = platooninfo[curveh][0:4]
         lanelist = np.unique(sim[curveh][:t_n-t_nstar,7])
         leadlist = np.unique(sim[curveh][:t_n-t_nstar,4])
@@ -1098,7 +1098,7 @@ def re_diff(data,platooninfo, platoons, delay = 0, h=.1,speeds = True, accel = T
     #re diferentiates speed and/or acceleration for either delay or no delay. 
     #This will work for platoonobjfn or TTobjfn functions, for any delayobjfn or stochobjfn functions you will need to modify this 
     #to redifferentiate over the correct times. 
-    for i in platoons[1:]: #iterate over vehicles 
+    for i in platoons: #iterate over vehicles 
         t_nstar, t_n, T_nm1, T_n = platooninfo[i][0:4]
         if delay != 0:
             offset = math.ceil(delay/h)
