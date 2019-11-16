@@ -692,7 +692,7 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
 # 	return q, k
 
 
-def calculateflows(meas, spacea, timea, agg):
+def calculateflows(meas, spacea, timea, agg, lane = None):
     q = [[] for i in spacea]
     k = [[] for i in spacea]
 
@@ -719,41 +719,54 @@ def calculateflows(meas, spacea, timea, agg):
     regions = [[([], []) for j in intervals] for i in spacea]
 
     for id in meas:
-        data = meas[id]
-        data = data[np.all([data[:,1] < timemax, data[:,1]>timemin], axis=0)]
-        data = data[np.all([data[:,2] < spacemax, data[:,2]>spacemin], axis=0)]
-        if len(data) == 0:
+        #heuristic for selecting shorter region of data; many trajectories we can potentially ignore
+        alldata = meas[id]
+        alldata = alldata[np.all([alldata[:,1] < timemax, alldata[:,1]>timemin], axis=0)]
+        alldata = alldata[np.all([alldata[:,2] < spacemax, alldata[:,2]>spacemin], axis=0)]
+        if len(alldata) == 0:
            continue
-
-        region_contained = []
-        region_data = {}  # key: tid, sid
-
-        for i in range(len(intervals)):
-            try:
-                start = max(0, intervals[i][0] - data[0][1])
-                end = max(0, intervals[i][1] - data[0][1])
-            except:
-                print("Empty data")
-            start = int(start)
-            end = int(end)
-
-            if start == end:
-                continue
-
-            dataInterval = data[start:end]
-            spaceInterval = [j[2] for j in dataInterval]
-
-            for j in range(len(spacea)):
+       
+        #if lane is given we need to find the segments of data inside the lane
+        if lane is not None: 
+            alldata = alldata[alldata[:,7]==lane] #boolean mask selects data inside lane
+            inds = helper.sequential(alldata) #returns indexes where there are jumps
+            indlist = []
+            for i in range(len(inds)-1):
+                indlist.append([inds[i], inds[i+1]])
+        else: #otherwise can just use everything
+            indlist = [[0,len(alldata)]]
+        
+        for i in indlist:
+            data = alldata[i[0]:i[1]] #select only current region of data 
+            region_contained = []
+            region_data = {}  # key: tid, sid
+    
+            for i in range(len(intervals)):
                 try:
-                    start = min(bisect.bisect_left(spaceInterval, spacea[j][0]), len(data)-1)
-                    end = min(bisect.bisect_left(spaceInterval, spacea[j][1]), len(data)-1)
-                    if start == end:
-                        continue
-                    regions[j][i][0].append(data[end][1] - data[start][1])
-                    regions[j][i][1].append(data[end][2] - data[start][2])
-
+                    start = max(0, intervals[i][0] - data[0][1])
+                    end = max(0, intervals[i][1] - data[0][1])
                 except:
-                    print("out index")
+                    print("Empty data")
+                start = int(start)
+                end = int(end)
+    
+                if start == end:
+                    continue
+    
+                dataInterval = data[start:end]
+                spaceInterval = [j[2] for j in dataInterval]
+    
+                for j in range(len(spacea)):
+                    try:
+                        start = min(bisect.bisect_left(spaceInterval, spacea[j][0]), len(data)-1)
+                        end = min(bisect.bisect_left(spaceInterval, spacea[j][1]), len(data)-1)
+                        if start == end:
+                            continue
+                        regions[j][i][0].append(data[end][1] - data[start][1])
+                        regions[j][i][1].append(data[end][2] - data[start][2])
+    
+                    except:
+                        print("out index")
 
     for i in range(len(regions)):
         for j in range(len(regions[0])):

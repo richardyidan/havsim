@@ -890,16 +890,16 @@ def arraytraj(meas,followerchain, presim = False, postsim = False,datalen=9):
 
 def platoononly(platooninfo, platoon):
     #makes it so platooninfo only contains entries for platoon
-    #platoon can be a platoon in form [[], 1, 2, 3, etc.] or a list of those. 
+    #platoon can be a platoon in form [ 1, 2, 3, etc.] or a list of those. 
     ans = {}
-    if len(platoon) == 1: 
-        useplatoon = platoon[0]
-    elif type(platoon[1]) == list:  #list of platoons 
+
+    if type(platoon[0]) == list:  #list of platoons 
         useplatoon = []
         for i in platoon:
             useplatoon.extend(i[:])
     else: 
         useplatoon = platoon
+        
     for i in useplatoon[:]:
         ans[i] = platooninfo[i]
     return ans
