@@ -24,11 +24,11 @@ except:
      
     
 #test on actual data
-# plt.close('all')
-# plt.figure()
-# plotflows(meas,[[500,1300]], [1000, 9000], 600, 'line')
-# plt.figure()
-# plotflows(meas,[[500,1300]], [1000, 9000], 600, 'FD')
+plt.close('all')
+plt.figure()
+plotflows(meas,[[600,1000]], [1000, 9000], 300, 'line', lane = 2)
+plt.figure()
+plotflows(meas,[[600,1000]], [1000, 9000], 300, 'FD', lane = 2)
     
     
 #%%
@@ -71,7 +71,7 @@ testmeas3 = {}
 for i in [898, 905, 909, 916, 920]:
     testmeas3[i] = meas[i].copy()
 
-q, k = calculateflows(testmeas3, [[400, 800]], [2600, 3000], 200, lane = None)
+q, k = calculateflows(testmeas3, [[400, 800]], [2600, 3000], 200, lane = 2)
 print(q,k)
 #measurements taken by hand (if lane = 2): 
 #q - [.0128125, .0082125] #q[1] has incorrect value in both cases for lane == none and lane is 2
