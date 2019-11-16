@@ -758,12 +758,12 @@ def calculateflows(meas, spacea, timea, agg, lane = None):
     
                 for j in range(len(spacea)):
                     try:
-                        start = min(bisect.bisect_left(spaceInterval, spacea[j][0]), len(data)-1)
-                        end = min(bisect.bisect_left(spaceInterval, spacea[j][1]), len(data)-1)
+                        start = min(bisect.bisect_left(spaceInterval, spacea[j][0]), len(dataInterval)-1)
+                        end = min(bisect.bisect_left(spaceInterval, spacea[j][1]), len(dataInterval)-1)
                         if start == end:
                             continue
-                        regions[j][i][0].append(data[end][1] - data[start][1])
-                        regions[j][i][1].append(data[end][2] - data[start][2])
+                        regions[j][i][0].append(dataInterval[end][1] - dataInterval[start][1])
+                        regions[j][i][1].append(dataInterval[end][2] - dataInterval[start][2])
     
                     except:
                         print("out index")
