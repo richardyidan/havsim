@@ -500,7 +500,7 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
 #    other thing is that I think we can also just try something super simple where instead of 1-2 we just have 1 strategy where we iterate over all the followers, 
 #    and if we can add any of them do add them. so in total that's 3 similar versions of this program we can try. 
     #####################
-    platoons = [[]] #current followers list for platoon; these are the vehicles which have been successfully added to the platoon
+    platoons = [] #current followers list for platoon; these are the vehicles which have been successfully added to the platoon
 #    totfollist = [] #list of every single follower of leaders; followers variables only has leaders that are in curleadlist
     curn = 0 #current n value
     
@@ -687,7 +687,9 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
                         for j in platooninfo[curlead][-1][1]:
                             totfollist.insert(0,j)
                         totfollist = list(set(totfollist))
-                    platoons[0].append(curfix)
+#                    platoons[0].append(curfix)
+                    platoons.append(curfix) #new version works with new platoon format maybe
+                    #actually what happens is we get nested platoons
                 
                 
             
@@ -776,16 +778,27 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
         platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, platoons = makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, n)
         #append it to platoonoutput (output from the function) and platoonlist (actual platoons we will be calibrating)
         platoonoutput.append(platoons)
-        if platoons[0] == []:
-            platoonlist.append(platoons)
-        else: 
-            for j in platoons[0]:
-                newplatoon = [[]]
-                newplatoon.append(j[0])
-                platoonlist.append(newplatoon) #append all the loop vehicles as 
-            newplatoon = [[]]
-            newplatoon = newplatoon + platoons[1:]
-            platoonlist.append(newplatoon)
+        #old code worked with the empty list in platoons
+#        if platoons[0] == []:
+##        if True:
+#            platoonlist.append(platoons)
+#        else: 
+#            for j in platoons[0]:
+#                newplatoon = []
+#                newplatoon.append(j[0])
+#                platoonlist.append(newplatoon) #append all the loop vehicles as 
+#            newplatoon = []
+#            newplatoon = newplatoon + platoons[1:]
+#            platoonlist.append(newplatoon)
+        
+        #new code will work without the empty list in platoons
+        newp = []
+        for i in platoons: 
+            if type(i) == np.float64:
+                newp.append(i)
+            elif type(i) == list: 
+                platoonlist.append(i)
+        platoonlist.append(newp)
     
     if vehs is not None:
         platooninfo = platooninfovehs #go back to the original platooninfo after we have made the platoons; this is only for special case where we are calibrating between vehs
@@ -805,7 +818,7 @@ def makeplatoonlist_s(data, n = 1, lane = 1, vehs = []):
     nvehs = len(sortedvehID)
     cur, n = 0, 5
     while cur < nvehs: 
-        curplatoon = [[]]
+        curplatoon = []
         curplatoon.extend(sortedvehID[cur:cur+n])
         sortedplatoons.append(curplatoon)
         cur = cur + n
