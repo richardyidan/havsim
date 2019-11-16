@@ -7,20 +7,28 @@ import pickle
 import matplotlib.pyplot as plt
 from havsim.plotting import platoonplot, calculateflows, plotflows
 #%%
-#load data 
-with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/plottingtesting.pkl','rb') as f:
-     meas, platooninfo, platoonlist, sim = pickle.load(f)
+#load data
+
+try:
+    with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/plottingtesting.pkl','rb') as f:
+         meas, platooninfo, platoonlist, sim = pickle.load(f)
+except:
+    with open("/users/qiwuzou/Documents/assignment/M.Eng/follow_up/hav-sim-master/visualization/plottingtesting.pkl", 'rb') as f:
+        meas, platooninfo, platoonlist, sim = pickle.load(f)
 
 #with open('D:/assignment/Meng/plottingtesting.pkl','rb') as f:
 #    meas, platooninfo, platoonlist, sim = pickle.load(f)
+
+# with open("/users/qiwuzou/Documents/assignment/M.Eng/follow_up/hav-sim-master/visualization/plottingtesting.pkl", 'rb') as f:
+#     meas, platooninfo, platoonlist, sim = pickle.load(f)
      
     
 #test on actual data
 plt.close('all')
 plt.figure()
-plotflows(meas,[[500,1300]], [1000, 9000], 600, 'line')
+plotflows(meas,[[600,1000]], [1000, 9000], 300, 'line', lane = 2)
 plt.figure()
-plotflows(meas,[[500,1300]], [1000, 9000], 600, 'FD')
+plotflows(meas,[[600,1000]], [1000, 9000], 300, 'FD', lane = 2)
     
     
 #%%
@@ -35,10 +43,11 @@ for i in range(1):
 #plt.figure()
 #plotflows(testmeas,[[200,400],[800,1000]],[0,1000],300,'line')
 q,k = calculateflows(testmeas,[[200,400],[800,1000]],[0,1000],300)
-#q = [.00166, .0166, 0, 0] for first region, [0, 0, .166, .005] for second. 
-#k is the same as q in this example. 
-
-
+print(q,k)
+# #q = [.00166, .0166, 0, 0] for first region, [0, 0, .166, .005] for second.
+# #k is the same as q in this example.
+#
+#
 testmeas2 = {}
 for i in range(3):
     testmeas2[i] = np.zeros((1001,3))
@@ -46,6 +55,7 @@ for i in range(3):
     testmeas2[i][:,2] = np.linspace(0,1000,1001)
 
 q,k = calculateflows(testmeas2,[[200,400],[800,1000]],[0,1000],300)
+print(q,k)
 #q = [.00166, .08333, 0, 0] for first region, [0, 0, .00166, .01]
 #k is the same as q in this example
 
@@ -61,7 +71,8 @@ testmeas3 = {}
 for i in [898, 905, 909, 916, 920]:
     testmeas3[i] = meas[i].copy()
 
-q, k = calculateflows(testmeas3, [[400, 800]], [2600, 3000], 200, lane = None)
+q, k = calculateflows(testmeas3, [[400, 800]], [2600, 3000], 200, lane = 2)
+print(q,k)
 #measurements taken by hand (if lane = 2): 
 #q - [.0128125, .0082125] #q[1] has incorrect value in both cases for lane == none and lane is 2
 #k - [.0068875, .0051]

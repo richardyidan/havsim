@@ -738,6 +738,8 @@ def calculateflows(meas, spacea, timea, agg, lane = None):
         
         for i in indlist:
             data = alldata[i[0]:i[1]] #select only current region of data 
+            if len(data) == 0:
+                continue
             region_contained = []
             region_data = {}  # key: tid, sid
     
@@ -758,12 +760,12 @@ def calculateflows(meas, spacea, timea, agg, lane = None):
     
                 for j in range(len(spacea)):
                     try:
-                        start = min(bisect.bisect_left(spaceInterval, spacea[j][0]), len(data)-1)
-                        end = min(bisect.bisect_left(spaceInterval, spacea[j][1]), len(data)-1)
+                        start = min(bisect.bisect_left(spaceInterval, spacea[j][0]), len(dataInterval)-1)
+                        end = min(bisect.bisect_left(spaceInterval, spacea[j][1]), len(dataInterval)-1)
                         if start == end:
                             continue
-                        regions[j][i][0].append(data[end][1] - data[start][1])
-                        regions[j][i][1].append(data[end][2] - data[start][2])
+                        regions[j][i][0].append(dataInterval[end][1] - dataInterval[start][1])
+                        regions[j][i][1].append(dataInterval[end][2] - dataInterval[start][2])
     
                     except:
                         print("out index")
@@ -776,7 +778,7 @@ def calculateflows(meas, spacea, timea, agg, lane = None):
     return q, k
 
 
-def plotflows(meas, spacea, timea, agg, type='FD', FDagg=None):
+def plotflows(meas, spacea, timea, agg, type='FD', FDagg=None, lane = None):
     """
 	aggregates microscopic data into macroscopic quantities based on Edie's generalized ... definitions of traffic variables
 	meas = measurements, in usual format (dictionary where keys are vehicle IDs, values ... are numpy arrays)
@@ -799,7 +801,7 @@ def plotflows(meas, spacea, timea, agg, type='FD', FDagg=None):
         temp2 += agg
     intervals.append((temp1, end))
 
-    q, k = calculateflows(meas, spacea, timea, agg)
+    q, k = calculateflows(meas, spacea, timea, agg, lane = lane)
     time_sequence = []
     time_sequence_for_line = []
 
