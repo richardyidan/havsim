@@ -4,19 +4,23 @@
 houses the main code for running simulations 
 
 TO DO /
-
-    add some control models (CACC like in JM, follower stopper and PI with saturation)
-    get some more loss functions
-     some quick modifications to get plotting api to work on sim format so we can properly debug/make pretty pictures
-    implementing boundary conditions (for now do the simplest possible)
-    getting networks working (need to handle changing roads, some rule for merging)
+     some quick modifications to get plotting api to work on sim format so we can properly debug/make pretty pictures (change sim into something we can treat as meas)
+    implementing boundary conditions 
+    getting networks working (need to handle changing roads, some rule for merging) (for now do relaxation only, can add mobil later)
      and write extended abstract
-     
-    adding lane changing and multi lane 
     
     how to do the adjoint calculation
     
     paper on AV control
+    
+    adding lane changing and multi lane 
+    
+    add some more models
+    
+    at some point will probably need to refactor this code again so it's in a polished state-
+    need to think about exactly what we need out of states, actions, how to handle things like different models,
+    different update functions, handling derivatives, handling different loss functions, how lane changing will work 
+    etc. 
     
     reinforcement learning/rewriting calibration code
 
@@ -52,16 +56,17 @@ def simulate_step(curstate, auxinfo, roadinfo, updatefun, dt):
     4 - length
     5 - parameters
     6 - model 
-    7 - init entry time
-    8 - past model reg info
-    9 - past leader info
-    10 - past lane info 
-    11 - past road info
+    7 - modelupdate
+    8 - init entry time
+    9 - past model reg info
+    10 - past leader info
+    11 - past lane info 
+    12 - past road info
     this is information that we will always have
     
     roadinfo - dictionary
     
-    updatefun - 
+    updatefun - overall function that updates the states based on actions, there is also a specific updatefun for each vehicle (modelupdate)
     
     dt - timestep
     
@@ -91,10 +96,13 @@ def update_cir(state, action, auxinfo, roadinfo, dt):
     nextstate = {}
     
     #update states
+#    for i in state.keys():
+#        nextstate[i] = [state[i][0] + dt*action[i][0], state[i][1] + dt*action[i][1], None ]
+#        if nextstate[i][0] > roadinfo[0]: #wrap around 
+#            nextstate[i][0] = nextstate[i][0] - roadinfo[0]
+    
     for i in state.keys():
-        nextstate[i] = [state[i][0] + dt*action[i][0], state[i][1] + dt*action[i][1], None ]
-        if nextstate[i][0] > roadinfo[0]: #wrap around 
-            nextstate[i][0] = nextstate[i][0] - roadinfo[0]
+        nextstate[i] = auxinfo[i][7](state[i],action[i],dt,roadinfo) #update is specific based on vehicle 
         
     #update headway, which is part of state      
     for i in state.keys(): 
@@ -106,6 +114,14 @@ def update_cir(state, action, auxinfo, roadinfo, dt):
         if nextstate[i][2] < -roadinfo[1]: 
             nextstate[i][2] = nextstate[i][2] + roadinfo[0]
         
+    return nextstate
+
+def update2nd_cir(state, action, dt, roadinfo):
+    #standard update function for a second order model
+    nextstate = [state[0] + dt*action[0], state[1] + dt*action[1], None ]
+    if nextstate[0] > roadinfo[0]: #wrap around 
+        nextstate[0] = nextstate[0] - roadinfo[0]
+    
     return nextstate
 
 
@@ -146,38 +162,7 @@ def simulate_net():
     """
     pass
 
-        #old code 
-#    for i in curstate.keys(): 
-#        #get necessary info for update
-#        leadid = auxinfo[i][1]
-#        lead = curstate[leadid]
-#        leadlen = auxinfo[leadid][0]
-#        
-#        #call model for vehicle
-#        out = auxinfo[i][4](curstate[i],lead,auxinfo[i][3],leadlen, *modelinfo[i], dt=dt)
-#        
-#        #update position in nextstate for vehicle
-#        nextstate[i] = [curstate[i][0] + dt* out[0], curstate[i][1] + dt*out[1]]
-
-    #this is one way to update the headway where we explicitly track if vehicles have a leader
-    #which has wrapped around. But you know you could just make this so much simpler if you just
-    #assume that if the headway is extremely negative, it's because you wrapped around. 
-#    temp = [] #keep track of vehicles which wrap-around in next timestep
-#    for i in nextstate.keys():
-#        if auxinfo[i][1]: #if in activated 
-#            if nextstate[i][0] > L: #follower wraps around so can reset 
-#                temp.append(i)
-#                auxinfo[i][1] = 0
-#        else: 
-#            if nextstate[auxinfo[i][1]][0] > L: #if leader wraps around
-#                if nextstate[i][0] <= L:
-#                    auxinfo[i][1] = 1 #active wrap around state for i 
-#                else:  #edge case where both leader and vehicle wrap around in same time step
-#                    temp.append(i)
-#        for i in temp: 
-#            nextstate[i][0] = nextstate[i][0] - L
-
-def eq_circular(p, model, eqlfun, n, length = 2, L = None, v = None, perturb = 1e-2):
+def eq_circular(p, model, modelupdate, eqlfun, n, length = 2, L = None, v = None, perturb = 1e-2):
     #given circular road with length L with n vehicles which follow model model with parameters p, 
     #solves for the equilibrium solution and initializes vehicles in this circular road in the eql solution, 
     #with the perturbation perturb applied to one of the vehicles. 
@@ -215,21 +200,22 @@ def eq_circular(p, model, eqlfun, n, length = 2, L = None, v = None, perturb = 1
     initstate[n-1][2] = initstate[n-1][2] - perturb
     
     #create auxinfo
-    auxinfo = {i:[0, i-1, 1, 1, length, p, model, 0, [],[],[],[]] for i in range(n)}
+    auxinfo = {i:[0, i-1, 1, 1, length, p, model, modelupdate, 0, [],[],[],[]] for i in range(n)}
     auxinfo[0][1] = n-1 #first vehicle needs to follow last vehicle
         
     #create roadinfo
-    roadinfo = [L, 3/4*L]
+    roadinfo = [L, 1/6*L]
     
     return initstate, auxinfo, roadinfo
 
-def simcir_obj(p, initstate, auxinfo, roadinfo, idlist, model, lossfn, updatefun = update_cir,  timesteps = 1000,  dt = .25, objonly = True):
+def simcir_obj(p, initstate, auxinfo, roadinfo, idlist, model, modelupdate, lossfn, updatefun = update_cir,  timesteps = 1000,  dt = .25, objonly = True):
     #p - parameters for AV 
     #idlist - vehicle IDs which will be controlled 
     #model - parametrization for AV 
     for i in idlist: 
         auxinfo[i][5] = p
         auxinfo[i][6] = model
+        auxinfo[i][7] = modelupdate
         
     sim, curstate, auxinfo = simulate_cir(initstate, auxinfo, roadinfo, updatefun = updatefun, timesteps=timesteps, dt = dt)
     obj = lossfn(sim, auxinfo)

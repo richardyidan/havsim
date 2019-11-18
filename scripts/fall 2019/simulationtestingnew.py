@@ -7,30 +7,50 @@ test the new shiny simulation module
 
 import havsim
 from havsim.simulation.simulation import *
-from havsim.simulation.models import IDM_b3, IDM_b3_eql, sv_obj, IDM_b3_sh
+from havsim.simulation.models import *
 import matplotlib.pyplot as plt 
 import scipy.optimize as sc
 #%%
 #create initial conditions of stop and go traffic on circular road 
 #p = [33.33, 1.5, 2, 1.1, 1.5] #4th parameter can change between .9 for absolutely unstable, 1.1 for convectively unstable. 
 p = [33.33, 1.2, 2, 1.1, 1.5]
-initstate, auxinfo, roadinfo = eq_circular(p, IDM_b3, IDM_b3_eql, 41, length = 2, L = None, v = 15, perturb = 1)
+initstate, auxinfo, roadinfo = eq_circular(p, IDM_b3, update2nd_cir, IDM_b3_eql, 41, length = 2, L = None, v = 15, perturb = 1)
 sim, curstate, auxinfo = simulate_cir(initstate, auxinfo,roadinfo, update_cir, timesteps = 25000, dt = .25)
 
 
 #%%
-p2 = [33.33, 1.2, 2, 1.1, 1.5, 15] #IDK just guess some parameters for IDM
 vlist = {i: curstate[i][1] for i in curstate.keys()}
 indlist = [min(vlist, key=vlist.get)]
 #verify objective function works - also get baseline of original scenario
-obj, testsim, curstate2, auxinfo2, modelinfo2 = simcir_obj(p,curstate, auxinfo, roadinfo,indlist, IDM_b3, sv_obj, timesteps = 5000, objonly = False, dt = .25)
+#obj, testsim, curstate2, auxinfo2, modelinfo2 = simcir_obj(p,curstate, auxinfo, roadinfo,indlist, IDM_b3, update2nd_cir, l2v_obj, timesteps = 5000, objonly = False, dt = .25)
+
+#verify objective function works 
+#obj, testsim, curstate2, auxinfo2, modelinfo2 = simcir_obj(res2['x'],curstate, auxinfo, roadinfo,indlist, linearCAV, update2nd_cir, l2v_obj, update_cir, 5000, .25, False)
+
+obj, testsim, curstate2, auxinfo2, modelinfo2 = simcir_obj(res['x'],curstate, auxinfo, roadinfo,indlist, FS, update2nd_cir, l2v_obj, update_cir, 5000, .25, False)
+#%%
 #optimize
-args = (curstate, auxinfo, roadinfo,indlist, IDM_b3_sh, sv_obj, update_cir, 5000, .25, True)
-bounds = [(15,35), (.5, 1.8), (1, 3), (.5, 3), (.5, 3), (10, 20)]
+
+#using IDM as a control model
+#p2 = [33.33, 1.2, 2, 1.1, 1.5] #IDK just guess some parameters for IDM
+#args = (curstate, auxinfo, roadinfo,indlist, IDM_b3_b, update2nd_cir, l2v_obj, update_cir, 5000, .25, True)
+#bounds = [(15,35), (.5, 1.8), (1, 3), (.5, 3), (.5, 3)]
+#res = sc.minimize(simcir_obj, p2, args = args, method = 'l-bfgs-b', bounds = bounds)
+
+#follower stopper
+p2 = [1.5, 1.0, .5, 4.5, 5.25, 6.0, 15] #IDK just guess some parameters for follower stopper
+args = (curstate, auxinfo, roadinfo,indlist, FS, update2nd_cir, l2v_obj, update_cir, 5000, .25, True)
+bounds = [(.4,2),(.4,2),(.4,2),(3,7),(3,7),(3,7),(12.5,22)]
 res = sc.minimize(simcir_obj, p2, args = args, method = 'l-bfgs-b', bounds = bounds)
+
+#linear CAV controller from experimental validation of cav design paper
+p2 = [1, .6, 16, .2, .4, 30,70] #IDK just guess some parameters for linearCAV
+args = (curstate, auxinfo, roadinfo,indlist, linearCAV, update2nd_cir, l2v_obj, update_cir, 5000, .25, True)
+bounds = [(.5,5), (.4,.8), (12.5,22), (.15,.4), (.3,.6),(10,70),(70,200)]
+res2 = sc.minimize(simcir_obj, p2, args = args, method = 'l-bfgs-b', bounds = bounds)
 #%%
 
-objopt, testsim, curstate2, auxinfo2, modelinfo2 = simcir_obj(res['x'],curstate, auxinfo, roadinfo,indlist, IDM_b3_sh, sv_obj, timesteps = 5000, objonly = False, dt = .25)
+objopt, testsim, curstate2, auxinfo2, modelinfo2 = simcir_obj(res['x'],curstate, auxinfo, roadinfo,indlist, IDM_b3_b, update2nd_cir, avgv_obj, update_cir, 5000, .25, False)
 
 #%%
 def plothelper(sim, cur = 40):
@@ -63,12 +83,29 @@ plothelper(testsim, cur = 21)
 #headwayhelper(sim,auxinfo, cur = 7)
 
 #%%
-def v_metric(testsim):
+def v_metric(testsim,ind=0):
     v = []
     for i in testsim.keys(): 
-        for j in testsim[i]:
+        for j in testsim[i][ind:]:
             v.append(j[1])
     print(np.mean(v))
     return
 v_metric(testsim)
 v_metric(sim)
+
+#%%
+import pickle
+#results for using IDM_b3 to stabilize ring road
+#args = (curstate, auxinfo, roadinfo,indlist, IDM_b3_b, update2nd_cir, avgv_obj, update_cir, 5000, .25, True)
+#bounds = [(15,35), (.5, 1.8), (1, 3), (.5, 3), (.5, 3)]
+#with open('C:/Users/rlk268/OneDrive - Cornell University/fall 2019/IFAC conference/IDMb3.pkl', 'wb') as f:
+#    pickle.dump(res,f)
+
+#use l2v instead of avgv
+#args = (curstate, auxinfo, roadinfo,indlist, IDM_b3_b, update2nd_cir, l2v_obj, update_cir, 5000, .25, True)
+#with open('C:/Users/rlk268/OneDrive - Cornell University/fall 2019/IFAC conference/IDMb32.pkl', 'wb') as f:
+#    pickle.dump(res,f)
+
+#args = (curstate, auxinfo, roadinfo,indlist, linearCAV, update2nd_cir, l2v_obj, update_cir, 5000, .25, True)
+#with open('C:/Users/rlk268/OneDrive - Cornell University/fall 2019/IFAC conference/IDMb33.pkl', 'wb') as f:
+#    pickle.dump(res2,f)

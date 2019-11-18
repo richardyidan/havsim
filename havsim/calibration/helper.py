@@ -182,7 +182,7 @@ def makeleadfolinfo(platoons, platooninfo, sim, *args):
 #    folinfo: list of lists with the relevant fol info (see below)
 #    
 #EXAMPLE: 
-#    platoons = [[],5,7] means we want to calibrate vehicles 5 and 7 in a platoon
+#    platoons = [5,7] means we want to calibrate vehicles 5 and 7 in a platoon
 #    
 #    leadinfo = [[[1,1,10],[2,11,20]],[[5,10,500]]] Means that vehicle 5 has vehicle 1 as a leader from 1 to 10, 2 as a leader from 11 to 20. 
 #    vehicle 7 has 3 as a leader from 10 to 500 (leadinfo[i] is the leader info for platoons[i]. leadinfo[i] is a list of lists, so leadinfo is a list of lists of lists.)
