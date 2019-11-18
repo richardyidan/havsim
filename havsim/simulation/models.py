@@ -121,7 +121,7 @@ def FS(p, veh, lead, *args, dt = .1):
                 vcmd = p[6]
     
     outdx = veh[1]
-    outddx = (vcmd - veh[1])/dt
+    outddx = p[7]*(vcmd - veh[1])
     
     if outddx > 2:
         outddx = 2

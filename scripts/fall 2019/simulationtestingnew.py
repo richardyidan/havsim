@@ -38,19 +38,19 @@ obj, testsim, curstate2, auxinfo2, modelinfo2 = simcir_obj(res['x'],curstate, au
 #res = sc.minimize(simcir_obj, p2, args = args, method = 'l-bfgs-b', bounds = bounds)
 
 #follower stopper
-p2 = [1.5, 1.0, .5, 4.5, 5.25, 6.0, 15] #IDK just guess some parameters for follower stopper
+p2 = [1.5, 1.0, .5, 4.5, 5.25, 6.0, 15,1] #IDK just guess some parameters for follower stopper
 args = (curstate, auxinfo, roadinfo,indlist, FS, update2nd_cir, l2v_obj, update_cir, 5000, .25, True)
-bounds = [(.4,2),(.4,2),(.4,2),(3,7),(3,7),(3,7),(12.5,22)]
+bounds = [(.4,2),(.4,2),(.4,2),(3,7),(3,7),(3,7),(12.5,22),(.4,2)]
 res = sc.minimize(simcir_obj, p2, args = args, method = 'l-bfgs-b', bounds = bounds)
 
 #linear CAV controller from experimental validation of cav design paper
-p2 = [1, .6, 16, .2, .4, 30,70] #IDK just guess some parameters for linearCAV
-args = (curstate, auxinfo, roadinfo,indlist, linearCAV, update2nd_cir, l2v_obj, update_cir, 5000, .25, True)
-bounds = [(.5,5), (.4,.8), (12.5,22), (.15,.4), (.3,.6),(10,70),(70,200)]
-res2 = sc.minimize(simcir_obj, p2, args = args, method = 'l-bfgs-b', bounds = bounds)
+#p2 = [1, .6, 16, .2, .4, 30,70] #IDK just guess some parameters for linearCAV
+#args = (curstate, auxinfo, roadinfo,indlist, linearCAV, update2nd_cir, l2v_obj, update_cir, 5000, .25, True)
+#bounds = [(.5,5), (.4,.8), (12.5,22), (.15,.4), (.3,.6),(10,70),(70,200)]
+#res2 = sc.minimize(simcir_obj, p2, args = args, method = 'l-bfgs-b', bounds = bounds)
 #%%
 
-objopt, testsim, curstate2, auxinfo2, modelinfo2 = simcir_obj(res['x'],curstate, auxinfo, roadinfo,indlist, IDM_b3_b, update2nd_cir, avgv_obj, update_cir, 5000, .25, False)
+objopt, testsim, curstate2, auxinfo2, modelinfo2 = simcir_obj(res2['x'],curstate, auxinfo, roadinfo,indlist, linearCAV, update2nd_cir, avgv_obj, update_cir, 5000, .25, False)
 
 #%%
 def plothelper(sim, cur = 40):
@@ -109,3 +109,9 @@ import pickle
 #args = (curstate, auxinfo, roadinfo,indlist, linearCAV, update2nd_cir, l2v_obj, update_cir, 5000, .25, True)
 #with open('C:/Users/rlk268/OneDrive - Cornell University/fall 2019/IFAC conference/IDMb33.pkl', 'wb') as f:
 #    pickle.dump(res2,f)
+
+#p2 = [1.5, 1.0, .5, 4.5, 5.25, 6.0, 15,1] #IDK just guess some parameters for follower stopper
+#args = (curstate, auxinfo, roadinfo,indlist, FS, update2nd_cir, l2v_obj, update_cir, 5000, .25, True)
+#bounds = [(.4,2),(.4,2),(.4,2),(3,7),(3,7),(3,7),(12.5,22),(.4,2)]
+with open('C:/Users/rlk268/OneDrive - Cornell University/fall 2019/IFAC conference/IDMb34.pkl', 'wb') as f:
+    pickle.dump(res,f)
