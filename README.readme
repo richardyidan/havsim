@@ -1,4 +1,4 @@
-hav-sim is a differentiable traffic simulator for the calibration and optimization of microscopic (agent-based) traffic simulations. 
+hav-sim (Human and Autonomous Vehicle SIMulation, calibration, and optimization) is a differentiable traffic simulator for the calibration and optimization of microscopic (agent-based) traffic simulations. 
 
 The two main use cases are 
 	-calibration and validation of some traffic model to vehicle trajectory data or aggregate network data
