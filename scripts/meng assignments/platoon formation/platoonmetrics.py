@@ -134,20 +134,24 @@ def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh'):
 
 
 platoon = [391, 335, 326]
-# veh = 391
-# T = set(range(platooninfo[391][1], platooninfo[391][2]))
-# c = c_metric(veh, platoon, T, platooninfo)
+#chainmetric = 34 - 326 follows 335 
+testplatoon = [381.0, 391.0, 335.0, 326.0, 334.0]
+#chainmetric = 507 - 391 follows 381,
+#34 - 326 follows 335
+# 59 - 334 follows 326, 194 + 56 - 334 follows 335 
+#chainmetric = 507 + 34 + 59 + 194 + 56 = 850
 
 
 
 
-Chain = chain_metric(platoon, platooninfo, 0)
+Chain = chain_metric(platoon, platooninfo, 0) 
 print(Chain)
+chain2 = chain_metric(testplatoon,platooninfo,0)
 
 # 507 + 343 + 397 + k* 34 (326 has a leader 335 at (1583, 1616)) = 1281 if k == 1 else 1247
 
 
-cir = cirdep_metric([[391, 335, 326], [307, 318, 316]], platooninfo, k=1, type='veh')
+cir = cirdep_metric([[391, 335, 326], [307, 318, 316]], platooninfo, k=1, type='num')
 print(cir)
 
 # leaders:
