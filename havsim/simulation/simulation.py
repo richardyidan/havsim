@@ -5,10 +5,10 @@ houses the main code for running simulations
 
 TO DO /
      some quick modifications to get plotting api to work on sim format so we can properly debug/make pretty pictures (change sim into something we can treat as meas)
-    implementing boundary conditions 
-    getting networks working (need to handle changing roads, some rule for merging) (for now do relaxation only, can add mobil later)
      and write extended abstract
     
+    implementing boundary conditions 
+    getting networks working (need to handle changing roads, some rule for merging) (relaxation, mobil)
     how to do the adjoint calculation
     
     paper on AV control

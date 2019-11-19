@@ -21,6 +21,42 @@ def IDM_b3(vehx, vehdx, leadx, leaddx, p,leadlen, *args,dt=.1):
     
     return outdx, outddx
 
+def linearCAV(vehx, vehdx, leadx, leaddx, p, leadlen, *args, dt = .1):
+    #p[0] = jam distance
+    #p[1] = headway slope
+    #p[2] = max speed
+    #p[3] = sensitivity parameter for headway feedback
+    #p[4] - initial beta value - sensitivity for velocity feedback
+    #p[5] - short headway 
+    #p[6] -large headway
+    s = leadx - vehx - leadlen
+    veh = [vehx, vehdx, s]
+    lead = [leadx, leaddx]
+    
+    
+    Vs = p[1]*(veh[2]-p[0]) #velocity based on triangular FD
+    #determine model regime
+    if Vs > p[2]:
+        Vs = p[2]
+    if lead[1] > p[2]:
+        lv = p[2]
+    else:
+        lv = lead[1]
+    if veh[2] > p[6]: 
+        A = 1
+        B = 0
+    else:
+        A = p[3]
+        if veh[2] > p[5]:
+            B = (1 - (veh[2]-p[5])/(p[6]-p[5]))*p[4]
+        else:
+            B = p[4]
+    
+    outdx = veh[1]
+    outddx = A*(Vs - veh[1]) + B*(lv - veh[1])
+    
+    return outdx, outddx
+
 def IDM_b(vehx, vehdx, leadx, leaddx, p,leadlen, *args,dt=.1):
     #IDM with bounded velocity and acceleration
 
