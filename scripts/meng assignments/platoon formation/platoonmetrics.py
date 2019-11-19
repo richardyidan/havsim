@@ -54,44 +54,6 @@ def chain_metric(platoon, platooninfo, k = .9, type = 'lead' ):
         res += c_metric(i, platoon, T, platooninfo, k, type)
     return res
 
-def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead'):
-    leadinfo, folinfo, unused = makeleadfolinfo(platoon, platooninfo, meas)
-
-    def getL(veh, platoon, T):
-        L = set([])
-        if veh not in platoon:
-            return L
-        leaders = leadinfo[platoon.index(veh)]
-        temp = set([])
-        for i in leaders:
-            temp.update(range(i[1], i[2]+1))
-        L = T.intersection(temp)
-        return L
-
-    def getLead(veh, platoon, T):
-        if veh not in platoon:
-            return []
-        leaders = leadinfo[platoon.index(veh)]
-        leads = []
-        for i in leaders:
-            if i[1] in T or i[2] in T:
-                leads.append(i[0])
-        return leads
-
-    def getTimes(veh, lead, T):
-        leaders = leadinfo[platoon.index(veh)]
-        temp = set([])
-        for i in leaders:
-            if i[0] == lead:
-                temp = T.intersection(set(range(i[1], i[2]+1)))
-        return temp
-
-    res = len(getL(veh, platoon, T))
-    leads = getLead(veh, platoon, T)
-    for i in leads:
-        res += k* c_metric(i, platoon, getTimes(veh, i, T), platooninfo, k=k)
-    return res
-
 
 def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead'):
     leadinfo, folinfo, unused = makeleadfolinfo(platoon, platooninfo, meas)
@@ -105,6 +67,8 @@ def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead'):
         # targetsList = leadinfo[platoon.index(veh)]
         temp = set([])
         for i in targetsList:
+            if i[0] not in platoon:
+                continue
             temp.update(range(i[1], i[2]+1))
         L = T.intersection(temp)
         return L
