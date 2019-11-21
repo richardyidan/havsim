@@ -245,7 +245,7 @@ def makeleadfolinfo(platoons, platooninfo, sim, *args, relaxtype = 'both', merge
     #new makeleadfolinfo function which integrates the previous versions 
     #returns leadinfo, folinfo 
     
-    #relaxtype = 'pos', 'neg', 'both'  - choose between positive, negative, and pos/negative relaxation amounts added 
+    #relaxtype = 'pos', 'neg', 'both', 'none'  - choose between positive, negative, and pos/negative relaxation amounts added. 'none' is no relax. 
     #mergertype = 'avg', 'last', 'none', 'remove'- 'avg' calculates the relaxation amount using average headway, 'last' uses the last known headway ; 'avg' works a lot better
     #if 'none' will not get merger relaxation amounts, but NOTE that some mergers are actually treated as lane changes and these are still kept. 
     #if 'remove' will actually go through and remove those mergers treated as lane changes (this happens when you had a leader in the on-ramp, and then merged before your leader)
@@ -271,6 +271,9 @@ def makeleadfolinfo(platoons, platooninfo, sim, *args, relaxtype = 'both', merge
     return leadinfo, folinfo, rinfo
 
 def makerinfo(platoons, platooninfo, sim, leadinfo, relaxtype = 'both',mergertype = 'avg', merge_from_lane = 7, merge_lane = 6):
+    
+    if relaxtype =='none':
+        return []
     
     rinfo = []
     for i in platoons: 

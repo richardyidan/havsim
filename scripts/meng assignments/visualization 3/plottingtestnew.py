@@ -64,7 +64,7 @@ print(q,k)
 #another toy example I want you to test on to verify on
 meas[898][100:200,7] = 3
 meas[905][150:250,7] = 3
-platoonplot(meas,None,platooninfo,platoon=[898, 905, 909, 916, 920], lane=2,opacity =.1, colorCode= True, speed_limit = [10,35]) 
+platoonplot(meas,None,platooninfo,platoon=[898, 905, 909, 916, 920], lane=None,opacity =.1, colorCode= True, speed_limit = [10,35]) 
 plt.plot([2600, 2600, 2800, 2800, 2600], [400, 800, 800, 400, 400], 'k-')
 plt.plot([2800, 2800, 3000, 3000, 2800], [400, 800, 800, 400, 400], 'k-')
 testmeas3 = {}
