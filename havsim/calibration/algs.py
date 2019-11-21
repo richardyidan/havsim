@@ -621,11 +621,11 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
                 result = helper.greedy_set_cover(HSsubsets,HSuni) #solve the set cover problem which gives us the HSsubsets which cover HSuni
 #                end = time.time()
 #                print(str(end-start))
+                
                 #now we have to convert the output of the set cover algorithm back to the actual vehicles we will be simulating 
-                #we will also put what needs to be taken from the measurements for the platoon to be simulated
-                #we will also need to update followers, totfollist, and leaders according to the updates we make
+                newlead = None #initilize the new curlead as none
+                curfix = [] #curfix will be all the vehicles in the result
                 for i in result: 
-                    curfix = []
                     curveh = universe[HSsubsets.index(i)] #vehicle ID of the corresponding vehicle in the hitting set
                     curfix.append(curveh)
                     chklead = platooninfo[curveh][4]
@@ -639,25 +639,29 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
                     
                     for j in chklead: 
                         platooninfo[j][-1].remove(curveh)
-                        if j not in leaders: #j might be in followers or totfollist in this special case where we resolve loops
-                            curfix.append(j)
-                        if len(platooninfo[j][-1]) < 1: 
+                        #To be honest I'm not sure at all why the below is here? 11/21/19
+#                        if j not in leaders: #j might be in followers or totfollist in this special case where we resolve loops
+#                            curfix.append(j)
+                        #I think can just comment out the above
+                        if len(platooninfo[j][-1]) < 1:  #remove a leader if all followers are gone
                             simcount += -1
                             if j in leaders:
                                 leaders.remove(j)
                             if j in curleadlist: 
                                 curleadlist.remove(j)
-                    curlead = curveh #make curlead the last vehicle we have resolved using resolution strategy 
-                    if len(platooninfo[curlead][-1]) < 1: #unless curlead has no followers in which case we'll let curlead be None 
-                        curlead = None
-                        leaders.remove(curlead)
+                    #now we see whether or not curveh can be a viable curlead    
+                    if len(platooninfo[curveh][-1]) < 1: #if it has no followers it cant be curlead; don't update newlead
+                        leaders.remove(curveh)
                     else: 
-                        for j in platooninfo[curlead][-1]:
+                        #curveh is a viable lead vehicle; add its followers and set newlead = curveh
+                        for j in platooninfo[curveh][-1]:
                             totfollist.insert(0,j)
                         totfollist = list(set(totfollist))
-#                    platoons[0].append(curfix)
-                    platoons.append(curfix) #new version works with new platoon format maybe
-                    #actually what happens is we get nested platoons
+                        newlead = curveh #curveh is viable
+
+                platoons.append(curfix) #will get nested platoons because curfix is a list
+                curlead = newlead #if no viable leaders were found, this will give curlead = None
+                #otherwise curlead will be the last viable vehicle in result
                 
                 
             
@@ -754,6 +758,8 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
 #            platoonlist.append(newplatoon)
         
         #new code will work without the empty list in platoons
+        #what happens is when we resolve a loop, we get a nested list of added vehicles added to platoons
+        #then in here, when we get a platoon we check if there are nested loops, they get added first, then add regular vehicles 
         newp = []
         for i in platoons: 
             if type(i) == np.float64:
