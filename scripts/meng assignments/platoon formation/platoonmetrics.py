@@ -145,6 +145,7 @@ testplatoon = [381.0, 391.0, 335.0, 326.0, 334.0]
 platoon1 = [307, 318, 335]
 platoon2 = [316, 262, 307]
 platoon3 = [259, 247, 315, 237]
+platoon4 = [995, 998, 1013, 1023]
 """
 platoon1:
 '307': 0 because 307 follows 308 and 308 is not in platoon
@@ -164,6 +165,11 @@ platoon3:
 '237': 0 because leaders are not in platoon
 metric = 846 + 400*k
 
+platoon4:
+998: 520 when it follows 995 in [2770, 3289]
+1013: 528 when it follows 998 in [2785, 3312], k*505 when 998 follows 995 in [2785, 3289]
+1023: 509 when it follows 1013 in [2826, 3334], k*487   when 1013 follows 998 in [2826, 3312], k**2 *464 when 998 follows 995 in [2826, 3289]
+metric = 1557 + k*992 + k**2 * 464
 """
 
 

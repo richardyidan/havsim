@@ -257,14 +257,6 @@ def makeplatooninfo(dataset, simlen = 50):
 #        
 #    leaders: list of vehicle IDs which are not simulated. these vehicles should not have any leaders, and their times should indicate that they are not simulated (t_n = T_nm1)
 #    
-#    G: directed graph (digraph) where nodes are all vehicles, and edges point from each node to any vehicles which have the parent node as a leader.  (not outputed anymore)
-#    example:
-#    G.nodes() 
-#    NodeView((1,2,4))
-#    G.edges()
-#    EdgeView([(1,2), (1,4)])
-#    There are 3 vehicles total. vehicle 1 has vehicles 2 and 4 as followers. Vehicles 2 and 4 do not have any followers. 
-#    
 #    simcount: count of how many vehicles in the dataset have 1 or more followers that need to be simulated. If simcount is equal to 0, then 
 #    there are no more vehicles that can be simulated. Simcount is not the same as how many vehicles need to be simulated. In above example, simcount is 1. 
 #    If vehicles 2 and 4 are both simulated, the simcount will drop to 0, and all vehicles that can be simulated have been simulated.
@@ -315,7 +307,7 @@ def makeplatooninfo(dataset, simlen = 50):
             #also if the length of the vehicle is equal to 0 we can't simulate the vehicle. If we can't simulate the vehicle, t_nstar = t_n = T_nm1
             t_n = t_nstar  #set equal to first measurement time in that case. 
             T_nm1 = t_nstar
-            platooninfo[i] = [t_nstar, t_n, T_nm1, T_n, [], curveh[0,2], curveh[0, 3], [0, []]]
+            platooninfo[i] = [t_nstar, t_n, T_nm1, T_n, [], curveh[0,2], curveh[0, 3], []]
 #            platooninfo[i] = [t_nstar, t_n, T_nm1, T_n, [], [0, []]]
             continue
             
@@ -327,7 +319,7 @@ def makeplatooninfo(dataset, simlen = 50):
             T_nm1 = t_nstar
             
         
-        platooninfo[i] = [t_nstar, t_n, T_nm1, T_n, [], curveh[t_n-t_nstar,2], curveh[t_n-t_nstar, 3], [0, []]] #put in everything except for vehicle len and the follower info 
+        platooninfo[i] = [t_nstar, t_n, T_nm1, T_n, [], curveh[t_n-t_nstar,2], curveh[t_n-t_nstar, 3], []] #put in everything except for vehicle len and the follower info 
 #        platooninfo[i] = [t_nstar, t_n, T_nm1, T_n, [], [0, []]]
     for i in vehlist: #second pass we need to construct vehlen dictionary for each vehicle ID. we will also put in the last entry of platooninfo, which gives info on the followers
 #        vehlen = {} #initialize vehlen which is the missing entry in platooninfo for each vehicle ID 
@@ -341,8 +333,7 @@ def makeplatooninfo(dataset, simlen = 50):
 #                continue 
 #            vehlen[j] = meas[j][0,dataind[4]] #put in vehicle length of each leader during simulated times 
             #now we will construct the last entry of platooninfo
-            platooninfo[j][-1][1].append(i) #vehicle j has vehicle i as a follower.
-            platooninfo[j][-1][0] += 1 #add 1 to the counter of followers that will need to be simulated
+            platooninfo[j][-1].append(i) #vehicle j has vehicle i as a follower.
         platooninfo[i][4] = leaderlist #put in the leader information 
         
         #now we have identified all the necessary information to setup the optimization problem.
@@ -392,20 +383,19 @@ def makeplatooninfo(dataset, simlen = 50):
     for i in leaders: #this will ensure that every vehicle designed as a leader has no leaders and no vehicle has a follower which is designated as a leader. 
         chklead = platooninfo[i][4].copy() #copy because we will potentially be modifying this pointer
         for j in chklead: 
-            platooninfo[j][-1][1].remove(i) #remove leader from the follower list of the leader's leaders; meaning the leader is not a follower
-            platooninfo[j][-1][0] += -1 #adjust index to be consistent with above line
+            platooninfo[j][-1].remove(i) #remove leader from the follower list of the leader's leaders; meaning the leader is not a follower
             platooninfo[i][4].remove(j) #the leader should not have any leaders. 
             
     #want to make sure there are not any leaders with no followers since we don't want that.         
     leadersc = leaders.copy()
     for i in leadersc:#initialize the simulation with the trajectory of the leaders 
-        if platooninfo[i][-1][0] ==0: #in case there are any leaders without followers #probably don't need this if but meh we'll leave it in 
+        if len(platooninfo[i][-1]) ==0: #in case there are any leaders without followers #probably don't need this if but meh we'll leave it in 
             leaders.remove(i)
             
     simcount = 0 #simcount keeps track of how many vehicles still have followers we can simulate. Once no vehicles have followers we can simulate, it means 
     #we must have simulated every vehicle that we can (thus our job is done)
     for i in vehlist: 
-        if platooninfo[i][-1][0]>0:
+        if len(platooninfo[i][-1])>0:
             simcount += 1
             
     totfollist = []
@@ -416,7 +406,7 @@ def makeplatooninfo(dataset, simlen = 50):
         #add in all the followers into totfollist, unless i = curlead 
 #        if i == curlead:  #don't need this part when it's in makeplatooninfo because curlead is just None
 #            continue #don't append the thing if i == curlead because it will be done in the beginning of the while loop 
-        for j in platooninfo[i][-1][1]: 
+        for j in platooninfo[i][-1]: 
             totfollist.append(j) #append all of the followers for vehicle i
     totfollist = list(set(totfollist)) #make list of followers unique
     
@@ -433,10 +423,6 @@ TO DO
 Would like makeplatoon to work more simply, and avoid the problem it currently has where the platoons tend to get spread out among many lanes. 
 Want something that will try to keep to the same lane, so ideally we get in situations where all vehicles being calibrated are in a long chain
 Some notes about this are on my phone. 
-
-Note also that the current makeplatoon depends on the output of makeplatooninfo
-
-Other consideration is that we want an algorithm that can handle time varying platoon order. 
 """
 def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, n=10):
 #	input: 
@@ -445,8 +431,6 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
 #    platooninfo, (see function makeplatooninfo) - note that makeplatoon will modify the last argument of platooninfo; which is only used for makeplatoon
 #    
 #    leaders, (see function makeplatooninfo) - note that makeplatoon will remove vehicles from leaders after they are no longer needed
-#    
-#    G, (see function makeplatooninfo) - note that makeplatoon will remove vehicles from G after they are no longer needed (not longer used)
 #    
 #    simcount (see function makeplatooninfo), - note that makeplatoon modifies this value; it keeps track of how many vehicles still have followers yet to be simulated
 #    
@@ -459,8 +443,6 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
 #    
 #    n = 10: n controls how big the maximum platoon size is. n is the number of following vehicles (i.e. simulated vehicles)
 #    
-#    dataind = [3,4,9,8,6,2,5]: dataind specifies the column indices for data entries. see makeplatooninfo
-#    
 #    
 #output: 
 #    platooninfo, which is updated as we simulate more vehicles
@@ -468,8 +450,6 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
 #    leaders, which are vehicles either already simulated or vehicles that were never simulated. everything in leaders is what we build platoons off of!
 #    NOTE THAT LEADERS ARE NOT ALL LEADERS. it is only a list of all vehicles we are currently building stuff off of. we remove vehicles from leaders 
 #    after they have no more followers we can simulate
-#    
-#    G, updated network of follower dependencies (no longer used)
 #    
 #    simcount, how many more vehicles have followers that can be simulated. when simcount = 0 all vehicles in the data have been simulated. 
 #    
@@ -479,17 +459,7 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
 #    
 #    followers - updated current candidate followers. updated as we add new leaders to curleadlist and simulate followers. 
 #    
-#    platoons - platoons[1:] is the list of vehicles, and platoons[0] gives some information related to any circular dependencies/loops in the data
-#    
-#    main output is platoons, which is a list of the vehicles that we will simulate in the platoon. the first entry of this list is an array that has special meaning: 
-#        the special meaning depends on whether we are using the 'strategy 1' or 'strategy 2' which are two different ways we can resolve loops in the data
-#        
-#        for strategy 1, the first entry indicates what vehicles are taken directly from the meas to do the simulation for the platoon
-#        e.g. platoons = [[5,14],17] means that the platoon consists only of vehicle 17. vehicles 5 and 14 are taken from the measurements to do the simulation
-#        [[],17,18,19] means that the platoons consists of vehicles 17, 18, and 19. the only vehicles we need to do the simulation are either never simulated, or already simulated. 
-#        
-#        for strategy 2, the first entry indicates what times the platoon holds for
-#        e.g. platoons = [[1000,1200],17,18,19] means that we have the platoon order of 17 18 19 for times 1000-1200
+#    platoons - the list of vehicles
 	
     #################
     #current code: 
@@ -523,7 +493,7 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
         breaknow = False 
         if curlead is not None:            
             curleadlist.insert(0,curlead) #append current leader to current leader list
-            for i in platooninfo[curlead][-1][1]: #append all of the current leader's followers to the current follower list
+            for i in platooninfo[curlead][-1]: #append all of the current leader's followers to the current follower list
                 followers.insert(0,i) 
 #                totfollist.insert(0,i)
             followers = list(set(followers)) #remove any duplicate entries from followers; we don't want to check the same vehicle multiple times!
@@ -544,20 +514,19 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
                 followers.remove(curlead) #delete i from followers
                 totfollist.remove(curlead) #delete i from the total follower list 
                 for j in chklead: 
-                    platooninfo[j][-1][1].remove(i) #remove i from each of the leader's followers
-                    platooninfo[j][-1][0] += -1 #subtract 1 from the total number of followers yet to be added 
-                    if platooninfo[j][-1][0] < 1: #if a leader has no more followers
+                    platooninfo[j][-1].remove(i) #remove i from each of the leader's followers
+                    if len(platooninfo[j][-1]) < 1: #if a leader has no more followers
                         simcount += -1 #adjust simcount. if simcount reaches 0 our job is finished and we can return what we have, even if curn is not equal to n
                         leaders.remove(j) #remove it from the list of leaders
                         curleadlist.remove(j) #remove it from the curleadlist. Note that we know that that any vehicle in curleadlist MUST ALSO BE in leaders
                         #note that vehicles in leaders are not necessarily in curleadlist. We know that every vehicle in chklead must be in curleadlist in this case, 
                         #since we were only able to add vehicle i to the platoon because curleadlist has all of vehicle i's leaders
-                if platooninfo[curlead][-1][0]<1: #need to do something different if the curlead turns out not to have any followers
+                if len(platooninfo[curlead][-1])<1: #need to do something different if the curlead turns out not to have any followers
                     leaders.remove(curlead) #remove it from the leader list
                     curlead = None #specify None as leader; the first part of while loop will handle special case if followers is empty and curlead is None
                     #otherwise, it's OK for curlead to be None, we can still check the followers as long as followers isn't empty. 
                 else: #if above is false then we need to add things to totfollist
-                    for j in platooninfo[curlead][-1][1]:
+                    for j in platooninfo[curlead][-1]:
                         totfollist.insert(0,j)
                     totfollist = list(set(totfollist))
                 break #stop checking followers; go back to while loop
@@ -682,22 +651,21 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
                         followers.remove(curveh)
                     
                     for j in chklead: 
-                        platooninfo[j][-1][1].remove(curveh)
-                        platooninfo[j][-1][0] += -1
+                        platooninfo[j][-1].remove(curveh)
                         if j not in leaders: #j might be in followers or totfollist in this special case where we resolve loops
                             curfix.append(j)
-                        if platooninfo[j][-1][0] < 1: 
+                        if len(platooninfo[j][-1]) < 1: 
                             simcount += -1
                             if j in leaders:
                                 leaders.remove(j)
                             if j in curleadlist: 
                                 curleadlist.remove(j)
                     curlead = curveh #make curlead the last vehicle we have resolved using resolution strategy 
-                    if platooninfo[curlead][-1][0] < 1: #unless curlead has no followers in which case we'll let curlead be None 
+                    if len(platooninfo[curlead][-1]) < 1: #unless curlead has no followers in which case we'll let curlead be None 
                         curlead = None
                         leaders.remove(curlead)
                     else: 
-                        for j in platooninfo[curlead][-1][1]:
+                        for j in platooninfo[curlead][-1]:
                             totfollist.insert(0,j)
                         totfollist = list(set(totfollist))
 #                    platoons[0].append(curfix)
@@ -742,15 +710,10 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
         return meas, platooninfo
     
     if vehs is not None: #in this special case we are giving vehicles which we want stuff to be calibrated between 
-        #one thing I don't like about this is that the first vehicle in vehs is not included, when really I want it to be. 
-        #also any other vehicles designated as `leaders` aren't included either. It's a small thing but could be nice to change. 
+        #note that the first vehicle in vehs is NOT included. So when you are selecting that first vehicle keep that in mind! 
+        #if you really wanted vehs[0] in the thing you could do this by calling the first makeplatoon with n-1 and putting vehs[0] in the front. 
         
-        """
-        #note to self: another way to implement this is to use the new sort vehicle function :) 
-        looks like you could just do lanvehlist(data, lane, vehs), and then sortveh3(). 
-        """
-        
-        vehlist, unused = helper.lanevehlist(data,lane,vehs) #special functions gets only the vehicles we want to simulate out of the whole dataset
+        vehlist = lanevehlist(data,lane,vehs, meas, platooninfo, needmeas = False) #special functions gets only the vehicles we want to simulate out of the whole dataset
         #after having gotten only the vehicles we want to simulate, we modify the platooninfo, leaders , totfollist, to reflect this
         #lastly we can seed curlead as the vehs[0] to start
         platooninfovehs = platooninfo
@@ -762,19 +725,18 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
             for j in platooninfo[i][4]:
                 if j in vehlist: 
                     templead.append(j)
-            for j in platooninfo[i][-1][1]:
+            for j in platooninfo[i][-1]:
                 if j in vehlist: 
                     tempfol.append(j)
-            lentempfol = len(tempfol)
                     
             platooninfo[i][4] = templead
-            platooninfo[i][-1] = [lentempfol,tempfol]
+            platooninfo[i][-1] = tempfol
         
         #platooninfo is updated now we need to update the totfollist, simcount, and leaders.
         curlead = vehs[0] #curlead (first vehicle algo starts from) should be the first vehicle in vehs
         simcount = 0
         for i in vehlist:
-            if platooninfo[i][-1][0] >0:
+            if len(platooninfo[i][-1]) >0:
                 simcount += 1
         leaders = []
         for i in vehlist: 
@@ -782,7 +744,7 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
                 leaders.append(i)
         totfollist = []
         for i in leaders:
-            for j in platooninfo[i][-1][1]:
+            for j in platooninfo[i][-1]:
                 totfollist.append(j)
         totfollist = list(set(totfollist))
     
@@ -822,10 +784,17 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
         return meas, platooninfo, platoonlist, platoonoutput, num_of_leaders, num_of_vehicles
 
 def makeplatoonlist_s(data, n = 1, lane = 1, vehs = []):
-    meas, platooninfo = makeplatoonlist(data,1,False)
+    #this makes platoon lists by sorting all the vehicles in a lane, and then 
+    #simply groups the vehicles in the order they were sorted. 
+    #only works in a single lane. Supports either entire lane (vehs = [])
+    #or for between vehs. 
     
-    vehIDs = np.unique(data[data[:,7]==lane,0])
-    sortedvehID = sortveh3(vehIDs,lane,meas,platooninfo) #algorithm for sorting vehicle IDs
+    if len(vehs) > 0:
+        sortedvehID, meas, platooninfo = lanevehlist(data, lane, vehs, None, None, needmeas = True)
+    else:
+        meas, platooninfo = makeplatoonlist(data,1,False)
+        vehIDs = np.unique(data[data[:,7]==lane,0])
+        sortedvehID = sortveh3(vehIDs,lane,meas,platooninfo) #algorithm for sorting vehicle IDs
     
     sortedplatoons = []
     nvehs = len(sortedvehID)
@@ -836,6 +805,40 @@ def makeplatoonlist_s(data, n = 1, lane = 1, vehs = []):
         sortedplatoons.append(curplatoon)
         cur = cur + n
     return meas, platooninfo, sortedplatoons
+
+def lanevehlist(data, lane, vehs, meas, platooninfo, needmeas = False):
+    #finds all vehicles between vehs[0] and vehs[1] in a specific lane, and returns the SORTED
+    #list of vehicle IDs. 
+    #different than lanevehlist2 since it returns a sortedlist back. Also it should be more robust. 
+    #does not support the edge case where the vehs[0] or vehs[1] are involved in circular dependency. 
+    #the vehicles involved in the circular dependency may, or may not, be included in that case. 
+    
+    #if needmeas = True, then it gets meas and platooninfo for you, and returns those in addition to the sortedvehlist. 
+    #otherwise it just returns the sortedvehlist. 
+    if needmeas: 
+        meas, platooninfo = makeplatoonlist(data, 1, False)
+    
+#    data = data[data[:,7] == lane]
+#    veh0 = vehs[0]; vehm1 = vehs[-1]
+#    veh0traj = data[data[:,0]==veh0]
+#    vehm1traj = data[data[:,0]==vehm1]
+#    firsttime = veh0traj[0,1]; lasttime = vehm1traj[-1,1]
+    firsttime = platooninfo[vehs[0]][0]
+    lasttime = platooninfo[vehs[-1]][3]
+    data = data[np.all([data[:,1]>=firsttime, data[:,1]<=lasttime, data[:,7] == lane],axis=0)]
+    vehlist = list(np.unique(data[:,0]))
+    
+    sortedvehlist = sortveh3(vehlist, lane, meas, platooninfo)
+    for count, i in enumerate(sortedvehlist): 
+        if i == vehs[0]:
+            inds = [count]
+        elif i == vehs[-1]:
+            inds.append(count)
+    sortedvehlist = sortedvehlist[inds[0]:inds[1]+1]
+    if needmeas: 
+        return sortedvehlist, meas, platooninfo
+    else: 
+        return sortedvehlist
 
 def sortveh3(vehlist,lane,meas,platooninfo):
     #third attempt at a platoon ordering algorithm 
