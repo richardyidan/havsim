@@ -142,14 +142,34 @@ testplatoon = [381.0, 391.0, 335.0, 326.0, 334.0]
 #chainmetric = 507 + 34 + 59 + 194 + 56 = 850
 
 
+platoon1 = [307, 318, 335]
+platoon2 = [316, 262, 307]
+platoon3 = [259, 247, 315, 237]
+"""
+platoon1:
+'307': 0 because 307 follows 308 and 308 is not in platoon
+'318': 225 because 318 follows 307 and 307 is leader in [1395, 1619]
+'335': 28 + k*3 because 335 follows 318 and 318 is leader in [1617, 1644], and 318 follows 307 in [1617, 1619]
+metric = 225 + 28 + 3*k 
+
+platoon2:
+'316': 40 because 316 follows 262 in [981, 1020]
+Others contribute 0 because leaders are not in platoon
+metric = 40
+
+platoon3:
+'259': 418 + 400*k because 249 follows 247 in [1028, 1445] and 247 follows 237 in [1028, 1427] (during T = times(249, 247, T))
+'247': 428 because 247 follows 237 in [1000, 1427]
+'315': 0 because leaders are not in platoon
+'237': 0 because leaders are not in platoon
+metric = 846 + 400*k
+
+"""
 
 
-Chain = chain_metric(platoon, platooninfo, 0) 
+
+Chain = chain_metric(platoon1, platooninfo, 1)
 print(Chain)
-chain2 = chain_metric(testplatoon,platooninfo,0)
-
-# 507 + 343 + 397 + k* 34 (326 has a leader 335 at (1583, 1616)) = 1281 if k == 1 else 1247
-
 
 cir = cirdep_metric([[391, 335, 326], [307, 318, 316]], platooninfo, k=1, type='num')
 print(cir)
