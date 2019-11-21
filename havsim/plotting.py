@@ -406,50 +406,77 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
     if platoon != []:
         followerchain = helper.platoononly(followerchain, platoon)
     followerlist = followerchain.keys()  # list of vehicle ID
-
     if newfig:
         fig = plt.figure()
 
-    #	# this is all deprecated now
-    #	if Colors:  # these colors are pretty ugly imo
-    #		for i in followerlist:  # iterate over each vehicle
-    #			veh = meas[i]
-    #			t_nstar, t_n, T_nm1, T_n = followerchain[i][0:4]
-    #			#        t_n = int(followerchain[i][1])
-    #			#        T_nm1 = int(followerchain[i][2])
-    #			#        T_n = int(followerchain[i][3])
-    #			x1 = range(t_nstar, t_n)  # vehicle has leader during this time so we will color it differently in plots
-    #			x2 = range(t_n, T_nm1 + 1)  # this is the portion of the trajectory that will be shifted during calibration
-    #			x3 = range(T_nm1 + 1, T_n + 1)
-    #
-    #			y1 = veh[0:t_n - t_nstar, ind]
-    #			y2 = veh[t_n - t_nstar:T_nm1 - t_nstar + 1:, ind]
-    #			y3 = veh[T_nm1 - t_nstar + 1:T_n - t_nstar + 1, ind]
-    #
-    #			plt.plot(x1, y1, 'k', x2, y2, 'b', x3, y3, 'r')
-    #	#        plt.plot(x2,y2)
-    #	#        plt.plot(x3,y3)
 
-    if True:
-        # fig, axs = plt.subplots(1, 1, sharex=True, sharey=True)
+    counter = 0
+    mymin = 1e10
+    mymax = 0
+    for i in followerlist:
+        curmin = min(meas[i][:, 3])
+        curmax = max(meas[i][:, 3])
+        if mymin > curmin:
+            mymin = curmin
+        if mymax < curmax:
+            mymax = curmax
 
+    if not speed_limit:
+        speed_limit = [mymin, mymax]
+
+    for i in followerlist:  # iterate over each vehicle
+        veh = meas[i]
+        t_nstar, t_n, T_nm1, T_n = followerchain[i][0:4]  # note followerchain and platooninfo have same
+
+        if fulltraj:  # entire trajectory including pre simulation and shifted end
+            start = 0
+            end = T_n - t_nstar
+        else:  # only show trajectory which is simulated
+            start = t_n - t_nstar
+            end = T_nm1 - t_nstar
+        veh = veh[start:end, :]
+        x = veh[:, 1]
+        y = veh[:, ind]
+        speed_list = veh[:, 3]
+
+        if lane is not None:
+
+            # LCind is a list of indices where the lane the vehicle is in changes. Note that it includes the first and last index.
+            LCind = np.diff(veh[:, 7])
+            LCind = np.nonzero(LCind)[0] + 1
+            LCind = list(LCind)
+            LCind.insert(0, 0)
+            LCind.append(len(veh[:, 7]))
+            
+        else: 
+            LCind = [0, len(veh[:,1])]
+
+        for j in range(len(LCind) - 1):
+            kwargs = {}
+            if meas[i][LCind[j], 7] != lane and lane is not None:
+                kwargs = {'linestyle': '--', 'alpha': opacity}  # dashed line .4 opacity (60% see through)
+                plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[0], **kwargs)
+            else:
+
+                X = x[LCind[j]:LCind[j + 1]]
+                Y = y[LCind[j]:LCind[j + 1]]
+                SPEED = speed_list[LCind[j]:LCind[j + 1]]
+                if colorCode:
+                    line = plotColorLines(X, Y, SPEED, speed_limit=speed_limit)
+
+                else:
+                    plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[0], picker=5, **kwargs)
+                    artist2veh.append(counter)
+
+                indcounter = np.append(indcounter, counter)
+
+        counter += 1
+
+
+    if sim is not None:
         counter = 0
-
-        mymin = 1e10
-        mymax = 0
-        for i in followerlist:
-            curmin = min(meas[i][:, 3])
-            curmax = max(meas[i][:, 3])
-            if mymin > curmin:
-                mymin = curmin
-            if mymax < curmax:
-                mymax = curmax
-
-        if not speed_limit:
-            speed_limit = [mymin, mymax]
-
         for i in followerlist:  # iterate over each vehicle
-            veh = meas[i]
+            veh = sim[i]
             t_nstar, t_n, T_nm1, T_n = followerchain[i][0:4]  # note followerchain and platooninfo have same
 
             if fulltraj:  # entire trajectory including pre simulation and shifted end
@@ -461,7 +488,6 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
             veh = veh[start:end, :]
             x = veh[:, 1]
             y = veh[:, ind]
-            speed_list = veh[:, 3]
 
             if lane is not None:
 
@@ -470,129 +496,56 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
                 LCind = np.nonzero(LCind)[0] + 1
                 LCind = list(LCind)
                 LCind.insert(0, 0);
-                LCind.append(len(veh[:, 7]) + 1)
+                LCind.append(len(veh[:, 7]))
 
                 for j in range(len(LCind) - 1):
                     kwargs = {}
-                    if meas[i][LCind[j], 7] != lane:
-                        kwargs = {'linestyle': '--', 'alpha': opacity}  # dashed line .4 opacity (60% see through)
-                        plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[0], **kwargs)
-                    else:
-
-                        X = x[LCind[j]:LCind[j + 1]]
-                        Y = y[LCind[j]:LCind[j + 1]]
-                        SPEED = speed_list[LCind[j]:LCind[j + 1]]
-                        if colorCode:
-                            # axs = plt.gca()
-                            # c = Y
-                            # points = np.array([X, Y]).T.reshape(-1, 1, 2)
-                            # segments = np.concatenate([points[:-1], points[1:]], axis=1)
-                            # norm = plt.Normalize(c.min(), c.max())
-                            # lc = LineCollection(segments, cmap=cm.get_cmap('RdYlBu'), norm=norm)
-                            # lc.set_array(c)
-                            # lc.set_linewidth(1)
-                            # line = axs.add_collection(lc)
-
-                            line = plotColorLines(X, Y, SPEED, speed_limit=speed_limit)
-
-                        # axs.set_xlim(X.min(), X.max())
-                        # axs.set_ylim(min(Y), max(Y))
-                        else:
-                            plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[0], picker=5, **kwargs)
-                            artist2veh.append(counter)
-
-                        indcounter = np.append(indcounter, counter)
-
-            # else:
-
-            # plt.plot(x,y,clr[0])
-            # if colorCode:
-            # 	line = plotColorLines()
-
-            # else:
-            # 	plt.plot(x, y, clr[0], picker=5)
-            # 	artist2veh.append(counter)
+                    if sim[i][LCind[j], 7] != lane:
+                        kwargs = {'linestyle': '--', 'alpha': .4}  # dashed line .4 opacity (60% see through)
+                    plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[1], **kwargs)
+                    artist2veh.append(counter)
+            else:
+                plt.plot(x, y, clr[1])
+                artist2veh.append(counter)
             counter += 1
 
-        # plt.show()
+    find_artists = []
+    nartists = len(artist2veh)
+    halfn = int(nartists / 2)
 
-        if sim is not None:
-            counter = 0
-            for i in followerlist:  # iterate over each vehicle
-                veh = sim[i]
-                t_nstar, t_n, T_nm1, T_n = followerchain[i][0:4]  # note followerchain and platooninfo have same
+    def on_pick(event):
+        nonlocal find_artists
+        ax = event.artist.axes
+        curind = ax.lines.index(event.artist)  # artist index
 
-                if fulltraj:  # entire trajectory including pre simulation and shifted end
-                    start = 0
-                    end = T_n - t_nstar
-                else:  # only show trajectory which is simulated
-                    start = t_n - t_nstar
-                    end = T_nm1 - t_nstar
-                veh = veh[start:end, :]
-                x = veh[:, 1]
-                y = veh[:, ind]
+        if event.mouseevent.button == 1:  # left click selects vehicle
+            # deselect old vehicle
+            for j in find_artists:
+                ax.lines[j].set_color('C0')
 
-                if lane is not None:
+            # select new vehicle
+            vehind = artist2veh[curind]  # convert from artist to vehicle index
+            find_artists = np.asarray(artist2veh)
+            find_artists = np.nonzero(find_artists == vehind)[
+                0]  # all artist indices which are associated with vehicle
+            #            nartists = len(ax.lines)
 
-                    # LCind is a list of indices where the lane the vehicle is in changes. Note that it includes the first and last index.
-                    LCind = np.diff(veh[:, 7])
-                    LCind = np.nonzero(LCind)[0] + 1
-                    LCind = list(LCind)
-                    LCind.insert(0, 0);
-                    LCind.append(len(veh[:, 7]))
-
-                    for j in range(len(LCind) - 1):
-                        kwargs = {}
-                        if sim[i][LCind[j], 7] != lane:
-                            kwargs = {'linestyle': '--', 'alpha': .4}  # dashed line .4 opacity (60% see through)
-                        plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[1], **kwargs)
-                        artist2veh.append(counter)
-                else:
-                    plt.plot(x, y, clr[1])
-                    artist2veh.append(counter)
-                counter += 1
-
-        find_artists = []
-        nartists = len(artist2veh)
-        halfn = int(nartists / 2)
-
-        def on_pick(event):
-            nonlocal find_artists
-            ax = event.artist.axes
-            curind = ax.lines.index(event.artist)  # artist index
-
-            if event.mouseevent.button == 1:  # left click selects vehicle
-                # deselect old vehicle
-                for j in find_artists:
-                    ax.lines[j].set_color('C0')
-
-                # select new vehicle
-                vehind = artist2veh[curind]  # convert from artist to vehicle index
-                find_artists = np.asarray(artist2veh)
-                find_artists = np.nonzero(find_artists == vehind)[
-                    0]  # all artist indices which are associated with vehicle
-                #            nartists = len(ax.lines)
-
-                for j in find_artists:
-                    ax.lines[j].set_color('C1')
-                plt.title('Vehicle ID ' + str(list(followerlist)[vehind]))
-                plt.draw()
-
-            if event.mouseevent.button == 3:  # right click selects platoon
-                #            print(find_artists)
-                # deselect old vehicle
-                for j in find_artists:
-                    ax.lines[j].set_color('C0')
+            for j in find_artists:
+                ax.lines[j].set_color('C1')
+            plt.title('Vehicle ID ' + str(list(followerlist)[vehind]))
             plt.draw()
 
-        # recolor the selected artist and all other artists associated with the vehicle ID so you can see what line you clicked on
-        # change the title to say what vehicle you selected.
+        if event.mouseevent.button == 3:  # right click selects platoon
+            #            print(find_artists)
+            # deselect old vehicle
+            for j in find_artists:
+                ax.lines[j].set_color('C0')
+        plt.draw()
 
-        fig.canvas.callbacks.connect('pick_event', on_pick)
+    # recolor the selected artist and all other artists associated with the vehicle ID so you can see what line you clicked on
+    # change the title to say what vehicle you selected.
 
-    #        plt.plot(x2,y2)
-    #        plt.plot(x3,y3)
-
+    fig.canvas.callbacks.connect('pick_event', on_pick)
     axs = plt.gca()
 
     plt.xlabel('time (frameID )')
@@ -605,15 +558,6 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
 
     axs.autoscale(axis='x')
 
-    # if speed_limit:
-    # 	axs.autoscale(axis='x')
-    # 	axs.set_ylim(speed_limit[0], speed_limit[1])
-    # else:
-    # 	axs.autoscale()
-    # modified
-
-    #	plt.savefig('platoonspacetime.png')
-    #	plt.show()
     return
 
 
