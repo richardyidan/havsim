@@ -171,7 +171,150 @@ Also there are way too many versions of makeleadfolinfo. Note that you should ei
 There is an optional keyword that can apply relaxation to mergers as well. Note that I believe the only difference between _r3 and _r4 is that the keyword defaults to true for _r4. 
 """
 
-def makeleadfolinfo(platoons, platooninfo, sim, *args):
+def makeleadinfo(platoon, platooninfo, sim, *args): 
+    #gets ALL lead info for platoon 
+    #requires platooninfo as input as well
+    #leaders are computed ONLY OVER SIMULATED TIMES (t_n - T_nm1). 
+    #requires platooninfo so it can know the simulated times. 
+    #also requires sim to know the leader at each observation
+    
+    #EXAMPLE: 
+#    platoon = [[],5,7] means we want to calibrate vehicles 5 and 7 in a platoon
+#    
+#    leadinfo = [[[1,1,10],[2,11,20]],[[5,10,500]]] Means that vehicle 5 has vehicle 1 as a leader from 1 to 10, 2 as a leader from 11 to 20. 
+#    vehicle 7 has 3 as a leader from 10 to 500 (leadinfo[i] is the leader info for platoons[i].)
+    leadinfo = []
+    for i in platoon: #iterate over each vehicle in the platoon
+        curleadinfo = [] #for each vehicle, we get these and then these are appeneded at the end so we have a list of the info for each vehicle in the platoon
+        
+        t_nstar, t_n, T_nm1, T_n = platooninfo[i][0:4] #get times for current vehicle 
+        leadlist = sim[i][t_n-t_nstar:T_nm1-t_nstar+1,4] #this gets the leaders for each timestep of the current vehicle\
+        curlead = leadlist[0] #initialize current leader
+        curleadinfo.append([curlead, t_n]) #initialization 
+        for j in range(len(leadlist)):
+            if leadlist[j] != curlead: #if there is a new leader
+                curlead = leadlist[j] #update the current leader
+                curleadinfo[-1].append(t_n+j-1) #last time (in frameID) the old leader is observed
+                curleadinfo.append([curlead,t_n+j]) #new leader and the first time (in frameID) it is observed. 
+        curleadinfo[-1].append(t_n+len(leadlist)-1) #termination
+        
+        leadinfo.append(curleadinfo)
+    
+    return leadinfo
+
+def makefolinfo(platoon, platooninfo, sim, *args, allfollowers = True):
+    #same as leadinfo but it gives followers instead of leaders. 
+    #followers computed ONLY OVER SIMULATED TIMES + BOUNDARY CONDITION TIMES (t_n - T_nm1 + T_nm1 - T_n)
+    #allfollowers = True -> gives all followers, even if they aren't in platoon
+    #allfollowers = False -> only gives followers in the platoon (needed for adjoint calculation, adjoint variables depend on followers, not leaders.)
+    
+    folinfo = []
+    for i in platoon:
+        curfolinfo = []
+        t_nstar, t_n, T_nm1, T_n= platooninfo[i][0:4]
+        
+        follist = sim[i][t_n-t_nstar:T_n-t_nstar+1,5] #list of followers
+        curfol = follist[0]
+        
+        if allfollowers and curfol != 0: 
+            curfolinfo.append([curfol,t_n])
+        else:
+            if curfol in platoon: #if the current follower is in platoons we initialize
+                curfolinfo.append([curfol,t_n])
+            
+        for j in range(len(follist)): #check what we just made to see if we need to put stuff in folinfo
+            if follist[j] != curfol: #if there is a new follower
+                curfol = follist[j]
+                if curfolinfo != []: #if there is anything in curfolinfo
+                    curfolinfo[-1].append(t_n+j-1) #we finish the interval
+                if allfollowers and curfol != 0:
+                    curfolinfo.append([curfol,t_n+j])
+                else:
+                    if curfol in platoon: #if new follower is in platoons
+                        curfolinfo.append([curfol,t_n+j]) #start the next interval
+        if curfolinfo != []: #if there is anything to finish
+            curfolinfo[-1].append(t_n+len(follist)-1) #finish it 
+        
+        folinfo.append(curfolinfo)
+        
+        
+        
+    return folinfo
+
+def makeleadfolinfo(platoons, platooninfo, sim, *args, relaxtype = 'both', mergertype = 'avg', merge_from_lane = 7, merge_lane = 6):
+    #new makeleadfolinfo function which integrates the previous versions 
+    #returns leadinfo, folinfo 
+    
+    #relaxtype = 'pos', 'neg', 'both'  - choose between positive, negative, and pos/negative relaxation amounts added 
+    #mergertype = 'avg', 'last', 'none', 'remove'- 'avg' calculates the relaxation amount using average headway, 'last' uses the last known headway ; 'avg' works a lot better
+    #if 'none' will not get merger relaxation amounts, but NOTE that some mergers are actually treated as lane changes and these are still kept. 
+    #if 'remove' will actually go through and remove those mergers treated as lane changes (this happens when you had a leader in the on-ramp, and then merged before your leader)
+    #merge_from_lane = 7 - if using merger anything other than 'none', you need to specify the laneID corresponding to the on-ramp
+    #merge_lane = 6 - if using merger anything other than 'none' you need to specify the laneID you are merging into
+    
+    #legacy info-
+    #makeleadfolinfo_r - 'pos' 'none'
+    #makeleadfolinfo_r2 - 'neg', 'none'
+    #makeleadfolinfo_r3 - 'both', 'none'
+    #makeleadfolinfo_r4 - 'both', 'avg'
+    #makeleadfolinfo_r5 - 'both', 'last'
+    #makeleadfolinfo_r6 - 'both', 'remove'
+    
+    #in the original implementation everything was done at once which I guess saves some work but makes it harder to change/develop.
+    #in this refactored version everything is modularized which is a lot nicer but slower. These functions are for calibration, and for calibration
+    #all the time (>99.99%) is spent simulating, the time you spend doing makeleadfolinfo is neglible. Hence this design makes sense. 
+    
+    leadinfo = makeleadinfo(platoons, platooninfo, sim)
+    folinfo = makefolinfo(platoons, platooninfo, sim, allfollowers = False)
+    rinfo = makerinfo(platoons, platooninfo, sim, leadinfo, relaxtype = relaxtype, mergertype = mergertype, merge_from_lane = merge_from_lane, merge_lane = merge_lane)
+    
+    return leadinfo, folinfo, rinfo
+
+def makerinfo(platoons, platooninfo, sim, leadinfo, relaxtype = 'both',mergertype = 'avg', merge_from_lane = 7, merge_lane = 6):
+    
+    rinfo = []
+    for i in platoons: 
+        currinfo = []
+        t_nstar, t_n, T_nm1, T_n = platooninfo[i][0:4]
+        leadlist = sim[i][t_n-t_nstar:T_nm1-t_nstar+1,4] #this gets the leaders for each timestep of the current vehicle\
+        curlead = leadlist[0]
+        
+        for j in range(len(leadlist)):
+            if leadlist[j] != curlead:
+                newlead = leadlist[j]
+                oldlead = curlead 
+                
+                #####relax constant calculation 
+                newt_nstar = platooninfo[newlead][0]
+                oldt_nstar = platooninfo[oldlead][0]
+                olds = sim[oldlead][t_n+j-1-oldt_nstar,2] - sim[oldlead][0,6] - sim[i][t_n+j-1-t_nstar,2] #the time is t_n+j-1; this is the headway
+                news = sim[newlead][t_n+j-newt_nstar,2] - sim[newlead][0,6] - sim[i][t_n+j-t_nstar,2] #the time is t_n+j
+                ########
+                
+                #pos/neg relax amounts
+                gam = olds - news
+                if relaxtype == 'both':
+                    currinfo.append([t_n+j,gam])
+                elif relaxtype == 'pos':
+                    if gam > 0:
+                        currinfo.append([t_n+j,gam])
+                elif relaxtype == 'neg': 
+                    if gam < 0:
+                        currinfo.append([t_n+j,gam])
+                
+                #merger cases
+                if mergertype == 'remove': 
+                    if sim[i][t_n+j-t_nstar,7]==merge_lane and sim[i][t_n+j-1-t_nstar,7]==merge_from_lane:
+                        currinfo.pop(-1)
+                elif mergertype == 'avg':
+                    rinfo = merge_rconstant(platoons,platooninfo,sim,leadinfo,rinfo,200, merge_from_lane, merge_lane)
+                elif mergertype == 'last':
+                    rinfo = merge_rconstant2(platoons,platooninfo,sim,leadinfo,rinfo,200, merge_from_lane, merge_lane)
+                    
+
+    return rinfo
+
+def makeleadfolinfo1(platoons, platooninfo, sim, *args):
 #	inputs: 
 #    platoons: the platoon we want to calibrate 
 #    platooninfo: output from makeplatooninfo
