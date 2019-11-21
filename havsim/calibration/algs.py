@@ -433,8 +433,6 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
 #    
 #    leaders, (see function makeplatooninfo) - note that makeplatoon will remove vehicles from leaders after they are no longer needed
 #    
-#    G, (see function makeplatooninfo) - note that makeplatoon will remove vehicles from G after they are no longer needed (not longer used)
-#    
 #    simcount (see function makeplatooninfo), - note that makeplatoon modifies this value; it keeps track of how many vehicles still have followers yet to be simulated
 #    
 #    curlead - output from makeplatooninfo. This controls what vehicle we currently prioritize; that vehicle followers are attempted to be added first. updated 
@@ -446,8 +444,6 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
 #    
 #    n = 10: n controls how big the maximum platoon size is. n is the number of following vehicles (i.e. simulated vehicles)
 #    
-#    dataind = [3,4,9,8,6,2,5]: dataind specifies the column indices for data entries. see makeplatooninfo
-#    
 #    
 #output: 
 #    platooninfo, which is updated as we simulate more vehicles
@@ -455,8 +451,6 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
 #    leaders, which are vehicles either already simulated or vehicles that were never simulated. everything in leaders is what we build platoons off of!
 #    NOTE THAT LEADERS ARE NOT ALL LEADERS. it is only a list of all vehicles we are currently building stuff off of. we remove vehicles from leaders 
 #    after they have no more followers we can simulate
-#    
-#    G, updated network of follower dependencies (no longer used)
 #    
 #    simcount, how many more vehicles have followers that can be simulated. when simcount = 0 all vehicles in the data have been simulated. 
 #    
@@ -737,7 +731,7 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
         looks like you could just do lanvehlist(data, lane, vehs), and then sortveh3(). 
         """
         
-        vehlist, unused = lanevehlist(data,lane,vehs, meas, platooninfo, needmeas = False) #special functions gets only the vehicles we want to simulate out of the whole dataset
+        vehlist = lanevehlist(data,lane,vehs, meas, platooninfo, needmeas = False) #special functions gets only the vehicles we want to simulate out of the whole dataset
         #after having gotten only the vehicles we want to simulate, we modify the platooninfo, leaders , totfollist, to reflect this
         #lastly we can seed curlead as the vehs[0] to start
         platooninfovehs = platooninfo
@@ -809,10 +803,14 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
         return meas, platooninfo, platoonlist, platoonoutput, num_of_leaders, num_of_vehicles
 
 def makeplatoonlist_s(data, n = 1, lane = 1, vehs = []):
+    #this makes platoon lists by sorting all the vehicles in a lane, and then 
+    #simply groups the vehicles in the order they were sorted. 
+    #only works in a single lane. Supports either entire lane (vehs = [])
+    #or for between vehs. 
     
-    if vehs is not []:
+    if len(vehs) > 0:
         sortedvehID, meas, platooninfo = lanevehlist(data, lane, vehs, None, None, needmeas = True)
-    elif vehs is []:
+    else:
         meas, platooninfo = makeplatoonlist(data,1,False)
         vehIDs = np.unique(data[data[:,7]==lane,0])
         sortedvehID = sortveh3(vehIDs,lane,meas,platooninfo) #algorithm for sorting vehicle IDs
@@ -839,19 +837,21 @@ def lanevehlist(data, lane, vehs, meas, platooninfo, needmeas = False):
     if needmeas: 
         meas, platooninfo = makeplatoonlist(data, 1, False)
     
-    data = data[data[:,7] == lane]
-    veh0 = vehs[0]; vehm1 = vehs[-1]
-    veh0traj = data[data[:,0]==veh0]
-    vehm1traj = data[data[:,0]==vehm1]
-    firsttime = veh0traj[0,1]; lasttime = vehm1traj[-1,1]
-    data = data[np.all([data[:,1]>=firsttime, data[:,1]<=lasttime],axis=0)]
+#    data = data[data[:,7] == lane]
+#    veh0 = vehs[0]; vehm1 = vehs[-1]
+#    veh0traj = data[data[:,0]==veh0]
+#    vehm1traj = data[data[:,0]==vehm1]
+#    firsttime = veh0traj[0,1]; lasttime = vehm1traj[-1,1]
+    firsttime = platooninfo[vehs[0]][0]
+    lasttime = platooninfo[vehs[-1]][3]
+    data = data[np.all([data[:,1]>=firsttime, data[:,1]<=lasttime, data[:,7] == lane],axis=0)]
     vehlist = list(np.unique(data[:,0]))
     
     sortedvehlist = sortveh3(vehlist, lane, meas, platooninfo)
     for count, i in enumerate(sortedvehlist): 
-        if i == veh0:
+        if i == vehs[0]:
             inds = [count]
-        elif i == vehm1:
+        elif i == vehs[-1]:
             inds.append(count)
     sortedvehlist = sortedvehlist[inds[0]:inds[1]+1]
     if needmeas: 
