@@ -670,8 +670,11 @@ def check_realistic(sim, platooninfo, limit = 10, h=.1):
             return False
     return True
 
-def lanevehlist(data,lane,vehs):
+def lanevehlist2(data,lane,vehs):
     #given two vehicles ids vehs[0] and vehs[-1], find all vehicles inbetween the two in a single lane
+    #this is an older version that was written before the sortveh3 was created. Now we can just use that and it's more robust. 
+    #both versions do not support the edge case where the starting and ending vehicles are involved in circular dependency. 
+    #the vehicles involved in the circular dependency may, or may not, be included in that case. 
 	#This is used in makeplatoonlist for speical input when you give it a pair of vehicles 
 	
     lanedata = data[data[:,7]==lane]
@@ -695,8 +698,8 @@ def lanevehlist(data,lane,vehs):
         if lanedata1[i,7] != lane:
             print(i)
         if lanedata1[i,2] > veh0traj[curdt,2]:
-            if lanedata1[i,0] in [581, 621]:
-                pass
+#            if lanedata1[i,0] in [581, 621]:
+#                pass
             badvehlist.add(lanedata1[i,0])
         
 #        try: 

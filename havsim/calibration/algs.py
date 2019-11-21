@@ -729,15 +729,15 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
         return meas, platooninfo
     
     if vehs is not None: #in this special case we are giving vehicles which we want stuff to be calibrated between 
-        #one thing I don't like about this is that the first vehicle in vehs is not included, when really I want it to be. 
-        #also any other vehicles designated as `leaders` aren't included either. It's a small thing but could be nice to change. 
+        #note that the first vehicle in vehs is NOT included. So when you are selecting that first vehicle keep that in mind! 
+        #if you really wanted vehs[0] in the thing you could do this by calling the first makeplatoon with n-1 and putting vehs[0] in the front. 
         
         """
         #note to self: another way to implement this is to use the new sort vehicle function :) 
         looks like you could just do lanvehlist(data, lane, vehs), and then sortveh3(). 
         """
         
-        vehlist, unused = helper.lanevehlist(data,lane,vehs) #special functions gets only the vehicles we want to simulate out of the whole dataset
+        vehlist, unused = lanevehlist(data,lane,vehs, meas, platooninfo, needmeas = False) #special functions gets only the vehicles we want to simulate out of the whole dataset
         #after having gotten only the vehicles we want to simulate, we modify the platooninfo, leaders , totfollist, to reflect this
         #lastly we can seed curlead as the vehs[0] to start
         platooninfovehs = platooninfo
@@ -809,10 +809,13 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
         return meas, platooninfo, platoonlist, platoonoutput, num_of_leaders, num_of_vehicles
 
 def makeplatoonlist_s(data, n = 1, lane = 1, vehs = []):
-    meas, platooninfo = makeplatoonlist(data,1,False)
     
-    vehIDs = np.unique(data[data[:,7]==lane,0])
-    sortedvehID = sortveh3(vehIDs,lane,meas,platooninfo) #algorithm for sorting vehicle IDs
+    if vehs is not []:
+        sortedvehID, meas, platooninfo = lanevehlist(data, lane, vehs, None, None, needmeas = True)
+    elif vehs is []:
+        meas, platooninfo = makeplatoonlist(data,1,False)
+        vehIDs = np.unique(data[data[:,7]==lane,0])
+        sortedvehID = sortveh3(vehIDs,lane,meas,platooninfo) #algorithm for sorting vehicle IDs
     
     sortedplatoons = []
     nvehs = len(sortedvehID)
@@ -823,6 +826,38 @@ def makeplatoonlist_s(data, n = 1, lane = 1, vehs = []):
         sortedplatoons.append(curplatoon)
         cur = cur + n
     return meas, platooninfo, sortedplatoons
+
+def lanevehlist(data, lane, vehs, meas, platooninfo, needmeas = False):
+    #finds all vehicles between vehs[0] and vehs[1] in a specific lane, and returns the SORTED
+    #list of vehicle IDs. 
+    #different than lanevehlist2 since it returns a sortedlist back. Also it should be more robust. 
+    #does not support the edge case where the vehs[0] or vehs[1] are involved in circular dependency. 
+    #the vehicles involved in the circular dependency may, or may not, be included in that case. 
+    
+    #if needmeas = True, then it gets meas and platooninfo for you, and returns those in addition to the sortedvehlist. 
+    #otherwise it just returns the sortedvehlist. 
+    if needmeas: 
+        meas, platooninfo = makeplatoonlist(data, 1, False)
+    
+    data = data[data[:,7] == lane]
+    veh0 = vehs[0]; vehm1 = vehs[-1]
+    veh0traj = data[data[:,0]==veh0]
+    vehm1traj = data[data[:,0]==vehm1]
+    firsttime = veh0traj[0,1]; lasttime = vehm1traj[-1,1]
+    data = data[np.all([data[:,1]>=firsttime, data[:,1]<=lasttime],axis=0)]
+    vehlist = list(np.unique(data[:,0]))
+    
+    sortedvehlist = sortveh3(vehlist, lane, meas, platooninfo)
+    for count, i in enumerate(sortedvehlist): 
+        if i == veh0:
+            inds = [count]
+        elif i == vehm1:
+            inds.append(count)
+    sortedvehlist = sortedvehlist[inds[0]:inds[1]+1]
+    if needmeas: 
+        return sortedvehlist, meas, platooninfo
+    else: 
+        return sortedvehlist
 
 def sortveh3(vehlist,lane,meas,platooninfo):
     #third attempt at a platoon ordering algorithm 
