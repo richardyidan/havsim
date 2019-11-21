@@ -223,13 +223,26 @@ def makeplatooninfo(dataset, simlen = 50):
 #            3 - follower. 
 #            4 - length, 
 #            5 - lane, 
-#            6 - acceleration
+#            6 - length
+            #7 -lane
+            #8 - acceleration
 #            e.g. data[:,dataind[0]] all position entries for entire dataset, data[data[:,1]] all frame IDs for entire dataset
 #            
 #    simlen = 50: this is the minimum number of observations a vehicle has a leader for it to be calibrated. 
 #    
 #output: 
 #    meas: all measurements with vehID as key, values as dataset[dataset==meas.val()] i.e. same format as dataset
+            #rows are observations. 
+            #columns are: 
+            #0 - id
+            #1 - time
+            #2 - position
+            #3 - speed
+            #4 - leader 
+            #5 - follower
+            #6 - length
+            #7 - lane
+            #8 - acceleration
 #    
 #    platooninfo: dictionary with key as vehicle ID, (excludes lead vehicle)
 #    value is array containing information about the platoon and calibration problem 

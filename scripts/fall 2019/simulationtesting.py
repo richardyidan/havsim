@@ -26,23 +26,26 @@ from havsim.simulation.modelsold import *
 from havsim.plotting import vehplot, hd
 
 #simulation results from large simulation 
-#with open('simeg33.33-1.1-2-.9-1.5IDMb3.pkl','rb') as f:
+#with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/simeg33.33-1.1-2-.9-1.5IDMb3.pkl','rb') as f:
 #    data = pickle.load(f)
+    
+#with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/simeg33.33-1.5-2-1.1-1.5IDM_b3.pkl','rb') as f:
+#    data = pickle.load(f)
+#%%
 
-#with open('simeg33.33-1.5-2-1.1-1.5IDM_b3.pkl','rb') as f:
-#    data = pickle.load(f)
 
 #create speed profile for the leader
 #CHOOSE A DISTURBANCE TYPE FROM THE COMMENTS BELOW. DEFAULT EQUILIBRIUM SPEED IS 30 FT/S. CHANGE BY CHANGING SPEEDOFFSET. 
 #CHOOSE SIMLEN AND N TO MAKE BIGGER SIMULATIONS WHICH TAKE LONGER TO RUN 
 #CAN ALSO CHANGE THE MODEL USED AND THE MODEL PARAMETERS. 
-simlen = 3000
-N = 80
+simlen = 33000 #33000
+N = 800 #800
 speedoffset = -15
 length = 5
 velocity = [30 for i in range(simlen)]
-#velocity[0:200] = [1/10*(.1*(i)-10)**2+20 for i in range(200)] #polynomial disturbance 
-velocity[0] = 30.1
+velocity[0:200] = [1/10*(.1*(i)-10)**2+20 for i in range(200)] #polynomial disturbance 
+#velocity[0] = 30.1
+#velocity[100:150] = [28 for i in range(50)]
 
 #velocity[2300:3300] = [18 for i in range(1000)]
 
@@ -87,13 +90,26 @@ universe = [v1]
 
 
 #IDM ####################
-p = [33.33,1.5,2,.9,1.5] #33.33, 1.5, 2, 1.1, 1.5
+#p = [33.33,1.5,2,1.1,1.5] #33.33, 1.5, 2, 1.1, 1.5 33.33-1.1-2-.9-1.5
+#p=[33.33, 1.2, 2, .9, 1.5]
+p = [33.33,1.1,2,.9,1.5]
+p2 = res2['x']
+#p2[0] = p2[0]*4/3
 headway = eql(IDM_b3,30+speedoffset,p, length)
+headway2 = eql(linearCAV,30+speedoffset,p2,length)
 prev = 0
+perturb = 2
+indlist = np.arange(0, N,10)
+#indlist = []
 for i in range(N):
-    prev = prev - headway
-    newveh = vehicle([prev,30+speedoffset],0,length,universe[-1],IDM_b3,p,.1)
-    universe.append(newveh)
+    if i in indlist:
+        prev = prev - headway2
+        newveh = vehicle([prev,30+speedoffset],0,length,universe[-1],linearCAV,p2,.1)
+        universe.append(newveh)
+    else:
+        prev = prev - headway
+        newveh = vehicle([prev,30+speedoffset],0,length,universe[-1],IDM_b3,p,.1)
+        universe.append(newveh)
     
 #OVM  ##################
 #p =  [10*3.3,.086/3.3, 1.545, 1.4, .175 ]
@@ -215,6 +231,8 @@ plt.figure()
 testveh = universe[-1]
 testdx = testveh.dx
 dt = testveh.dt
+#testdx = data[0][400]
+#speedoffset = -10
 displacement = [0]
 for i in range(len(testdx)):
     d = (testdx[i]-30-speedoffset)*dt
@@ -231,17 +249,41 @@ plt.plot(displacement)
 
 
 #%%
-plt.figure()
-displacementlist = []
-for j in range(len(universe)):
-    testveh = universe[j]
-    testdx = testveh.dx
-    dt = testveh.dt
-    displacement = [0]
-    for i in range(len(testdx)):
-        d = (testdx[i]-30-speedoffset)*dt
-        displacement.append(displacement[-1]+d)
+#plt.figure()
+#displacementlist = []
+#for j in range(len(universe)):
+#    testveh = universe[j]
+#    testdx = testveh.dx
+#    dt = testveh.dt
+#    displacement = [0]
+#    for i in range(len(testdx)):
+#        d = (testdx[i]-30-speedoffset)*dt
+#        displacement.append(displacement[-1]+d)
+#        
+#    displacementlist.append(displacement[-1])
+#plt.plot(displacementlist, 'k.')
         
-    displacementlist.append(displacement[-1])
-plt.plot(displacementlist, 'k.')
-        
+
+#%%
+#dt = .1
+
+#plt.close('all')
+#plt.plot(data[0][10])
+
+
+def myplot():
+    indlist = np.arange(0,150,15)
+    plt.figure()
+    for i in indlist:
+        plt.plot(universe[i].dx)
+
+myplot()
+
+
+#%%
+#save simulation results 
+data = []
+for i in universe:
+    data.append(i.dx)
+with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/universenoAV.pkl','wb') as f:
+    pickle.dump(data,f)
