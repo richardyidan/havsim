@@ -482,37 +482,30 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
             curleadlist.insert(0,curlead) #append current leader to current leader list
             for i in platooninfo[curlead][-1]: #append all of the current leader's followers to the current follower list
                 followers.insert(0,i) 
-#                totfollist.insert(0,i)
             followers = list(set(followers)) #remove any duplicate entries from followers; we don't want to check the same vehicle multiple times!
-#            totfollist = list(set(totfollist))
             
             
             
         followersc = followers.copy() #followersc is a copy of followers because we need to modify followers while iterating over it 
-        for i in followersc: #check if any candidate followers can be added. we iterate over the copy of followers since we will be deleting entries from the list 
+        for i in followersc: 
             chklead = platooninfo[i][4] #these are all the leaders needed to simulate vehicle i
             if all(j in curleadlist for j in chklead): #will be true if curlead contains all vehicles in chklead; in that case vehicle i can be simulated
-                #after we add a follower, we want to remove the follower from the graph, remove it from the leaders' followers (in platooninfo), and subtract 1 from the number of followers each vehicle has 
                 platoons.append(i) #append vehicle i to list of followers in current platoon
                 curn += 1 #we have added a following vehicle. if curn reaches n, then the platoon is of desired size 
                 curlead  = i #newly added follower becomes the new leader
                 leaders.insert(0,curlead) #append newly added follower to the leader list as well; we have simulated vehicle i, and can now treat it as a leader 
-                #note that leaders can either be vehicles which are never simulated, or vehicles that we have put in a platoon successfully (and thus can be simulated)
-                followers.remove(curlead) #delete i from followers
-                totfollist.remove(curlead) #delete i from the total follower list 
+                followers.remove(curlead) 
+                totfollist.remove(curlead) 
                 for j in chklead: 
                     platooninfo[j][-1].remove(i) #remove i from each of the leader's followers
                     if len(platooninfo[j][-1]) < 1: #if a leader has no more followers
                         simcount += -1 #adjust simcount. if simcount reaches 0 our job is finished and we can return what we have, even if curn is not equal to n
                         leaders.remove(j) #remove it from the list of leaders
-                        curleadlist.remove(j) #remove it from the curleadlist. Note that we know that that any vehicle in curleadlist MUST ALSO BE in leaders
-                        #note that vehicles in leaders are not necessarily in curleadlist. We know that every vehicle in chklead must be in curleadlist in this case, 
-                        #since we were only able to add vehicle i to the platoon because curleadlist has all of vehicle i's leaders
-                if len(platooninfo[curlead][-1])<1: #need to do something different if the curlead turns out not to have any followers
-                    leaders.remove(curlead) #remove it from the leader list
-                    curlead = None #specify None as leader; the first part of while loop will handle special case if followers is empty and curlead is None
-                    #otherwise, it's OK for curlead to be None, we can still check the followers as long as followers isn't empty. 
-                else: #if above is false then we need to add things to totfollist
+                        curleadlist.remove(j) #remove it from the curleadlist. Note that we know that that any vehicle in curleadlist MUST ALSO BE in leaders. reverse not true. 
+                if len(platooninfo[curlead][-1])<1: # if the curlead turns out not to have any followers it can't be used as leader. 
+                    leaders.remove(curlead) 
+                    curlead = None
+                else: #i can be used as the new curlead
                     for j in platooninfo[curlead][-1]:
                         totfollist.insert(0,j)
                     totfollist = list(set(totfollist))
@@ -520,25 +513,18 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
             followers.remove(i) #don't need to keep checking vehicle i if we can't add it the first time; if we add a new lead vehicle with vehicle i as a follower
             #it will be readded to the followers list 
             
-        else: #no vehicles in followers could be added
-#            print('no candidate followers could be added - attempting to add more lead vehicles')
-            #there are two possible scenarios at this point. Either we can keep adding followers, and we are just missing some vehicles from leaders
-            #the other possibility is that we can't add any followers, even if we added every leader, which means there must be a circular dependency among the followers. 
-            #we want to figure out which possibility it is, because we don't want to keep checking for, and resolving, loops unless we have to. 
-            
-            #note if we get the print out in the else statement the alg should fail so it doesnt so that suggests a bug 
+        else: #get a vehicle from leaders to add to to curleadlist
             for i in totfollist: #iterate over every possible follower (total follower list)
-                chklead = platooninfo[i][4] #get leaders for each candidate follower
-                if all(j in leaders for j in chklead): #if true, more vehicles can be simulated 
-                    for j in chklead: #check all of the potential new leaders
+                chklead = platooninfo[i][4] 
+                if all(j in leaders for j in chklead): #if true, i can be simulated
+                    for j in chklead: 
                         if j not in curleadlist: #if any of the leaders is not in the current leader list
-                            curlead = j #we will assign that leader as curlead, and exit both the nested loops, returning to the while loop where we will add it, and its candidate followers
+                            curlead = j #we will assign that leader as curlead
                             breaknow = True
                             break #break out of inner for loop
                 if breaknow:
                     break #break out of the outer for loop and return to the while loop
             else: #otherwise we need to resolve a circular dependency
-#                print('no lead vehicles found, attempting to resolve loop among followers')
                 bestG = None
                 bestGlen = float('inf')
                 bestGedge = float('inf')
@@ -547,11 +533,11 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
                     G = nx.DiGraph()
                     prevfolfix = [] #vehicles that we have already added all of their problem leaders to the network 
                     nextfolfix = [] #these are vehicles we need to add their problem leaders to the network after we deal with the current folfix
-                    folfix = j #nothing in totfollist can be added, so we'll pick a random entry as the follower to "fix" 
-                    G.add_node(folfix) #add follower to the network
-                    chklead = platooninfo[folfix][4] #get leaders
+                    folfix = j
+                    G.add_node(folfix)
+                    chklead = platooninfo[folfix][4]
                     for i in chklead: 
-                        if i not in leaders: #if the leaders arent in the list of leaders (variable leaders)
+                        if i not in leaders: 
                             G.add_node(i) #add them to network
                             G.add_edge(folfix,i) #add an edge from folfix to the leader its missing (i)
                             if i not in prevfolfix: #if we haven't already done this for i 
@@ -566,45 +552,17 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
                                 G.add_edge(folfix,i)
                                 if i not in prevfolfix:
                                     nextfolfix.append(i)
-                        prevfolfix.append(folfix)
-#                    print(len(G.nodes())) #debug
-                    
+                        prevfolfix.append(folfix)  
                     if len(G.nodes()) < bestGlen or len(G.edges())<bestGedge:
                         bestG = G.copy()
                         bestGlen = len(G.nodes())
                         bestGedge = len(G.edges())
-#                print('best G nodes are '+str(len(bestG.nodes()))) #debug
-                #now we have created a network that shows the dependency among some the vehicles we are unable to add. 
-                #there must exist cycles among these vehicles that prevent us from adding them - we will find a cycle basis for these.
-                #we will resolve these cycles with the `strategy 1' where we solve the hitting set problem on the cycle basis. For the results of that, 
-                #every vehicle identified in the hitting set will be solved using a heuristic where they are simulated with the problem leaders taken from measurements
-                #in 'strategy 2' you would resolve these loops by having a time varying platoon order
-#                print('number of nodes in G is '+str(len(bestG.nodes())))
-#                print(G.nodes())
-#                print(G.edges())
-#                print('length of totfollist is '+str(len(totfollist)))
                 cyclebasis = nx.simple_cycles(bestG) #get cycle basis (this is a generator)
-                #can we not use cycle basis instead (convert to undirected graph?)
-                ###########
-                #time is dominated by the below segment; we have made a better version but the time is still dominated by this section. 
-                #time to resolve loops is exponetial with the size of the network G. 
-                #overall calibration time is dominated by the time to do the calibration though; ultimately this function is a small amount of the total work needed
-#                subsets = [] 
-#                universe = set()
-#                start = time.time()
-#                for i in cyclebasis: 
-#                    subsets.append(set(i)) #this is all of the subsets
-#                    universe = universe.union(set(i)) #this is the "universe" which is the union of all the subsets
-#                end = time.time()
-#                print(str(end-start))
-                
+                #can we not use cycle basis instead (convert to undirected graph?)             
                 universe = list(bestG.nodes()) #universe for set cover
-#                start = time.time()
                 subsets = list(cyclebasis) #takes a long time to convert generator to list when the generator is very long; this is what dominates the cost
                 for i in range(len(subsets)):
                     subsets[i] = set(subsets[i])
-#                end = time.time()
-#                print(str(end-start))
                 #now we have what is needed for the set cover problem, and we need to convert this into a hitting set problem. 
                 HSuni = list(range(len(subsets))) #read variable name as hitting set universe; universe for the hitting set HSuni[0] corresponds to subsets[0]
                 HSsubsets = [] #this is the list of subsets for the hitting set
@@ -615,12 +573,7 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
                         if curveh in subsets[j]: # if i is in subsets[j] then we add the index to the current set for i
                             cursubset.add(j)
                     HSsubsets.append(cursubset)
-#                print('number of subsets (nodes) is '+str(len(HSsubsets))+' ('+str(len(universe))+')') #DEBUG
-#                print('number of universe (cycles) is '+str(len(HSuni))+' ('+str(len(subsets))+')') #DEBug
-#                start = time.time()
                 result = helper.greedy_set_cover(HSsubsets,HSuni) #solve the set cover problem which gives us the HSsubsets which cover HSuni
-#                end = time.time()
-#                print(str(end-start))
                 
                 #now we have to convert the output of the set cover algorithm back to the actual vehicles we will be simulating 
                 newlead = None #initilize the new curlead as none
