@@ -20,7 +20,6 @@ All calibration related functions which set up optimization problems, including 
 	
     general features/QOL 
         -choose what loss function you want to use 
-        -support for changing platoon order during execution 
         -support for using relaxation phenomenon on a platoon, where we would like to update the relaxation amount during simulation. also support for models where the lead trajectory is delayed 
         but your own trajectory is not. If we just ignore the extra terms these add to the adjoint calculation how accurate is the gradient going to be? Is it ok to do that? 
             -i think we can add a special argument that will make it so the r_constant functions will recompute the relax amount on run, and this should be good enough. 
@@ -34,11 +33,8 @@ All calibration related functions which set up optimization problems, including 
         -choosing how to deal with end trajectory - perhaps we don't like the shifted end strategy and would like to use a different one 
     
     optimizing speed
-		-need to test fastest way to write code in jax, compare jax with adjoint method. 
-        When using adjoint method tests suggest that it is better to use python lists 
-        -push euler functions into cython 
-        -general optimization of code possible, use a profiler to do this; 
-		there are repeated computations in adjoint calculations which can be manually optimized, especially for complicated models 
+        -could push euler functions into cython 
+		there are repeated computations in (manual) adjoint calculations which can be manually optimized, especially for complicated models 
         
     features which would require a seperate function
         -dealing with models which have stochastic components 

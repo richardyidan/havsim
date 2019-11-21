@@ -385,7 +385,6 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
     # fulltraj = True controls how much of each trajectory to plot
 
     # lane = None - If passed in as a laneID, the parts of trajectories not in the lane ID given will be made opaque
-    #lane = None is supposed to be allowed but currently you must specify a lane or else it will not work. 
     # colorcode = True - if colorcode is True, sim must be None, and we will plot the trajectories
     # colorcoded based on their speeds. It looks nice!
     # speed_limit = [] - only used when colorcode is True, if empty we will find the minimum and maximum speeds
