@@ -411,7 +411,7 @@ Would like makeplatoon to work more simply, and avoid the problem it currently h
 Want something that will try to keep to the same lane, so ideally we get in situations where all vehicles being calibrated are in a long chain
 Some notes about this are on my phone. 
 """
-def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, n=10):
+def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, n=10, graphtype = 'digraph'):
 #	input: 
 #    meas, (see function makeplatooninfo)
 #    
@@ -449,27 +449,6 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
 #    platoons - the list of vehicles
 	
     #################
-    #current code: 
-    #we have leaders, all possible vehicles which may have followers that can be added
-    #curleadlist, which is a smaller subset of leaders
-    #followers, which is all the followers of curleadlist 
-    #totfollist, which is all the followers of leaders
-    #the code works as follows. We have 3 different operations, in different priorities: 
-    
-    #0.add curlead to the curleadlist and insert its following vehicles into the front of followers to be checked first
-    #1.try to add followers of vehicles in curleadlist. vehicles are only added if all their leaders are in curleadlist 
-    #if a follower is added, that vehicle becomes the curlead and is added to curleadlist.
-    
-    #2.if 1 can't be done, then add a random vehicle from leaders into curleadlist. Only leaders that may potentially result in followers being added can be selected
-    
-    #3. if 1 and 2 can't be done, then there must be some loop that we will resolve 
-    
-    #we could try adding: 
-    #1.b. if there are any followers of curleadlist that could be added if we used leaders instead of curleadlist, add those followers. (need a seperate followers list for this since we remove followers after checking them)
-    #####################
-#    other thing is that I think we can also just try something super simple where instead of 1-2 we just have 1 strategy where we iterate over all the followers, 
-#    and if we can add any of them do add them. so in total that's 3 similar versions of this program we can try. 
-    #####################
     platoons = [] #current followers list for platoon; these are the vehicles which have been successfully added to the platoon
 #    totfollist = [] #list of every single follower of leaders; followers variables only has leaders that are in curleadlist
     curn = 0 #current n value
@@ -529,8 +508,10 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
                 bestGlen = float('inf')
                 bestGedge = float('inf')
                 for j in totfollist: #for loop to choose the smallest network possible
-                    
-                    G = nx.DiGraph()
+                    if graphtype == 'digraph':
+                        G = nx.DiGraph()
+                    else:
+                        G = nx.Graph()
                     prevfolfix = [] #vehicles that we have already added all of their problem leaders to the network 
                     nextfolfix = [] #these are vehicles we need to add their problem leaders to the network after we deal with the current folfix
                     folfix = j
@@ -557,7 +538,10 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
                         bestG = G.copy()
                         bestGlen = len(G.nodes())
                         bestGedge = len(G.edges())
-                cyclebasis = nx.simple_cycles(bestG) #get cycle basis (this is a generator)
+                if graphtype == 'digraph':
+                    cyclebasis = nx.simple_cycles(bestG) #get cycle basis (this is a generator)
+                else:
+                    cyclebasis = nx.cycle_basis(bestG)
                 #can we not use cycle basis instead (convert to undirected graph?)             
                 universe = list(bestG.nodes()) #universe for set cover
                 subsets = list(cyclebasis) #takes a long time to convert generator to list when the generator is very long; this is what dominates the cost
