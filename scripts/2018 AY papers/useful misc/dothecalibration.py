@@ -8,7 +8,9 @@ to files like adjointcontent, relaxcontent or algtesting2 for more up to date op
 @author: rlk268
 """
 
-from calibration import * 
+from havsim.calibration.opt import *
+from havsim.calibration.helper import makeleadfolinfo
+from havsim.calibration.models import OVM, OVMadj, OVMadjsys
 
 #make the platoons and platooninfo, as well as get the measurements in dictionary form 
 #meas, platooninfo, platoonlist = makeplatoonlist(data, 10)  
@@ -49,13 +51,18 @@ args = (True,6)
 #curplatoon = platoonlist[93]
 #curplatoon = [[], 995,998,1013,1023,1030]  #[[],995,998,1013,1023,1030] this is a good test platoon 
 #curplatoon = [[],995,998,1013,1023] #995 good for testing lane changing #1003 1014 was original pair we used for testing where 1014 was the follower
-curplatoon = [[],581, 611]
+#curplatoon = [[],581, 611]
+curplatoon = [381.0, 391.0, 335.0, 326.0, 334.0]
+#curplatoon = [335, 326]
 #curplatoon = platoonlist[17]
-n = len(curplatoon[1:])
+n = len(curplatoon)
 
-leadinfo, folinfo, rinfo = makeleadfolinfo_r3(curplatoon, platooninfo,meas) 
+leadinfo, folinfo, rinfo = makeleadfolinfo(curplatoon, platooninfo,meas) 
 #leadinfo,folinfo,rinfo = makeleadfolinfo(curplatoon,platooninfo,meas)
 p = np.tile(pguess, n)
+p = [10*3.3,.086/3.3, 1.545, 2, .175, 5.01, 9*3.3,.083/3.3, 2, 1.5, .275, 15.01, 11*3.3,.075/3.3, 1.545, 2.2, .175, 25.01, 
+          10.5*3.3,.086/3.3, 1.6, 2, .175, 10.01, 9.6*3.3,.095/3.3, 1.6, 2.1, .255, 8.01]
+#p = p[0:12]
 bounds = np.tile(mybounds,(n,1))
 #p = finitebfgs['x']
 ##########################################################################################
@@ -75,9 +82,11 @@ end = time.time()
 objtime = end-start #note that the obj is supposed to be around 500k for the initial platoon with 5 vehicles, initial guess for ovm 
 
 start = time.time()
-adjder = platoonobjfn_der(p,model, modeladjsys, modeladj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo,*args)
+adjder = platoonobjfn_objder(p,model, modeladjsys, modeladj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo,*args)
+#adjder = platoonobjfn_der(p,model, modeladjsys, modeladj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo,*args)
 end = time.time()
 adjdertime = end-start
+adjder = adjder[1]
 
 start = time.time()
 finder = platoonobjfn_fder(p,model, modeladjsys, modeladj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo,*args)
@@ -92,7 +101,7 @@ print(acc2)
 #############test calibration#####################
 
 start = time.time()
-bfgs = sc.fmin_l_bfgs_b(platoonobjfn_objder,p,None,(model, modeladjsys, modeladj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo,*args),0,bounds,maxfun=200)
+#bfgs = sc.fmin_l_bfgs_b(platoonobjfn_objder,p,None,(model, modeladjsys, modeladj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo,*args),0,bounds,maxfun=200)
 end = time.time()
 bfgstime = end-start
 
