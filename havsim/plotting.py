@@ -370,7 +370,7 @@ def plotColorLines(X, Y, SPEED, speed_limit):
 
 
 def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C1'],
-                fulltraj=True, lane=None, opacity=.4, colorCode=True, speed_limit=[]):  # plot platoon in space-time
+                fulltraj=True, lane=None, opacity=.4, colorcode=True, speed_limit=[]):  # plot platoon in space-time
     # CURRENT DOCUMENTATION 11/11
     # meas - measurements in np array, rows are observations
     # sim - simulation in same format as meas. can pass in None and only meas will be shown, or can pass in the data and they will be plotted together
@@ -461,7 +461,7 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
                 X = x[LCind[j]:LCind[j + 1]]
                 Y = y[LCind[j]:LCind[j + 1]]
                 SPEED = speed_list[LCind[j]:LCind[j + 1]]
-                if colorCode:
+                if colorcode:
                     line = plotColorLines(X, Y, SPEED, speed_limit=speed_limit)
 
                 else:
@@ -553,11 +553,12 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
     #	if speed:
     #		plt.ylabel('speed (ft/s)')
 
-    if colorCode:
+    if colorcode:
         fig.colorbar(line, ax=axs)
 #        fig.colorbar.set_label('speed (m/s)')
 
     axs.autoscale(axis='x')
+    axs.autoscale(axis='y')
 
     return
 

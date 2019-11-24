@@ -586,7 +586,7 @@ def SEobj_pervehicle(meas,sim,platooninfo,curplatoon, dim=2, h=.1):
     #takes as input meas, sim, platooninfo, curplatoon, 
     #outputs a list of the objective function for each vehicle. 
     out = []
-    for i in curplatoon[1:]:
+    for i in curplatoon:
         t_nstar, t_n, T_nm1, T_n = platooninfo[i][0:4]
         curloss = sim[i][t_n-t_nstar:T_nm1+dim-t_nstar,2] -  meas[i][t_n-t_nstar:T_nm1+dim-t_nstar,2]
         curloss = np.sum(np.square(curloss))*h
@@ -601,7 +601,7 @@ def convert_to_rmse(obj,platooninfo,curplatoon, dim = 2, h=.1, delay = 0):
     #this currently is only for newell delay. 
     ans = 0 
     num_obs = 0 
-    for i in curplatoon[1:]:
+    for i in curplatoon:
         if delay == 0 : #ODE
             t_n, T_nm1, T_n = platooninfo[i][1:4]
             if T_n >= T_nm1+dim-1: #the reason you have dim is because at T_nm1 you get position and speed, speed determines position at next step. 
