@@ -13,8 +13,12 @@ try:
     with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/datasets/trajectory data/mydata.pkl', 'rb') as f: #replace with path to pickle file
         rawdata, truedata, data, trueextradata = pickle.load(f) #load data
 except:
-    with open("/users/qiwuzou/Documents/assignment/M.Eng/mydata.pkl", 'rb') as f:
-        rawdata, truedata, data, trueextradata = pickle.load(f) #load data
+    try:
+        with open("/users/qiwuzou/Documents/assignment/M.Eng/mydata.pkl", 'rb') as f:
+            rawdata, truedata, data, trueextradata = pickle.load(f) #load data
+    except:
+        with open("D:/assignment/Meng/mydata.pkl", 'rb') as f:
+            rawdata, truedata, data, trueextradata = pickle.load(f) #load data
 #%%
     
 #existing platoon formation algorithm
@@ -28,7 +32,7 @@ unused, unused, sortedplatoons = makeplatoonlist_s(data,n=5,lane=2, vehs = [582,
 #note that havsim.calibration.helper.makeleadfolinfo can be used to get the leaders 
 #for a platoon, which may be convenient. 
 
-from havsim.calibration.helper import makeleadfolinfo
+from havsim.calibration.helper import makeleadfolinfo, makeleadinfo, makefolinfo
 
 testplatoon = [381.0, 391.0, 335.0, 326.0, 334.0]
 leadinfo, folinfo, unused = makeleadfolinfo(testplatoon, platooninfo, meas)
@@ -55,15 +59,23 @@ def chain_metric(platoon, platooninfo, k = .9, type = 'lead' ):
     return res
 
 
-def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead'):
-    leadinfo, folinfo, unused = makeleadfolinfo(platoon, platooninfo, meas)
-    if veh not in platoon:
-        return 0
-    targetsList = leadinfo[platoon.index(veh)] if type == 'lead' else folinfo[platoon.index(veh)]
+def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0):
+    # leadinfo, folinfo= makeleadinfo(platoon, platooninfo, meas),  makefolinfo(platoon, platooninfo, meas)
+    # if veh not in platoon:
+    #     return 0
+    # targetsList = leadinfo[platoon.index(veh)] if type == 'lead' else folinfo[platoon.index(veh)]
+
+    if type == 'lead':
+        leadinfo = makeleadinfo([veh], platooninfo, meas)
+        targetsList = leadinfo[0]
+    else:
+        folinfo = makefolinfo([veh], platooninfo, meas)
+        targetsList = folinfo[0]
+
     def getL(veh, platoon, T):
         L = set([])
-        if veh not in platoon:
-            return L
+        # if veh not in platoon:
+        #     return L
         # targetsList = leadinfo[platoon.index(veh)]
         temp = set([])
         for i in targetsList:
@@ -74,12 +86,12 @@ def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead'):
         return L
 
     def getLead(veh, platoon, T):
-        if veh not in platoon:
-            return []
+        # if veh not in platoon:
+        #     return []
         # targetsList = leadinfo[platoon.index(veh)]
         leads = []
         for i in targetsList:
-            if i[1] in T or i[2] in T:
+            if i[0] in platoon and (i[1] in T or i[2] in T):
                 leads.append(i[0])
         return leads
 
@@ -94,7 +106,7 @@ def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead'):
     res = len(getL(veh, platoon, T))
     leads = getLead(veh, platoon, T)
     for i in leads:
-        res += k* c_metric(i, platoon, getTimes(veh, i, T), platooninfo, k=k)
+        res += k*c_metric(i, platoon, getTimes(veh, i, T), platooninfo, k=k, type=type, depth=depth+1)
     return res
 
 def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh'):
@@ -105,7 +117,7 @@ def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh'):
             after.update(platoonlist[i])
         for i in range(len(platoonlist)):
             after -= set(platoonlist[i])
-            leadinfo, folinfo, unused = makeleadfolinfo(platoonlist[i], platooninfo, meas)
+            leadinfo, folinfo = makeleadinfo(platoonlist[i], platooninfo, meas),  makefolinfo(platoon, platooninfo, meas)
             for j in range(len(platoonlist[i])):
                 leaders = [k[0] for k in leadinfo[j]]
                 leaders = set(leaders)
@@ -120,15 +132,18 @@ def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh'):
             after.update(platoonlist[i])
         for i in range(len(platoonlist)):
             after -= set(platoonlist[i])
-            leadinfo, folinfo, unused = makeleadfolinfo(platoonlist[i], platooninfo, meas)
+            leadinfo, folinfo = makeleadinfo(platoonlist[i], platooninfo, meas),  makefolinfo(platoon, platooninfo, meas)
             for j in range(len(platoonlist[i])):
                 leaders = [k[0] for k in leadinfo[j]]
                 leaders = set(leaders)
-                if len(leaders.intersection(after)) > 0:
-                    cirList.append((platoonlist[i][j], i))
+                leaders_after = leaders.intersection(after)
+                if len(leaders_after) > 0:
+                    cirList.append((list(leaders_after), i))
+        res = []
         for i in cirList:
-            T = set(range(platooninfo[i[0]][1], platooninfo[i[0]][2]))
-            res += c_metric(i[0], platoonlist[i[1]], T, platooninfo, k=k, type='follower')
+            for j in i[0]:
+                T = set(range(platooninfo[j][1], platooninfo[j][2]))
+                res.append(c_metric(j, platoonlist[i[1]], T, platooninfo, k=k, type='follower'))
         return res
 
 
@@ -159,7 +174,7 @@ Others contribute 0 because leaders are not in platoon
 metric = 40
 
 platoon3:
-'259': 418 + 400*k because 249 follows 247 in [1028, 1445] and 247 follows 237 in [1028, 1427] (during T = times(249, 247, T))
+'259': 418 + 400*k because 259 follows 247 in [1028, 1445] and 247 follows 237 in [1028, 1427] (during T = times(249, 247, T))
 '247': 428 because 247 follows 237 in [1000, 1427]
 '315': 0 because leaders are not in platoon
 '237': 0 because leaders are not in platoon
@@ -173,15 +188,87 @@ metric = 1557 + k*992 + k**2 * 464
 """
 
 
+#
+# Chain = chain_metric(platoon4, platooninfo, 1)
+# print(Chain)
+#
+# testplatoon2 = [platoon4, [956]]
+# testplatoon3 = [[925, 937, 956], [920]]
+#
+# cir = cirdep_metric(testplatoon3, platooninfo, k=0.9, type='num')
+# print(cir)
 
-Chain = chain_metric(platoon1, platooninfo, 1)
-print(Chain)
 
-cir = cirdep_metric([[391, 335, 326], [307, 318, 316]], platooninfo, k=1, type='num')
-print(cir)
 
-# leaders:
-# 391: 381
-# 335: 316, 318
-# 326: 307, 318, 335, 316
-# Thus, 335 and 326 violates circular dependency
+"""
+testplatoon2 = [[995, 998, 1013, 1023], [956]]
+995 violates circular dependency because 995 follows 956
+
+testplatoon2:
+37 when 956 has follower 955 in [2746, 2782]
+k*13 when 955 has follower 998 in [2770, 2782], 
+No others could contribute since the time sequence exceeds 2782
+
+metric = 37 + k*13
+
+testplatoon3 = [[925, 937, 956], [920]]
+925 violates circular dependency because 925 follows 920
+
+testplatoon3:
+484 when 920 has follower 925 in [2635, 3118]
+k*444 when 925 has follower 937 in [2675, 3118]
+k**2 * 418 when 937 has follower 956 in [2701, 3118]
+
+metric = 484 + k*444 + k**2 * 418
+
+
+"""
+
+
+import statistics
+
+def benchmark(platoon_list):
+    chain_metric_scores = []
+    cirdep_metric_scores = []
+    veh_set = set([])
+    platoon_set = set([])
+    violate_veh_set = set([])
+
+    for i in platoon_list:
+        chain_metric_scores.append(chain_metric(i, platooninfo, 1))
+        veh_set.update(i)
+    violation = cirdep_metric(platoon_list, platooninfo, type='veh')
+    cirdep_metric_scores = cirdep_metric(platoon_list, platooninfo, type='num')
+
+    for i in violation:
+        platoon_set.add(i[1])
+        violate_veh_set.add(i[0])
+    average = sum(chain_metric_scores)/len(chain_metric_scores)
+    median = list(sorted(chain_metric_scores))[len(chain_metric_scores)//2]
+    std = statistics.stdev(chain_metric_scores)
+    num_veh = len(violation)
+
+
+
+
+    print('chain score average:', average, "\nmedian:", median, "\nstandard deviation:", std)
+    print('number of vehicles:', len(violate_veh_set), "\nfraction of total vehicles:", num_veh/len(veh_set), "\nfraction of total "
+                                                                                               "platoons:",
+          len(platoon_set)/len(platoon_list))
+    if cirdep_metric_scores:
+        average = sum(cirdep_metric_scores)/len(cirdep_metric_scores)
+        median = list(sorted(cirdep_metric_scores))[len(cirdep_metric_scores)//2]
+        std = statistics.stdev(cirdep_metric_scores)
+        print('cirdep score average:', average, "\nmedian:", median, "\nstandard deviation:", std)
+    else:
+        print("No circular dependency violation found")
+
+# benchmark_list = [platoons, laneplatoons, sortedplatoons]
+# names = ["platoons", "laneplatoons", "sortedplatoons"]
+# for i in range(len(benchmark_list)):
+#     print("Performance for", names[i])
+#     benchmark(benchmark_list[i])
+#     print()
+
+# res = makeplatoonlist(rawdata,n=5)
+# print(res)
