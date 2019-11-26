@@ -24,9 +24,9 @@ except:
 #existing platoon formation algorithm
 meas, platooninfo, platoons = makeplatoonlist(data, n = 5)
 #existing platoon formation algorithm in a single lane 
-unused, unused, laneplatoons = makeplatoonlist(data,n=5,lane=2,vehs=[582,1146])
+#unused, unused, laneplatoons = makeplatoonlist(data,n=5,lane=2,vehs=[582,1146])
 #platoon formation based on sorting    
-unused, unused, sortedplatoons = makeplatoonlist_s(data,n=5,lane=2, vehs = [582, 1146])
+#unused, unused, sortedplatoons = makeplatoonlist_s(data,n=5,lane=2, vehs = [582, 1146])
     
 #%%
 #note that havsim.calibration.helper.makeleadfolinfo can be used to get the leaders 
