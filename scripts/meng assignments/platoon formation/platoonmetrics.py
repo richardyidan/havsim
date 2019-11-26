@@ -263,12 +263,12 @@ def benchmark(platoon_list):
     else:
         print("No circular dependency violation found")
 
-# benchmark_list = [platoons, laneplatoons, sortedplatoons]
-# names = ["platoons", "laneplatoons", "sortedplatoons"]
-# for i in range(len(benchmark_list)):
-#     print("Performance for", names[i])
-#     benchmark(benchmark_list[i])
-#     print()
+benchmark_list = [platoons, laneplatoons, sortedplatoons]
+names = ["platoons", "laneplatoons", "sortedplatoons"]
+for i in range(len(benchmark_list)):
+    print("Performance for", names[i])
+    benchmark(benchmark_list[i])
+    print()
 
 # res = makeplatoonlist(rawdata,n=5)
 # print(res)
