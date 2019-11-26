@@ -83,6 +83,7 @@ usevehlist = usevehlist[:100]
 from havsim.calibration.calibration import calibrate_tnc2, calibrate_GA
 from havsim.calibration.helper import makeleadfolinfo
 from havsim.calibration.models import OVM, OVMadjsys, OVMadj
+from havsim.calibration.opt import platoonobjfn_obj, platoonobjfn_objder
 import pickle
 import math 
 def platoontest(vehlist, meas, platooninfo):
@@ -118,15 +119,15 @@ def platoontest(vehlist, meas, platooninfo):
     output2 = []
     
     for i in range(3): #change this part here depending on whether you want to show that these scale awfully or not 
-        out2 = calibrate_GA(bounds_nor,meas,platooninfo,lists[i],makeleadfolinfo,platoonobjfn_obj,None,OVM,OVMadjsys,OVMadj,True,6,order=1)
-        output.append(out)
+        out2 = calibrate_GA(bounds,meas,platooninfo,lists[i],makeleadfolinfo,platoonobjfn_obj,None,OVM,OVMadjsys,OVMadj,True,6,order=1)
+        output2.append(out2)
     
     for i in range(maxsize):
-        out = calibrate_tnc2(plist_nor,bounds_nor,meas,platooninfo,lists[i],makeleadfolinfo,platoonobjfn_objder,None,OVM,OVMadjsys,OVMadj,True,6,cutoff=0,cutoff2=5.5,order=1,budget = 3)
+        out = calibrate_tnc2(plist,bounds,meas,platooninfo,lists[i],makeleadfolinfo,platoonobjfn_objder,None,OVM,OVMadjsys,OVMadj,True,6,cutoff=0,cutoff2=5.5,order=1,budget = 3)
         output.append(out)
     return output, output2, lists
 
 out, out2, lists = platoontest(usevehlist,meas,platooninfo)
 
-with open('plattest.pkl', 'wb') as f:
+with open('/home/rlk268/data/pickle/plattest.pkl', 'wb') as f:
     pickle.dump([out, out2, lists],f)
