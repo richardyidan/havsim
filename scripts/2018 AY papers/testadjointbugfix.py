@@ -14,33 +14,33 @@ from havsim.calibration.models import OVM, OVMadjsys, OVMadj
 from havsim.calibration.opt import platoonobjfn_obj, platoonobjfn_objder
 from havsim.plotting import * 
 #%%
-#pguess = [20*3.3,.086/3.3/2, 1.545, .5, .175, 60 ] #this seems like a very good second guess
-pguess = [10*3.3,.086/3.3, 1.545, 2, .175, 5 ] #original guess
-#pguess = [10*3.3,.086/3.3/2, .5, .5, .175, 60 ]
-
-mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)]
-
-plist = [[10*3.3,.086/3.3, 1.545, 2, .175, 5 ], [20*3.3,.086/3.3/2, 1.545, .5, .175, 60 ], [10*3.3,.086/3.3/2, .5, .5, .175, 60 ]]
-bounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)]
-args = (True, 6)
-
-#lists = [[381.0, 391.0], [335.0, 326.0, 334.0]]
-#lists = [[381], [391], [335],[326],[334]]
-platoonlist = [[249]]
-
-outtest = calibrate_tnc2(plist,bounds,meas,platooninfo,platoonlist,makeleadfolinfo,platoonobjfn_objder,None,OVM,OVMadjsys,OVMadj,True,6,cutoff=0,cutoff2=4.5,order=1,budget = 3)
-outtest2 = calibrate_GA(bounds,meas,platooninfo,platoonlist,makeleadfolinfo,platoonobjfn_obj,None,OVM,OVMadjsys,OVMadj,True,6,order=1)
-#%% #figure out what is happening in the results
-#sim = copy.deepcopy(meas)
-#testplatoon = [[244],[249]]
-#plist = []
-#plist.append(list(out[0][0][11][0]))
-#plist.append(list(out[0][0][12][0]))
-#sim = helper.obj_helper(plist,OVM,OVMadjsys,OVM,meas,sim,platooninfo,testplatoon,makeleadfolinfo,platoonobjfn_obj,(True,6),manual=True)
+##pguess = [20*3.3,.086/3.3/2, 1.545, .5, .175, 60 ] #this seems like a very good second guess
+#pguess = [10*3.3,.086/3.3, 1.545, 2, .175, 5 ] #original guess
+##pguess = [10*3.3,.086/3.3/2, .5, .5, .175, 60 ]
 #
-#platoonplot(meas,sim,platooninfo,[244,249],colorcode = False)
-
-optplot(out[0],meas,None,platooninfo,lists[0],OVM,OVMadjsys,OVMadj,makeleadfolinfo,platoonobjfn_obj,(True,6),lane = 2)
+#mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)]
+#
+#plist = [[10*3.3,.086/3.3, 1.545, 2, .175, 5 ], [20*3.3,.086/3.3/2, 1.545, .5, .175, 60 ], [10*3.3,.086/3.3/2, .5, .5, .175, 60 ]]
+#bounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)]
+#args = (True, 6)
+#
+##lists = [[381.0, 391.0], [335.0, 326.0, 334.0]]
+##lists = [[381], [391], [335],[326],[334]]
+#platoonlist = [[249]]
+#
+#outtest = calibrate_tnc2(plist,bounds,meas,platooninfo,platoonlist,makeleadfolinfo,platoonobjfn_objder,None,OVM,OVMadjsys,OVMadj,True,6,cutoff=0,cutoff2=4.5,order=1,budget = 3)
+#outtest2 = calibrate_GA(bounds,meas,platooninfo,platoonlist,makeleadfolinfo,platoonobjfn_obj,None,OVM,OVMadjsys,OVMadj,True,6,order=1)
+#%% #figure out what is happening in the results
+##sim = copy.deepcopy(meas)
+##testplatoon = [[244],[249]]
+##plist = []
+##plist.append(list(out[0][0][11][0]))
+##plist.append(list(out[0][0][12][0]))
+##sim = helper.obj_helper(plist,OVM,OVMadjsys,OVM,meas,sim,platooninfo,testplatoon,makeleadfolinfo,platoonobjfn_obj,(True,6),manual=True)
+##
+##platoonplot(meas,sim,platooninfo,[244,249],colorcode = False)
+#
+#optplot(out[0],meas,None,platooninfo,lists[0],OVM,OVMadjsys,OVMadj,makeleadfolinfo,platoonobjfn_obj,(True,6),lane = 2)
 #%% just want to check this test platoon see what's going on 
 #335, 326, 334 shows the type of complex behavior that you have a hard time describing without a complciated LC model
 
@@ -134,46 +134,52 @@ def platoontest(vehlist, meas, platooninfo):
     output = []
     output2 = []
     
-    for i in range(3): #change this part here depending on whether you want to show that these scale awfully or not 
-        out2 = calibrate_GA(bounds,meas,platooninfo,lists[i],makeleadfolinfo,platoonobjfn_obj,None,OVM,OVMadjsys,OVMadj,True,6,order=1)
-        output2.append(out2)
+#    for i in range(3): #change this part here depending on whether you want to show that these scale awfully or not 
+#        out2 = calibrate_GA(bounds,meas,platooninfo,lists[i],makeleadfolinfo,platoonobjfn_obj,None,OVM,OVMadjsys,OVMadj,True,6,order=1)
+#        output2.append(out2)
     
     for i in range(maxsize):
         out = calibrate_tnc2(plist,bounds,meas,platooninfo,lists[i],makeleadfolinfo,platoonobjfn_objder,None,OVM,OVMadjsys,OVMadj,True,6,cutoff=0,cutoff2=5.5,order=1,budget = 3)
         output.append(out)
-    return output, output2, lists
+#    return output, output2, lists
+    return output, lists
 
 #out, out2, lists = platoontest(usevehlist,meas,platooninfo)
 
 #with open('/home/rlk268/data/pickle/plattest.pkl', 'wb') as f:
 #    pickle.dump([out, out2, lists],f)
+    
+out, lists = platoontest(usevehlist,meas,platooninfo)
+
+with open('/home/rlk268/data/pickle/plattest2.pkl', 'wb') as f:
+    pickle.dump([out,lists],f)
 
 
 #%%
-with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/2018 AY papers/plattest.pkl','rb') as f:
-    out, out2, lists = pickle.load(f)
-import havsim.calibration.helper as helper
-#get overall RMSE
-#total platoon    
-vehlist = []
-for i in lists[-1]:
-    vehlist.extend(i) 
-GArmse = []
-rmse = []
-for count,i in enumerate(lists): 
-    totobj = 0
-    for j in out[count][0]:
-        totobj = totobj + j[-2]
-    currmse = helper.convert_to_rmse(totobj,platooninfo,vehlist)
-    rmse.append(currmse)
-    if count < 3: 
-        totobj = 0
-        for j in out2[count][0]:
-            totobj = totobj + j['fun']
-        curGA = helper.convert_to_rmse(totobj,platooninfo,vehlist)
-        GArmse.append(curGA)
-relrmse = []
-relrmsebar = []
+#with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/2018 AY papers/plattest.pkl','rb') as f:
+#    out, out2, lists = pickle.load(f)
+#import havsim.calibration.helper as helper
+##get overall RMSE
+##total platoon    
+#vehlist = []
+#for i in lists[-1]:
+#    vehlist.extend(i) 
+#GArmse = []
+#rmse = []
+#for count,i in enumerate(lists): 
+#    totobj = 0
+#    for j in out[count][0]:
+#        totobj = totobj + j[-2]
+#    currmse = helper.convert_to_rmse(totobj,platooninfo,vehlist)
+#    rmse.append(currmse)
+#    if count < 3: 
+#        totobj = 0
+#        for j in out2[count][0]:
+#            totobj = totobj + j['fun']
+#        curGA = helper.convert_to_rmse(totobj,platooninfo,vehlist)
+#        GArmse.append(curGA)
+#relrmse = []
+#relrmsebar = []
 
     
 
