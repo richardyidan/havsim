@@ -7,7 +7,9 @@ Created on Mon Feb 25 02:11:16 2019
 main data which was used in the adjoint paper. 
 pickle files - adjointtest1 - adjointtest11
 """
-from calibration import * 
+#from calibration import *  #old code was all in calibration file 
+import os
+os.chdir('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/2018 AY papers') 
 
 def adjointtest(platooninfo,meas):
             

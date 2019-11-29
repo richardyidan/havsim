@@ -310,6 +310,11 @@ def calibrate_tnc2(plist,bounds, meas,platooninfo,platoonlist,makeleadfolinfo,pl
         if order ==0:
             for j in i: #reset simulation to measurements for next platoon. you can change this part as desired for the desired calibration strategy. 
                 sim[j] = meas[j].copy()
+        elif order ==1: #need to make sure simulation loaded in is the best one found
+            if objder: 
+                obj, grad = platoonobjfn(bfgs[0],model, modeladjsys, modeladj, meas, sim, platooninfo, i, leadinfo, folinfo,rinfo,*args)
+            else: 
+                obj = platoonobjfn(bfgs[0],model, modeladjsys, modeladj, meas, sim, platooninfo, i, leadinfo, folinfo,rinfo,*args)
     
     return out, times, rmse
 
@@ -628,6 +633,8 @@ def calibrate_GA(bounds, meas,platooninfo,platoonlist,makeleadfolinfo, platoonob
         if order ==0:
             for j in i: #reset simulation to measurements for next platoon
                 sim[j] = meas[j].copy()
+        elif order ==1:
+            obj = platoonobjfn(GA['x'],model, modeladjsys, modeladj, meas, sim, platooninfo, i, leadinfo, folinfo,rinfo,*args)
     
     return out, times, rmse
 
