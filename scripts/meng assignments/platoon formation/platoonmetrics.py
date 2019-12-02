@@ -286,7 +286,7 @@ cirdep score average: 176.52900000000002
 median: 106.0 
 standard deviation: 170.14791833607816
 
-For 33
+For 33 (vehicles in platoons: correct)
 Performance for platoons
 chain score average: 1555.9027149321266 
 median: 1370 
@@ -298,7 +298,7 @@ cirdep score average: 176.6342253521127
 median: 106.0 
 standard deviation: 170.9755430493697
 
-For 332
+For 332    (vehicles in platoons: 1938)
 Performance for platoons
 chain score average: 2404.7698412698414 
 median: 2047 
@@ -310,7 +310,7 @@ cirdep score average: 178.83632911392408
 median: 86.0 
 standard deviation: 179.88970141398693
 
-For 341
+For 341    (vehicles in platoons: 2033)
 Performance for platoons
 chain score average: 1788.2736572890026 
 median: 1595 
@@ -322,7 +322,7 @@ cirdep score average: 223.25582
 median: 154.0 
 standard deviation: 256.14688018575555
 
-For 342
+For 342     (vehicles in platoons: 1991)
 Performance for platoons
 chain score average: 2755.6761363636365 
 median: 1570 

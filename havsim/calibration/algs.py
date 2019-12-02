@@ -614,7 +614,7 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, followers, 
 
 
 
-def makeplatoon33(platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, *args, n=10, graphtype = 'digraph'):
+def makeplatoon33(platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, meas=[], cycle_num=100, n=10, graphtype = 'digraph'):
 #	input:
 #    meas, (see function makeplatooninfo)
 #
@@ -843,7 +843,7 @@ def makeplatoon33(platooninfo, leaders, simcount, curlead, totfollist, followers
 
 # Another modification for 3.3
 
-def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, meas=[], n=10, graphtype = 'digraph'):
+def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, meas=[], cycle_num=100, n=10, graphtype = 'digraph'):
 #	input:
 #    meas, (see function makeplatooninfo)
 #
@@ -1402,7 +1402,7 @@ def makeplatoon341(platooninfo, leaders, simcount, curlead, totfollist, follower
 
 # Modifcation 3.4.2
 
-def makeplatoon342(platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, *args, n=10, graphtype = 'digraph'):
+def makeplatoon342(platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, meas=[], cycle_num=100, n=10, graphtype = 'digraph'):
 #	input:
 #   meas, (see function makeplatooninfo)
 ##
@@ -1676,7 +1676,7 @@ def makeplatoon342(platooninfo, leaders, simcount, curlead, totfollist, follower
     return platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, platoons
 #
 
-def makeplatoon_combined_33_341(platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, cycle_num=100, n=10, graphtype ='digraph'):
+def makeplatoon_combined_33_341(platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, meas=[], cycle_num=100, n=10, graphtype ='digraph'):
 #	input:
 #    meas, (see function makeplatooninfo)
 #
@@ -2312,13 +2312,15 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
             for j in platooninfo[i][-1]:
                 totfollist.append(j)
         totfollist = list(set(totfollist))
-    
+
+    count = 0
     while simcount > 0:
-        #make a platoon
-        platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, platoons = makeplatoon_combined(platooninfo, leaders, simcount, curlead, totfollist,
+        #make a platoonplatoon
+        platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, platoons = makeplatoon342(platooninfo, leaders, simcount, curlead, totfollist,
                                                                                                                             followers, curleadlist, meas=meas, cycle_num=10, n=n)
         #append it to platoonoutput (output from the function) and platoonlist (actual platoons we will be calibrating)
         platoonoutput.append(platoons)
+        count += len(platoons)
         #old code worked with the empty list in platoons
 #        if platoons[0] == []:
 ##        if True:
@@ -2342,6 +2344,7 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
             elif type(i) == list: 
                 platoonlist.append(i)
         platoonlist.append(newp)
+    print(count)
     
     if vehs is not None:
         platooninfo = platooninfovehs #go back to the original platooninfo after we have made the platoons; this is only for special case where we are calibrating between vehs
