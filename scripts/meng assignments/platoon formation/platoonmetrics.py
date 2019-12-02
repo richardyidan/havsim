@@ -263,8 +263,8 @@ def benchmark(platoon_list):
     else:
         print("No circular dependency violation found")
 
-benchmark_list = [platoons, laneplatoons, sortedplatoons]
-names = ["platoons", "laneplatoons", "sortedplatoons"]
+benchmark_list = [platoons]
+names = ["platoons"]
 for i in range(len(benchmark_list)):
     print("Performance for", names[i])
     benchmark(benchmark_list[i])
@@ -272,3 +272,90 @@ for i in range(len(benchmark_list)):
 
 # res = makeplatoonlist(rawdata,n=5)
 # print(res)
+
+"""
+For original
+Performance for platoons
+chain score average: 1540.7533936651585 
+median: 1369 
+standard deviation: 1189.9745801510596
+number of vehicles: 70 
+fraction of total vehicles: 0.03443187407771766 
+fraction of total platoons: 0.11085972850678733
+cirdep score average: 176.52900000000002 
+median: 106.0 
+standard deviation: 170.14791833607816
+
+For 33
+Performance for platoons
+chain score average: 1555.9027149321266 
+median: 1370 
+standard deviation: 1200.0188611676674
+number of vehicles: 70 
+fraction of total vehicles: 0.03443187407771766 
+fraction of total platoons: 0.11085972850678733
+cirdep score average: 176.6342253521127 
+median: 106.0 
+standard deviation: 170.9755430493697
+
+For 332
+Performance for platoons
+chain score average: 2404.7698412698414 
+median: 2047 
+standard deviation: 1422.7000192466544
+number of vehicles: 33 
+fraction of total vehicles: 0.030136986301369864 
+fraction of total platoons: 0.021164021164021163
+cirdep score average: 178.83632911392408 
+median: 86.0 
+standard deviation: 179.88970141398693
+
+For 341
+Performance for platoons
+chain score average: 1788.2736572890026 
+median: 1595 
+standard deviation: 1109.154440841137
+number of vehicles: 55 
+fraction of total vehicles: 0.02705361534677816 
+fraction of total platoons: 0.10230179028132992
+cirdep score average: 223.25582 
+median: 154.0 
+standard deviation: 256.14688018575555
+
+For 342
+Performance for platoons
+chain score average: 2755.6761363636365 
+median: 1570 
+standard deviation: 4244.103060647846
+number of vehicles: 42 
+fraction of total vehicles: 0.025915492957746478 
+fraction of total platoons: 0.05113636363636364
+cirdep score average: 479.5660755714286 
+median: 294.0 
+standard deviation: 512.5728355167643
+
+ 
+Combined 341 and 33   (fastest)
+Performance for platoons
+chain score average: 1406.7219827586207 
+median: 1267 
+standard deviation: 1132.3763590060512
+number of vehicles: 79 
+fraction of total vehicles: 0.03885882931628136 
+fraction of total platoons: 0.15732758620689655
+cirdep score average: 153.15322580645162 
+median: 106.0 
+standard deviation: 141.772048476937
+
+Combined 332 and 342 (best score)
+Performance for platoons
+chain score average: 2847.3485714285716 
+median: 2232 
+standard deviation: 3920.259142022884
+number of vehicles: 51 
+fraction of total vehicles: 0.055855855855855854 
+fraction of total platoons: 0.02
+cirdep score average: 480.9292548333336 
+median: 359.83799999999997 
+standard deviation: 478.28581593271167
+"""
