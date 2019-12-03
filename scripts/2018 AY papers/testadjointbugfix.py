@@ -149,37 +149,78 @@ def platoontest(vehlist, meas, platooninfo):
 #with open('/home/rlk268/data/pickle/plattest.pkl', 'wb') as f:
 #    pickle.dump([out, out2, lists],f)
     
-out, lists = platoontest(usevehlist,meas,platooninfo)
+#out, lists = platoontest(usevehlist,meas,platooninfo)
 
-with open('/home/rlk268/data/pickle/plattest2.pkl', 'wb') as f:
-    pickle.dump([out,lists],f)
+#with open('/home/rlk268/data/pickle/plattest2.pkl', 'wb') as f:
+#    pickle.dump([out,lists],f)
 
 
 #%%
-#with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/2018 AY papers/plattest.pkl','rb') as f:
-#    out, out2, lists = pickle.load(f)
-#import havsim.calibration.helper as helper
-##get overall RMSE
-##total platoon    
-#vehlist = []
-#for i in lists[-1]:
-#    vehlist.extend(i) 
-#GArmse = []
-#rmse = []
-#for count,i in enumerate(lists): 
-#    totobj = 0
-#    for j in out[count][0]:
-#        totobj = totobj + j[-2]
-#    currmse = helper.convert_to_rmse(totobj,platooninfo,vehlist)
-#    rmse.append(currmse)
-#    if count < 3: 
-#        totobj = 0
-#        for j in out2[count][0]:
-#            totobj = totobj + j['fun']
-#        curGA = helper.convert_to_rmse(totobj,platooninfo,vehlist)
-#        GArmse.append(curGA)
-#relrmse = []
-#relrmsebar = []
+import numpy as np
+import matplotlib.pyplot as plt    
 
+with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/2018 AY papers/plattest.pkl','rb') as f:
+    out, out2, lists = pickle.load(f)
     
+with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/2018 AY papers/plattest2.pkl','rb') as f: #out had a bug so we had to fix it and do it again. out2 did not have the bug
+    out, lists = pickle.load(f)
+    
+import havsim.calibration.helper as helper
+#get overall RMSE
+#total platoon    
+vehlist = []
+for i in lists[-1]:
+    vehlist.extend(i) 
+GArmse = []
+rmse = []
+for count,i in enumerate(lists): 
+    totobj = 0
+    for j in out[count][0]:
+        totobj = totobj + j[-2]
+    currmse = helper.convert_to_rmse(totobj,platooninfo,vehlist)
+    rmse.append(currmse)
+    if count < 3: 
+        totobj = 0
+        for j in out2[count][0]:
+            totobj = totobj + j['fun']
+        curGA = helper.convert_to_rmse(totobj,platooninfo,vehlist)
+        GArmse.append(curGA)
+relrmse = [0]
+relrmsebar = [0]
+relrmselist = []
+
+for i in range(1,10):
+    currel = []
+    for count,j in enumerate(lists[i]):
+        if len(j) == 1:
+            continue
+        platrmse = out[i][2][count] #rmse in platoon
+        #get the rmse from 1, aggregated
+        n = len(j)
+        inds = list(range(n*count,n*(count+1)))
+        obj = 0 
+        for k in inds: 
+            obj += out[0][0][k][-2]
+        aggrmse = helper.convert_to_rmse(obj, platooninfo, j)
+        currel.append((platrmse - aggrmse)/aggrmse)
+    relrmse.append(np.mean(currel))
+    relrmsebar.append(np.std(currel))
+    relrmselist.append(currel)
+    
+plt.figure()
+plt.subplot(1,2,1)
+plt.plot(list(range(1,11)),rmse, 'C0.',markersize =8)
+plt.plot(list(range(1,4)),GArmse, 'C1.',markersize =8)
+plt.xlabel('platoon size')
+plt.ylabel('overall RMSE')
+plt.legend(['Adj TNC','GA'])
+
+plt.subplot(1,2,2)
+plt.errorbar(list(range(1,11)),relrmse,yerr=relrmsebar,marker='.',markersize=9,capsize=2,linestyle='')
+plt.xlabel('platoon size')
+plt.ylabel('relative improvement in RMSE')
+plt.legend(['Adj TNC'])
+
+#sort of interesting looking at the relrmselist. For platoonsize 2 and 3 there are a few platoons which get bad fits which ruin the overall improvement. 
+#probably just need some extra tuning to fix these problems. Some tuning that will be done in the next paper and not this one :) 
 
