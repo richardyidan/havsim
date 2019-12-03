@@ -24,9 +24,9 @@ except:
 #existing platoon formation algorithm
 meas, platooninfo, platoons = makeplatoonlist(data, n = 5)
 #existing platoon formation algorithm in a single lane 
-#unused, unused, laneplatoons = makeplatoonlist(data,n=5,lane=2,vehs=[582,1146])
+unused, unused, laneplatoons = makeplatoonlist(data,n=5,lane=2,vehs=[582,1146])
 #platoon formation based on sorting    
-#unused, unused, sortedplatoons = makeplatoonlist_s(data,n=5,lane=2, vehs = [582, 1146])
+unused, unused, sortedplatoons = makeplatoonlist_s(data,n=5,lane=2, vehs = [582, 1146])
     
 #%%
 #note that havsim.calibration.helper.makeleadfolinfo can be used to get the leaders 
@@ -223,7 +223,7 @@ metric = 484 + k*444 + k**2 * 418
 
 
 """
-
+#%%
 
 import statistics
 
@@ -233,13 +233,16 @@ def benchmark(platoon_list):
     veh_set = set([])
     platoon_set = set([])
     violate_veh_set = set([])
-
+    lenlist = []
+    
+    #counting total number of vehicles and chain scores
     for i in platoon_list:
         chain_metric_scores.append(chain_metric(i, platooninfo, 1))
         veh_set.update(i)
+        lenlist.append(len(i))
     violation = cirdep_metric(platoon_list, platooninfo, type='veh')
     cirdep_metric_scores = cirdep_metric(platoon_list, platooninfo, type='num')
-
+    #counting circular dependencies
     for i in violation:
         platoon_set.add(i[1])
         violate_veh_set.add(i[0])
@@ -250,12 +253,13 @@ def benchmark(platoon_list):
 
 
 
-
+    print('number vehicles/number unique vehicles:',np.sum(lenlist),'/',len(veh_set))
     print('chain score average:', average, "\nmedian:", median, "\nstandard deviation:", std)
     print('number of vehicles:', len(violate_veh_set), "\nfraction of total vehicles:", num_veh/len(veh_set), "\nfraction of total "
                                                                                                "platoons:",
           len(platoon_set)/len(platoon_list))
-    if cirdep_metric_scores:
+    print('average/median platoon size:', np.mean(lenlist),"/",np.median(lenlist), "\nmax platoon size:", max(lenlist))
+    if cirdep_metric_scores: #circular dependency scores
         average = sum(cirdep_metric_scores)/len(cirdep_metric_scores)
         median = list(sorted(cirdep_metric_scores))[len(cirdep_metric_scores)//2]
         std = statistics.stdev(cirdep_metric_scores)
@@ -263,8 +267,8 @@ def benchmark(platoon_list):
     else:
         print("No circular dependency violation found")
 
-benchmark_list = [platoons]
-names = ["platoons"]
+benchmark_list = [platoons, laneplatoons, sortedplatoons]
+names = ["platoons", "laneplatoons","sortedplatoons"]
 for i in range(len(benchmark_list)):
     print("Performance for", names[i])
     benchmark(benchmark_list[i])
@@ -272,6 +276,7 @@ for i in range(len(benchmark_list)):
 
 # res = makeplatoonlist(rawdata,n=5)
 # print(res)
+#%%
 
 """
 For original

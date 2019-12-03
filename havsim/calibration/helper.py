@@ -780,6 +780,102 @@ def fin_dif_wrapper(p,args, *eargs, eps = 1e-8, **kwargs):
         out[i] = objfun(curp,*args)
     return (out-obj)/eps
 
+def chain_metric(platoon, platooninfo, k = .9, type = 'lead', meas = []):
+    res = 0
+    for i in platoon:
+        T = set(range(platooninfo[i][1], platooninfo[i][2]+1))
+        res += c_metric(i, platoon, T, platooninfo, k, type, meas=meas)
+    return res
+
+
+def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas = []):
+    # leadinfo, folinfo= makeleadinfo(platoon, platooninfo, meas),  makefolinfo(platoon, platooninfo, meas)
+    # if veh not in platoon:
+    #     return 0
+    # targetsList = leadinfo[platoon.index(veh)] if type == 'lead' else folinfo[platoon.index(veh)]
+    veh = int(veh)
+    if type == 'lead':
+        leadinfo = makeleadinfo([veh], platooninfo, meas)
+        targetsList = leadinfo[0]
+    else:
+        folinfo = makefolinfo([veh], platooninfo, meas)
+        targetsList = folinfo[0]
+
+    def getL(veh, platoon, T):
+        L = set([])
+        # if veh not in platoon:
+        #     return L
+        # targetsList = leadinfo[platoon.index(veh)]
+        temp = set([])
+        for i in targetsList:
+            if i[0] not in platoon:
+                continue
+            temp.update(range(i[1], i[2]+1))
+        L = T.intersection(temp)
+        return L
+
+    def getLead(veh, platoon, T):
+        # if veh not in platoon:
+        #     return []
+        # targetsList = leadinfo[platoon.index(veh)]
+        leads = []
+        for i in targetsList:
+            if i[0] in platoon and (i[1] in T or i[2] in T):
+                leads.append(i[0])
+        return leads
+
+    def getTimes(veh, lead, T):
+        # targetsList = leadinfo[platoon.index(veh)]
+        temp = set([])
+        for i in targetsList:
+            if i[0] == lead:
+                temp = T.intersection(set(range(i[1], i[2]+1)))
+        return temp
+
+    res = len(getL(veh, platoon, T))
+    leads = getLead(veh, platoon, T)
+    for i in leads:
+        res += k*c_metric(i, platoon, getTimes(veh, i, T), platooninfo, k=k, type=type, depth=depth+1, meas=meas)
+    return res
+
+def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh', meas=[]):
+    if type == 'veh':
+        cirList = []
+        after = set([])
+        for i in range(len(platoonlist)):
+            after.update(platoonlist[i])
+        for i in range(len(platoonlist)):
+            after -= set(platoonlist[i])
+            leadinfo, folinfo = makeleadinfo(platoonlist[i], platooninfo, meas), makefolinfo(platoonlist[i], platooninfo, meas)
+            for j in range(len(platoonlist[i])):
+                leaders = [k[0] for k in leadinfo[j]]
+                leaders = set(leaders)
+                if len(leaders.intersection(after))>0:
+                    cirList.append((platoonlist[i][j], i))
+        return cirList
+    elif type == 'num':
+        res = 0
+        cirList = []
+        after = set([])
+        for i in range(len(platoonlist)):
+            after.update(platoonlist[i])
+        for i in range(len(platoonlist)):
+            after -= set(platoonlist[i])
+            leadinfo, folinfo = makeleadinfo(platoonlist[i], platooninfo, meas),  makefolinfo(platoonlist[i], platooninfo, meas)
+            for j in range(len(platoonlist[i])):
+                leaders = [k[0] for k in leadinfo[j]]
+                leaders = set(leaders)
+                leaders_after = leaders.intersection(after)
+                if len(leaders_after) > 0:
+                    cirList.append((list(leaders_after), i))
+        res = []
+        for i in cirList:
+            for j in i[0]:
+                T = set(range(platooninfo[j][1], platooninfo[j][2]))
+                res.append(c_metric(j, platoonlist[i[1]], T, platooninfo, k=k, type='follower'))
+        return res
+
+
 
 #################################################
 #old makeleadfolinfo functions - this ravioli code has now been fixed! 
@@ -1332,97 +1428,3 @@ def fin_dif_wrapper(p,args, *eargs, eps = 1e-8, **kwargs):
 
 
 
-def chain_metric(platoon, platooninfo, k = .9, type = 'lead', meas = []):
-    res = 0
-    for i in platoon:
-        T = set(range(platooninfo[i][1], platooninfo[i][2]+1))
-        res += c_metric(i, platoon, T, platooninfo, k, type, meas=meas)
-    return res
-
-
-def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas = []):
-    # leadinfo, folinfo= makeleadinfo(platoon, platooninfo, meas),  makefolinfo(platoon, platooninfo, meas)
-    # if veh not in platoon:
-    #     return 0
-    # targetsList = leadinfo[platoon.index(veh)] if type == 'lead' else folinfo[platoon.index(veh)]
-    veh = int(veh)
-    if type == 'lead':
-        leadinfo = makeleadinfo([veh], platooninfo, meas)
-        targetsList = leadinfo[0]
-    else:
-        folinfo = makefolinfo([veh], platooninfo, meas)
-        targetsList = folinfo[0]
-
-    def getL(veh, platoon, T):
-        L = set([])
-        # if veh not in platoon:
-        #     return L
-        # targetsList = leadinfo[platoon.index(veh)]
-        temp = set([])
-        for i in targetsList:
-            if i[0] not in platoon:
-                continue
-            temp.update(range(i[1], i[2]+1))
-        L = T.intersection(temp)
-        return L
-
-    def getLead(veh, platoon, T):
-        # if veh not in platoon:
-        #     return []
-        # targetsList = leadinfo[platoon.index(veh)]
-        leads = []
-        for i in targetsList:
-            if i[0] in platoon and (i[1] in T or i[2] in T):
-                leads.append(i[0])
-        return leads
-
-    def getTimes(veh, lead, T):
-        # targetsList = leadinfo[platoon.index(veh)]
-        temp = set([])
-        for i in targetsList:
-            if i[0] == lead:
-                temp = T.intersection(set(range(i[1], i[2]+1)))
-        return temp
-
-    res = len(getL(veh, platoon, T))
-    leads = getLead(veh, platoon, T)
-    for i in leads:
-        res += k*c_metric(i, platoon, getTimes(veh, i, T), platooninfo, k=k, type=type, depth=depth+1, meas=meas)
-    return res
-
-def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh', meas=[]):
-    if type == 'veh':
-        cirList = []
-        after = set([])
-        for i in range(len(platoonlist)):
-            after.update(platoonlist[i])
-        for i in range(len(platoonlist)):
-            after -= set(platoonlist[i])
-            leadinfo, folinfo = makeleadinfo(platoonlist[i], platooninfo, meas), makefolinfo(platoonlist[i], platooninfo, meas)
-            for j in range(len(platoonlist[i])):
-                leaders = [k[0] for k in leadinfo[j]]
-                leaders = set(leaders)
-                if len(leaders.intersection(after))>0:
-                    cirList.append((platoonlist[i][j], i))
-        return cirList
-    elif type == 'num':
-        res = 0
-        cirList = []
-        after = set([])
-        for i in range(len(platoonlist)):
-            after.update(platoonlist[i])
-        for i in range(len(platoonlist)):
-            after -= set(platoonlist[i])
-            leadinfo, folinfo = makeleadinfo(platoonlist[i], platooninfo, meas),  makefolinfo(platoonlist[i], platooninfo, meas)
-            for j in range(len(platoonlist[i])):
-                leaders = [k[0] for k in leadinfo[j]]
-                leaders = set(leaders)
-                leaders_after = leaders.intersection(after)
-                if len(leaders_after) > 0:
-                    cirList.append((list(leaders_after), i))
-        res = []
-        for i in cirList:
-            for j in i[0]:
-                T = set(range(platooninfo[j][1], platooninfo[j][2]))
-                res.append(c_metric(j, platoonlist[i[1]], T, platooninfo, k=k, type='follower'))
-        return res
