@@ -203,6 +203,7 @@ unused, unused, sortedplatoons = makeplatoonlist_s(data,n=5,lane=2, vehs = [582,
 # Chain = chain_metric(platoon4, platooninfo, 1)
 # print(Chain)
 #
+print()
 k = .9
 platoon4 = [995, 998, 1013, 1023]
 testplatoon2 = [platoon4, [956]]
@@ -266,6 +267,7 @@ print('expected result is '+str(1157+k*992+k**2*464))
 res = helper.chain_metric(platoon5,platooninfo,k=k,meas = meas)
 print('chain metric platoon5 result is '+str(res))
 print('expected result is '+str(163+103+190+40+34+33+k*103))
+print()
 #
 #%%
 
@@ -358,14 +360,19 @@ def benchmark(platoon_list, meas,platooninfo, n = 5, k = .9):
         print('cirdep score avg/med/sdev:', average,'/', median,'/', std)
     else:
         print("No circular dependency violation found")
+    return chain_metric_scores
 
 benchmark_list = [platoons, laneplatoons, sortedplatoons]
-names = ["platoons", "laneplatoons","sortedplatoons"]
+names = ["platoons", "laneplatoons", "sortedplatoons"]
+outlist = []
 for i in range(len(benchmark_list)):
     print("Performance for", names[i])
-    benchmark(benchmark_list[i], meas, platooninfo)
+    out = benchmark(benchmark_list[i], meas, platooninfo)
+    outlist.append(out)
     print()
-
+#%% do some testing on what the platoons look like and verify ideas for hueristics make sense. 
+    
+    
 # res = makeplatoonlist(rawdata,n=5)
 # print(res)
 #%%
