@@ -352,6 +352,7 @@ def optplot(out, meas, sim, followerchain, platoonlist, model, modeladj, modelad
 
 
 def plotColorLines(X, Y, SPEED, speed_limit):
+    #helper for platoonplot
     axs = plt.gca()
     c = SPEED
     points = np.array([X, Y]).T.reshape(-1, 1, 2)
@@ -724,16 +725,33 @@ def calculateflows(meas, spacea, timea, agg, lane = None):
 
 def plotflows(meas, spacea, timea, agg, type='FD', FDagg=None, lane = None):
     """
-	aggregates microscopic data into macroscopic quantities based on Edie's generalized ... definitions of traffic variables
-	meas = measurements, in usual format (dictionary where keys are vehicle IDs, values ... are numpy arrays)
-	spacea = reads as ``space A'' (where A is the region where the macroscopic quantities ... are being calculated). 
-    list of lists, each nested list is a length 2 list which ... represents the starting and ending location on road. So if len(spacea) >1 there ... will be multiple regions on the road which we are tracking
-	e.g. spacea = [[200,400],[800,1000]], calculate the flows in regions 200 to 400 and ... 800 to 1000 in meas.
-	timea = reads as ``time A'', should be a list of the times (in the local time of the ... data). E.g. timea = [1000,3000] calculate times between 1000 and 3000.
-	agg = aggregation length, float number which is the length of each aggregation ... interval. E.g. agg = 300 each measurement of the macroscopic quantities is over ... 300 time units in the data, so in NGSim where each time is a frameID with length ... .1s, we are aggregating every 30 seconds.
-	type = `FD', if type is `FD', plot data in flow-density plane. Otherwise, plot in ... flow-time plane.
-	FDagg = None - If FDagg is None and len(spacea) > 1, aggregate q and k measurements ... together. Otherwise if FDagg is an int, only show the q and k measurements for the ... corresponding spacea[int]
-	`"""
+	aggregates microscopic data into macroscopic quantities based on Edie's generalized definitions of traffic variables
+    
+	meas = measurements, in usual format (dictionary where keys are vehicle IDs, values are numpy arrays)
+    
+	spacea = reads as ``space A'' (where A is the region where the macroscopic quantities are being calculated). 
+    list of lists, each nested list is a length 2 list which ... represents the starting and ending location on road. 
+    So if len(spacea) >1 there will be multiple regions on the road which we are tracking e.g. spacea = [[200,400],[800,1000]], 
+    calculate the flows in regions 200 to 400 and 800 to 1000 in meas.
+    
+	timea = reads as ``time A'', should be a list of the times (in the local time of thedata). 
+    E.g. timea = [1000,3000] calculate times between 1000 and 3000.
+    
+	agg = aggregation length, float number which is the length of each aggregation interval. 
+    E.g. agg = 300 each measurement of the macroscopic quantities is over 300 time units in the data, 
+    so in NGSim where each time is a frameID with length .1s, we are aggregating every 30 seconds.
+    
+	type = `FD', if type is `FD', plot data in flow-density plane. Otherwise, plot in flow-time plane.
+    
+	FDagg = None - If FDagg is None and len(spacea) > 1, aggregate q and k measurements together. 
+    Otherwise if FDagg is an int, only show the q and k measurements for the corresponding spacea[int]
+    
+    lane = None - If lane is given, it only uses measurement in that lane. 
+    
+    Note that if the aggregation intervals are too small the plots won't really make sense 
+    because a lot of the variation is just due to the aggregation. Increase either agg
+    or spacea regions to prevent this problem. 
+	"""
     intervals = []
     start = timea[0]
     end = timea[1]
@@ -926,6 +944,7 @@ def plotvhd(meas, sim, platooninfo, my_id, show_sim=True, show_meas=True, effect
 
 def animatevhd(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, show_meas=True, effective_headway=False,
                rp=None, h=.1, datalen=9, end=None, delay=0):
+    #plot a single vehicle in phase space (speed v headway)
     # my_id - id of the vehicle to plot
     # lentail = 20 - number of observations to show in the past
     # show_sim  = True - whether or not to show sim
@@ -1011,6 +1030,7 @@ def animatevhd(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, show_me
 
 def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, show_meas=True, effective_headway=False,
                     rp=None, h=.1, datalen=9, start=None, end=None, delay=0):
+    #plot multiple vehicles in phase space (speed v headway)
     # my_id - id of the vehicle to plot
     # lentail = 20 - number of observations to show in the past
     # show_sim  = True - whether or not to show sim
@@ -1229,16 +1249,13 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
 
 
 def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsim=True, datalen=9):
+    #plots vehicles platoon using data meas. 
+    
     # platoon = [] - if given as a platoon, only plots those vehicles in the platoon (e.g. [[],1,2,3] )
     # usetime = [] - if given as a list, only plots those times in the list (e.g. list(range(1,100)) )
     # presim = True - presim and postsim control whether the entire trajectory is displayed or just the simulated parts (t_nstar - T_n versus T-n - T_nm1)
     # postsim = True
-
-    # note that followerchain is essentially the same as platooninfo.
-    # either plots everything in followerchain.keys() (if platoon is empty) or everything in platoon (if platoon is not empty)
-
-    # currently this is pretty slow but as long as the platoon you want to look at is small it's fine. Also, everything is just a black dot so it can be a little tricky to see the
-    # vehicle IDs.
+    
     from mpl_toolkits.axes_grid1 import make_axes_locatable
     if platoon != []:
         followerchain = helper.platoononly(followerchain, platoon)

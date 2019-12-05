@@ -142,7 +142,7 @@ import csv
 import pickle
 import copy 
 
-from ..havsim.calibration.opt import makeplatoonlist
+from havsim.calibration.algs import makeplatoonlist
 
 
 
