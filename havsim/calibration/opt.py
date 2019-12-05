@@ -4,18 +4,17 @@ All calibration related functions which set up optimization problems, including 
 
     
     \\ TO DO 
-	FIX BUG 
-		-there is a bug in the adjoint calculation code. folp is a single set of parameters, but we can have multiple followers, each with different parameters. So folp should instead be 
-		curfolp, and then there needs to be another input which is a list which corresponds to the follower at each time. So we will always get the right follower parameters to use 
-		in the adjoint calculation.
-		
 	HIGH PRIORITY 
 		-being able to use autodifferentiation so we don't have to rely on adjoint calculation 
 		-want to rewrite the platoonobjfn to use python lists and be vectorized - should have similar construction to simulation code
         should use auxinfo/modelinfo and take up less memory as well ; will need to modify plotting functions to work with 
         this updated format
+            -many of the problems in general features/QOL can be solved by using the new simulation code in place of current calibration code
         	-function for delay and LL model needs to be tested/debugged still, implement LL as DE, implement other models  
             and update the documentation in model info pdf 
+            
+        -should refactor calibration code to be cleaner, including a polished api for users
+        -create test script that can be used to check for bugs in the calibration code
 	
 	
     general features/QOL 
@@ -253,7 +252,7 @@ def platoonobjfn_obj(p, model, modeladjsys, modeladj, meas, sim, platooninfo, pl
 
     lead = {} #dictionary where we put the relevant lead vehicle information 
     obj = 0 
-    n = len(platoons[1:])    
+    n = len(platoons)    
     
     for i in range(n): #iterate over all vehicles in the platoon 
         #first get the lead trajectory and length for the whole length of the vehicle 
@@ -261,7 +260,7 @@ def platoonobjfn_obj(p, model, modeladjsys, modeladj, meas, sim, platooninfo, pl
         #lastly, we want to apply the shifted trajectory strategy to finish the trajectory 
         #we can then evaluate the objective function 
         curp = p[m*i:m*(i+1)]
-        curvehid = platoons[i+1] #current vehicle ID 
+        curvehid = platoons[i] #current vehicle ID 
         t_nstar, t_n, T_nm1, T_n = platooninfo[curvehid][0:4] #grab relevant times for current vehicle
         frames = [t_n, T_nm1]
         
@@ -303,7 +302,7 @@ def platoonobjfn_obj2(p, model, modeladjsys, modeladj, meas, sim, platooninfo, p
 
     lead = {} #dictionary where we put the relevant lead vehicle information 
     obj = 0 
-    n = len(platoons[1:])    
+    n = len(platoons)    
     
     for i in range(n): #iterate over all vehicles in the platoon 
         #first get the lead trajectory and length for the whole length of the vehicle 
@@ -353,7 +352,7 @@ def platoonobjfn_obj_b(p, model, modeladjsys, modeladj, meas, sim, platooninfo, 
 
     lead = {} #dictionary where we put the relevant lead vehicle information 
     obj = 0 
-    n = len(platoons[1:])    
+    n = len(platoons)    
     
     for i in range(n): #iterate over all vehicles in the platoon 
         #first get the lead trajectory and length for the whole length of the vehicle 
@@ -409,7 +408,7 @@ def platoonobjfn_der(p, model, modeladjsys, modeladj, meas, sim, platooninfo, pl
     lead = {} #dictionary where we put the relevant lead vehicle information 
     lam = {}
     extra = {} #this will hold the regime, the r, and gamma
-    n = len(platoons[1:]) #fix this in this funciton and the above 
+    n = len(platoons) 
     grad = np.zeros(n*m)
     for i in range(n): #iterate over all vehicles in the platoon 
         #first get the lead trajectory and length for the whole length of the vehicle 
@@ -417,7 +416,7 @@ def platoonobjfn_der(p, model, modeladjsys, modeladj, meas, sim, platooninfo, pl
         #lastly, we want to apply the shifted trajectory strategy to finish the trajectory 
         #we can then evaluate the objective function 
         curp = p[m*i:m*(i+1)] #parameters for current vehicle 
-        curvehid = platoons[i+1] #current vehicle ID 
+        curvehid = platoons[i] #current vehicle ID 
         t_nstar, t_n, T_nm1, T_n = platooninfo[curvehid][0:4] #grab relevant times for current vehicle
         frames = [t_n,T_nm1]
         
@@ -446,7 +445,7 @@ def platoonobjfn_der(p, model, modeladjsys, modeladj, meas, sim, platooninfo, pl
         
     for i in range(n,0,-1): #go backwards over the vehicles for gradient 
         curp = p[m*(i-1):m*i]
-        curvehid = platoons[i] #current vehicle in the platoon 
+        curvehid = platoons[i-1] #current vehicle in the platoon 
         t_nstar, t_n, T_nm1, T_n = platooninfo[curvehid][0:4]
         frames = [t_n, T_n]
         inmodel,relax,relaxadj = extra[i-1][0:3]
@@ -466,7 +465,7 @@ def platoonobjfn_der(p, model, modeladjsys, modeladj, meas, sim, platooninfo, pl
             
             curfolid = j[0] #get current follower
             folind = platoons.index(curfolid) #this is the index of the current follower
-            folp = p[m*(folind-1):m*folind]
+            folp = p[m*(folind):m*(folind+1)]
             folt_nstar, folt_n = platooninfo[curfolid][0:2] #first time follower is observed
             curfol[j[1]-t_n:j[2]+1-t_n,:] = sim[curfolid][j[1]-folt_nstar:j[2]+1-folt_nstar,:] #load in the relevant portion of follower trajectory from the simulation
             #add in a part here to handle the adjoint variables 
@@ -484,7 +483,7 @@ def platoonobjfn_der(p, model, modeladjsys, modeladj, meas, sim, platooninfo, pl
         #note that shiftloss is dependent on both the loss function as well as the dimension of the model 
         shiftloss = 2*(sim[curvehid][-1,2]-meas[curvehid][-1,2])/(T_n-T_nm1) #this computes the derivative of loss in the shifted end, then weights it by the required amount
         #now we can compute the adjoint variables for the current vehicle. 
-        lam[curvehid] = euleradj(curp, frames, modeladjsys, lead[i-1], leadlen, meas[curvehid], sim[curvehid], curfol, inmodel, havefol, vehlen, lamp1, folp, relax, folrelax, shiftloss)
+        lam[curvehid] = euleradj2(curp, frames, modeladjsys, lead[i-1], leadlen, meas[curvehid], sim[curvehid], curfol, inmodel, havefol, vehlen, lamp1, folp, relax, folrelax, shiftloss)
         
 #        calculate the gradient now 
         lang = np.zeros((T_nm1-t_n+1,m)) #lagrangian
@@ -508,7 +507,7 @@ def platoonobjfn_der2(p, model, modeladjsys, modeladj, meas, sim, platooninfo, p
     lead = {} #dictionary where we put the relevant lead vehicle information 
     lam = {}
     extra = {} #this will hold the regime, the r, and gamma
-    n = len(platoons[1:]) #fix this in this funciton and the above 
+    n = len(platoons) #fix this in this funciton and the above 
     grad = np.zeros(n*m)
     obj = 0 
     for i in range(n): #iterate over all vehicles in the platoon 
@@ -617,16 +616,17 @@ def platoonobjfn_objder(p, model, modeladjsys, modeladj, meas, sim, platooninfo,
     lead = {} #dictionary where we put the relevant lead vehicle information 
     lam = {}
     extra = {} #this will hold the regime, the r, and gamma
-    n = len(platoons[1:]) #fix this in this funciton and the above 
+    n = len(platoons) #fix this in this funciton and the above 
     grad = np.zeros(n*m)
     obj = 0 
+    pdict = {i: p[m*i:m*(i+1)] for i in range(n)}
     for i in range(n): #iterate over all vehicles in the platoon 
         #first get the lead trajectory and length for the whole length of the vehicle 
         #then we can use euler function to get the simulated trajectory 
         #lastly, we want to apply the shifted trajectory strategy to finish the trajectory 
         #we can then evaluate the objective function 
-        curp = p[m*i:m*(i+1)] #parameters for current vehicle 
-        curvehid = platoons[i+1] #current vehicle ID 
+        curp = pdict[i] #parameters for current vehicle 
+        curvehid = platoons[i] #current vehicle ID 
         t_nstar, t_n, T_nm1, T_n = platooninfo[curvehid][0:4] #grab relevant times for current vehicle
         frames = [t_n,T_nm1]
         
@@ -661,12 +661,12 @@ def platoonobjfn_objder(p, model, modeladjsys, modeladj, meas, sim, platooninfo,
         extra[i] = [inmodel, relax, relaxadj]
         
         
-    for i in range(n,0,-1): #go backwards over the vehicles for gradient 
-        curp = p[m*(i-1):m*i]
+    for i in range(n-1,-1,-1): #go backwards over the vehicles for gradient 
+        curp = pdict[i]
         curvehid = platoons[i] #current vehicle in the platoon 
         t_nstar, t_n, T_nm1, T_n = platooninfo[curvehid][0:4]
         frames = [t_n, T_n]
-        inmodel,relax,relaxadj = extra[i-1][0:3]
+        inmodel,relax,relaxadj = extra[i][0:3]
         
         #we need the below things because of coupling term between leader and follower 
         
@@ -674,22 +674,22 @@ def platoonobjfn_objder(p, model, modeladjsys, modeladj, meas, sim, platooninfo,
         curfol = np.zeros((T_n+1-t_n,datalen)) #this is where the follower measurements go 
         lamp1 = np.zeros((T_n+1-t_n,dim))
         vehlen = sim[curvehid][0,6]
-        folp = [] #initialize 
+        folplist = np.zeros(T_n+1-t_n) #initialize 
         folrelax = np.zeros(T_n-t_n+1)
         
-        for j in folinfo[i-1]: #need i-1 because platoons has a special entry as its 0 index but folinfo and leadinfo don't have this 
+        for j in folinfo[i]: #need i-1 because platoons has a special entry as its 0 index but folinfo and leadinfo don't have this 
             
             #we can implement relaxation phenomenon by finding the times we need to apply it in makeleadfolinfo
             
             curfolid = j[0] #get current follower
             folind = platoons.index(curfolid) #this is the index of the current follower
-            folp = p[m*(folind-1):m*folind]
             folt_nstar, folt_n = platooninfo[curfolid][0:2] #first time follower is observed
             curfol[j[1]-t_n:j[2]+1-t_n,:] = sim[curfolid][j[1]-folt_nstar:j[2]+1-folt_nstar,:] #load in the relevant portion of follower trajectory from the simulation
             #add in a part here to handle the adjoint variables 
             lamp1[j[1]-t_n:j[2]+1-t_n,:] = lam[curfolid][j[1]-folt_n:j[2]+1-folt_n,[1,2]]
-            havefol[j[1]-t_n:j[2]+1-t_n] = extra[folind-1][0][j[1]-folt_n:j[2]+1-folt_n]
-            folrelax[j[1]-t_n:j[2]+1-t_n] = extra[folind-1][1][j[1]-folt_n:j[2]+1-folt_n]
+            havefol[j[1]-t_n:j[2]+1-t_n] = extra[folind][0][j[1]-folt_n:j[2]+1-folt_n]
+            folplist[j[1]-t_n:j[2]+1-t_n] = folind
+            folrelax[j[1]-t_n:j[2]+1-t_n] = extra[folind][1][j[1]-folt_n:j[2]+1-folt_n]
             
         
         #note that lead[i-1], leadlen, curfol, havefol, inmodel, and lambdas are all defined on times t_n to T_n.
@@ -697,11 +697,12 @@ def platoonobjfn_objder(p, model, modeladjsys, modeladj, meas, sim, platooninfo,
 #        simtraj = sim[curvehid] #simulation
 #        curlead = lead[i-1] #leader
 #        vehstar = meas[curvehid] #measurements
-        leadlen = lead[i-1][:,6] #leader's length       
+        leadlen = lead[i][:,6] #leader's length       
         #note that shiftloss is dependent on both the loss function as well as the dimension of the model 
         shiftloss = 2*(sim[curvehid][-1,2]-meas[curvehid][-1,2])/(T_n-T_nm1) #this computes the derivative of loss in the shifted end, then weights it by the required amount
         #now we can compute the adjoint variables for the current vehicle. 
-        lam[curvehid] = euleradj(curp, frames, modeladjsys, lead[i-1], leadlen, meas[curvehid], sim[curvehid], curfol, inmodel, havefol, vehlen, lamp1, folp, relax, folrelax, shiftloss)
+        lam[curvehid] = euleradj(curp, frames, modeladjsys, lead[i], leadlen, meas[curvehid], sim[curvehid], curfol, inmodel, 
+           havefol, vehlen, lamp1, folplist, relax, folrelax, shiftloss, pdict)
         
 #        calculate the gradient now 
         lang = np.zeros((T_nm1-t_n+1,m)) #lagrangian
@@ -711,11 +712,11 @@ def platoonobjfn_objder(p, model, modeladjsys, modeladj, meas, sim, platooninfo,
 #        curlam = lam[curvehid][:,[1,2]]
         
         for j in range(T_nm1-t_n+1):
-            lang[j,:] = modeladj(sim[curvehid][j+offset,2:4], lead[i-1][j,2:4],curp,leadlen[j],lam[curvehid][j,[1,2]], inmodel[j], relax[j], relaxadj[j], use_r)
+            lang[j,:] = modeladj(sim[curvehid][j+offset,2:4], lead[i][j,2:4],curp,leadlen[j],lam[curvehid][j,[1,2]], inmodel[j], relax[j], relaxadj[j], use_r)
 #            lang[j,:] = modeladj(cursim[j,:], curlead[j,:],curp,leadlen[j],curlam[j,:])
 #        temp = sci.simps(lang,None,h,axis=0,even = 'first')
         temp = np.sum(lang,0)*h
-        grad[m*(i-1):m*i] = temp
+        grad[m*i:m*(i+1)] = temp
         
         
     return obj, grad
@@ -727,7 +728,7 @@ def platoonobjfn_objder2(p, model, modeladjsys, modeladj, meas, sim, platooninfo
     lead = {} #dictionary where we put the relevant lead vehicle information 
     lam = {}
     extra = {} #this will hold the regime, the r, and gamma
-    n = len(platoons[1:]) #fix this in this funciton and the above 
+    n = len(platoons) #fix this in this funciton and the above 
     grad = np.zeros(n*m)
     obj = 0 
     for i in range(n): #iterate over all vehicles in the platoon 
@@ -1228,7 +1229,7 @@ def euler(p,frames,IC,func,lead, leadlen, r, dim = 2, h = .1,*args):
 
 
 
-def euleradj(p,frames, func,lead,leadlen, vehstar, simtraj, curfol, inmodel, havefol, vehlen, lamp1, folp, relax, folrelax, shiftloss, dim = 2, h = -.1,*args):
+def euleradj(p,frames, func,lead,leadlen, vehstar, simtraj, curfol, inmodel, havefol, vehlen, lamp1, folplist, relax, folrelax, shiftloss, pdict, dim = 2, h = -.1,*args):
     #############
 #    this is where the main computational time is spent.
     #can we use cython or something to make the for loop faster? 
@@ -1246,7 +1247,76 @@ def euleradj(p,frames, func,lead,leadlen, vehstar, simtraj, curfol, inmodel, hav
 	#havefol - boolean records whether or not there is a leader
 	#vehlen - length of vehicle
 	#lamp1 - adjoint system of follower 
-	#folp - follower parameters 
+	#folp - index of following vehicle at current time
+	#relax - relaxation, list
+	#folrelax - relaxation of follower
+	#shiftloss - for when we are using the shifted end startegy for boundary 
+	#dim = 2 - dimension of model (first or second order DE)
+	# h = .1 - timestep of data
+    
+    lead = lead[:,2:4] #get only the position and speed because that's what we care about 
+    #lead from leadinfo is on times t_n-t_nstar:T_nm1-t_nstar+1 (using t_nstar of follower, obv need leadt_nstar when getting it from leader)
+    #so we are going to need to pad the lead trajectory with zeros for this to work 
+#    simtraj = simtraj[:,1:] this is when you use the output of euler
+    simtraj = simtraj[:,2:4]
+    #need the simtraj for t_n to T_n
+    vehstar = vehstar[:,2:4]
+    #need the vehstar for t_n to T_n
+    curfol = curfol[:,2:4]
+    
+#    if h < 0: #get relevant frames for solution
+    t = range(int(frames[1]),int(frames[0]-1),-1)  #time t is going backwards here
+    #flipping everything should be pretty fast so don't need to worry about it too much 
+    lead = np.flip(lead,0)   #need to flip lead to match t since we go backwards in time for adjoint system
+    simtraj = np.flip(simtraj,0)
+    vehstar = np.flip(vehstar,0)
+    leadlen = np.flip(leadlen,0)
+    curfol = np.flip(curfol,0)
+    inmodel = np.flip(inmodel,0)
+    havefol = np.flip(havefol,0)
+    lamp1 = np.flip(lamp1,0)
+    relax = np.flip(relax)
+    folrelax = np.flip(folrelax)
+    folplist = np.flip(folplist)
+#    else: 
+#        t = range(int(frames[0,0]),int(frames[0,1]+1))
+        
+    
+    
+#    a,b = lead.shape #note we got only the speed and position of lead, and lead is padded with zeros so this is ok 
+    a = int(frames[1]-frames[0]+1)
+    lam = np.empty((a,dim+1)) #initialize solution
+    
+    lam[:,0] = t #input frames = times
+    lam[0,[1,2]] = [0,0] #initial conditions 
+    
+    
+    
+    for i in range(len(t)-1):
+        lam[i+1,[1,2]] = lam[i,[1,2]] + h*func(simtraj[i,:],lead[i,:],p,leadlen[i],vehstar[i,:],lam[i,[1,2]], curfol[i,:], inmodel[i], havefol[i], 
+           vehlen, lamp1[i,:], pdict[folplist[i]], relax[i],folrelax[i],shiftloss)    #forward euler formula where func computes derivative
+        #print(func(out[i,[1,2]],lead[i,:],p))
+    lam = np.flip(lam,0)
+    return lam
+
+def euleradj2(p,frames, func,lead,leadlen, vehstar, simtraj, curfol, inmodel, havefol, vehlen, lamp1, folp, relax, folrelax, shiftloss, dim = 2, h = -.1,*args):
+    #############
+# old version with bugged folp it's here for debugging
+    #############
+   
+    #p - parameters 
+	# frames - list of len 2, frames[0] is initial time of simulation and frames[1] last time
+	#func - defines model
+	#lead - lead trajectory 
+	#leadlen - length of leader
+	#vehstar - measurements
+	#simtraj - simulation 
+	#curfol - follower of vehicle 
+	#inmodel - regime of model, list
+	#havefol - boolean records whether or not there is a leader
+	#vehlen - length of vehicle
+	#lamp1 - adjoint system of follower 
+	#folp - index of following vehicle at current time
 	#relax - relaxation, list
 	#folrelax - relaxation of follower
 	#shiftloss - for when we are using the shifted end startegy for boundary 
@@ -1291,7 +1361,8 @@ def euleradj(p,frames, func,lead,leadlen, vehstar, simtraj, curfol, inmodel, hav
     
     
     for i in range(len(t)-1):
-        lam[i+1,[1,2]] = lam[i,[1,2]] + h*func(simtraj[i,:],lead[i,:],p,leadlen[i],vehstar[i,:],lam[i,[1,2]], curfol[i,:], inmodel[i], havefol[i], vehlen, lamp1[i,:], folp, relax[i],folrelax[i],shiftloss)    #forward euler formula where func computes derivative
+        lam[i+1,[1,2]] = lam[i,[1,2]] + h*func(simtraj[i,:],lead[i,:],p,leadlen[i],vehstar[i,:],lam[i,[1,2]], curfol[i,:], inmodel[i], havefol[i], 
+           vehlen, lamp1[i,:], folp, relax[i],folrelax[i],shiftloss)    #forward euler formula where func computes derivative
         #print(func(out[i,[1,2]],lead[i,:],p))
     lam = np.flip(lam,0)
     return lam

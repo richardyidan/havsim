@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Nov  7 15:33:18 2019
+
+@author: rlk268
+"""
+#need data loaded in, functinos loadede in, run autodiffjax first 
+#obj6 = finaleg(pfinal,eg2,testdata2,testdata3,testdata4,testdata5)
+print(obj6)
+#fgrad6 = fin_dif_wrapper(pfinal,(eg2,testdata2,testdata3,testdata4,testdata5,finaleg))
+jaxgrad6 = grad(finaleg)(pfinal, eg2,testdata2,testdata3,testdata4,testdata5)
+print("finaleg")
+getDiff(jaxgrad6, fgrad6)

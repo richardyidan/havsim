@@ -468,13 +468,16 @@ def merge_rconstant2(platoons, platooninfo, sim, leadinfo, rinfo, relax_constant
     return rinfo
 
 
-def obj_helper(plist,model,modeladjsys,modeladj, meas,sim,platooninfo,platoonlist,makeleadfolfun,platoonobjfn,args):
+def obj_helper(plist,model,modeladjsys,modeladj, meas,sim,platooninfo,platoonlist,makeleadfolfun,platoonobjfn,args,manual=False):
     #this will get the objective of a list of platoons and in doing so get the simulated trajectories loaded into sim whereas sim is normally just unchanged 
     #if only using the optimization algorithm. 
     count = 0 
     
     for i in platoonlist: 
-        p = plist[count][0]
+        if manual: 
+            p = plist[count]
+        else:
+            p = plist[count][0] #this is supposed to be for directly passing in results of optimization for scipy.optimize.minimize routines
         leadinfo, folinfo, rinfo = makeleadfolfun(i,platooninfo,sim)
         
         obj = platoonobjfn(p,model,modeladj,modeladjsys,meas,sim,platooninfo,i,leadinfo,folinfo,rinfo,*args)
@@ -586,7 +589,7 @@ def SEobj_pervehicle(meas,sim,platooninfo,curplatoon, dim=2, h=.1):
     #takes as input meas, sim, platooninfo, curplatoon, 
     #outputs a list of the objective function for each vehicle. 
     out = []
-    for i in curplatoon[1:]:
+    for i in curplatoon:
         t_nstar, t_n, T_nm1, T_n = platooninfo[i][0:4]
         curloss = sim[i][t_n-t_nstar:T_nm1+dim-t_nstar,2] -  meas[i][t_n-t_nstar:T_nm1+dim-t_nstar,2]
         curloss = np.sum(np.square(curloss))*h
@@ -601,7 +604,7 @@ def convert_to_rmse(obj,platooninfo,curplatoon, dim = 2, h=.1, delay = 0):
     #this currently is only for newell delay. 
     ans = 0 
     num_obs = 0 
-    for i in curplatoon[1:]:
+    for i in curplatoon:
         if delay == 0 : #ODE
             t_n, T_nm1, T_n = platooninfo[i][1:4]
             if T_n >= T_nm1+dim-1: #the reason you have dim is because at T_nm1 you get position and speed, speed determines position at next step. 
@@ -855,6 +858,30 @@ def plotformat(sim, auxinfo, roadinfo, endtimeind = 3000, density = 2, indlist =
 
     return meas, platooninfo
 
+def is_pareto_efficient(costs, return_mask = True): #copy pasted from stack exchange. finds pareto front assuming lower is better
+    """
+    Find the pareto-efficient points
+    :param costs: An (n_points, n_costs) array
+    :param return_mask: True to return a mask
+    :return: An array of indices of pareto-efficient points.
+        If return_mask is True, this will be an (n_points, ) boolean array
+        Otherwise it will be a (n_efficient_points, ) integer array of indices.
+    """
+    is_efficient = np.arange(costs.shape[0])
+    n_points = costs.shape[0]
+    next_point_index = 0  # Next index in the is_efficient array to search for
+    while next_point_index<len(costs):
+        nondominated_point_mask = np.any(costs<costs[next_point_index], axis=1)
+        nondominated_point_mask[next_point_index] = True
+        is_efficient = is_efficient[nondominated_point_mask]  # Remove dominated points
+        costs = costs[nondominated_point_mask]
+        next_point_index = np.sum(nondominated_point_mask[:next_point_index])+1
+    if return_mask:
+        is_efficient_mask = np.zeros(n_points, dtype = bool)
+        is_efficient_mask[is_efficient] = True
+        return is_efficient_mask
+    else:
+        return is_efficient
 
 #################################################
 #old makeleadfolinfo functions - this ravioli code has now been fixed! 

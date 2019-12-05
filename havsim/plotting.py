@@ -68,7 +68,7 @@ def checksort(vehlist, meas, lane):
 
 def optplot(out, meas, sim, followerchain, platoonlist, model, modeladj, modeladjsys, makeleadfolfun, platoonobjfn,
             args,
-            speed=False, newfig=True, clr=['C0', 'C1'], fulltraj=True, lane=None):  # plot platoon in space-time
+            speed=False, newfig=True, clr=['C0', 'C1'], fulltraj=True, lane=None,opacity = .4):  # plot platoon in space-time
     # CURRENT DOCUMENTATION
     # out - results from optimization algorithm
     # meas - measurements in np array, rows are observations
@@ -108,8 +108,8 @@ def optplot(out, meas, sim, followerchain, platoonlist, model, modeladj, modelad
     for i in platoonlist:
         obj = helper.SEobj_pervehicle(meas, sim, followerchain,
                                       i)  # list of (individual) objective functions. This is needed for next step
-        for j in range(len(i) - 1):  # convert each individual objective to individual rmse
-            temp = helper.convert_to_rmse(obj[j], followerchain, [[], i[j + 1]])
+        for j in range(len(i)):  # convert each individual objective to individual rmse
+            temp = helper.convert_to_rmse(obj[j], followerchain, [i[j]])
             vehrmse.append(temp)
 
     #    indcounter = np.asarray([],dtype = int64) #keeps track of which artists correspond to which vehicle
@@ -120,7 +120,7 @@ def optplot(out, meas, sim, followerchain, platoonlist, model, modeladj, modelad
     followerlist = list(followerchain.keys())  # list of vehicle ID
 
     for count, i in enumerate(platoonlist):
-        for j in i[1:]:
+        for j in i:
             veh2platoon.append(count)
 
     if newfig:
@@ -153,7 +153,7 @@ def optplot(out, meas, sim, followerchain, platoonlist, model, modeladj, modelad
             for j in range(len(LCind) - 1):
                 kwargs = {}
                 if meas[i][LCind[j], 7] != lane:
-                    kwargs = {'linestyle': '--', 'alpha': .4}  # dashed line .4 opacity (60% see through)
+                    kwargs = {'linestyle': '--', 'alpha': opacity}  # dashed line .4 opacity (60% see through)
                 plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[0], picker=5, **kwargs)
                 artist2veh.append(
                     counter)  # artist2veh takes artist index and converts it to vehicle ID index (for followerlist)
@@ -193,7 +193,7 @@ def optplot(out, meas, sim, followerchain, platoonlist, model, modeladj, modelad
                 for j in range(len(LCind) - 1):
                     kwargs = {}
                     if sim[i][LCind[j], 7] != lane:
-                        kwargs = {'linestyle': '--', 'alpha': .4}  # dashed line .4 opacity (60% see through)
+                        kwargs = {'linestyle': '--', 'alpha': opacity}  # dashed line .4 opacity (60% see through)
                     plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[1], picker=5, **kwargs)
                     artist2veh.append(counter)
             else:
@@ -370,7 +370,7 @@ def plotColorLines(X, Y, SPEED, speed_limit):
 
 
 def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C1'],
-                fulltraj=True, lane=None, opacity=.4, colorCode=True, speed_limit=[]):  # plot platoon in space-time
+                fulltraj=True, lane=None, opacity=.4, colorcode=True, speed_limit=[]):  # plot platoon in space-time
     # CURRENT DOCUMENTATION 11/11
     # meas - measurements in np array, rows are observations
     # sim - simulation in same format as meas. can pass in None and only meas will be shown, or can pass in the data and they will be plotted together
@@ -397,7 +397,9 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
     # can colorcode trajectories based on their speeds to easily see shockwaves and other structures.
 
     c = None
-
+    if sim is not None:
+        colorcode = False
+    
     ind = 2
     artist2veh = []
 
@@ -461,7 +463,7 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
                 X = x[LCind[j]:LCind[j + 1]]
                 Y = y[LCind[j]:LCind[j + 1]]
                 SPEED = speed_list[LCind[j]:LCind[j + 1]]
-                if colorCode:
+                if colorcode:
                     line = plotColorLines(X, Y, SPEED, speed_limit=speed_limit)
 
                 else:
@@ -497,21 +499,22 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
                 LCind = list(LCind)
                 LCind.insert(0, 0);
                 LCind.append(len(veh[:, 7]))
+            else: 
+                LCind = [0, len(veh[:,1])]
 
-                for j in range(len(LCind) - 1):
-                    kwargs = {}
-                    if sim[i][LCind[j], 7] != lane:
-                        kwargs = {'linestyle': '--', 'alpha': .4}  # dashed line .4 opacity (60% see through)
-                    plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[1], **kwargs)
-                    artist2veh.append(counter)
-            else:
-                plt.plot(x, y, clr[1])
-                artist2veh.append(counter)
+            for j in range(len(LCind) - 1):
+                kwargs = {}
+                if sim[i][LCind[j], 7] != lane and lane is not None:
+                    kwargs = {'linestyle': '--', 'alpha': .4}  # dashed line .4 opacity (60% see through)
+                plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[1], **kwargs)
+#                artist2veh.append(counter)
+#            else:
+#                plt.plot(x, y, clr[1])
+#                artist2veh.append(counter)
             counter += 1
 
     find_artists = []
     nartists = len(artist2veh)
-    halfn = int(nartists / 2)
 
     def on_pick(event):
         nonlocal find_artists
@@ -522,6 +525,8 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
             # deselect old vehicle
             for j in find_artists:
                 ax.lines[j].set_color('C0')
+                if sim is not None: 
+                    ax.lines[j+nartists].set_color('C1')
 
             # select new vehicle
             vehind = artist2veh[curind]  # convert from artist to vehicle index
@@ -531,15 +536,11 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
             #            nartists = len(ax.lines)
 
             for j in find_artists:
-                ax.lines[j].set_color('C1')
+                ax.lines[j].set_color('C3')
+                if sim is not None:
+                    ax.lines[j+nartists].set_color('C3')
             plt.title('Vehicle ID ' + str(list(followerlist)[vehind]))
             plt.draw()
-
-        if event.mouseevent.button == 3:  # right click selects platoon
-            #            print(find_artists)
-            # deselect old vehicle
-            for j in find_artists:
-                ax.lines[j].set_color('C0')
         plt.draw()
 
     # recolor the selected artist and all other artists associated with the vehicle ID so you can see what line you clicked on
@@ -553,11 +554,12 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
     #	if speed:
     #		plt.ylabel('speed (ft/s)')
 
-    if colorCode:
+    if colorcode:
         fig.colorbar(line, ax=axs)
 #        fig.colorbar.set_label('speed (m/s)')
 
     axs.autoscale(axis='x')
+    axs.autoscale(axis='y')
 
     return
 
