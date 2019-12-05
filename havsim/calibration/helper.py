@@ -846,7 +846,7 @@ def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh', meas=[]):
             after.update(platoonlist[i])
         for i in range(len(platoonlist)):
             after -= set(platoonlist[i])
-            leadinfo, folinfo = makeleadinfo(platoonlist[i], platooninfo, meas), makefolinfo(platoonlist[i], platooninfo, meas)
+            leadinfo = makeleadinfo(platoonlist[i], platooninfo, meas)
             for j in range(len(platoonlist[i])):
                 leaders = [k[0] for k in leadinfo[j]]
                 leaders = set(leaders)
@@ -857,22 +857,27 @@ def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh', meas=[]):
         res = 0
         cirList = []
         after = set([])
-        for i in range(len(platoonlist)):
+        for i in range(len(platoonlist)): #get set of all vehicles
             after.update(platoonlist[i])
-        for i in range(len(platoonlist)):
-            after -= set(platoonlist[i])
-            leadinfo, folinfo = makeleadinfo(platoonlist[i], platooninfo, meas),  makefolinfo(platoonlist[i], platooninfo, meas)
+        for i in range(len(platoonlist)): #i is current platoon
+            after -= set(platoonlist[i]) #remove vehicles from current platoon 
+            leadinfo= makeleadinfo(platoonlist[i], platooninfo, meas)
             for j in range(len(platoonlist[i])):
                 leaders = [k[0] for k in leadinfo[j]]
                 leaders = set(leaders)
-                leaders_after = leaders.intersection(after)
+                leaders_after = leaders.intersection(after) #leaders_after are any leaders of i which are not yet calibrated
                 if len(leaders_after) > 0:
                     cirList.append((list(leaders_after), i))
+                else:
+                    cirList.append(None)
         res = []
         for i in cirList:
-            for j in i[0]:
-                T = set(range(platooninfo[j][1], platooninfo[j][2]))
-                res.append(c_metric(j, platoonlist[i[1]], T, platooninfo, k=k, type='follower'))
+            if i == None: 
+                res.append(0)
+            else: 
+                for j in i[0]:
+                    T = set(range(platooninfo[j][1], platooninfo[j][2]+1))
+                    res.append(c_metric(j, platoonlist[i[1]], T, platooninfo, k=k, type='follower',meas = meas))
         return res
 
 

@@ -888,15 +888,15 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, follower
 
 
     while curn < n and simcount > 0: #loop which will be exited when the platoon is of size desired n or when no more vehicles can be added
-        breaknow = False
-        if curlead is not None:
-            curleadlist.insert(0,curlead) #append current leader to current leader list
-            leaders.insert(0, curlead)
-            for i in platooninfo[curlead][-1]: #append all of the current leader's followers to the current follower list
-                followers.insert(0,i)
-                totfollist.insert(0,i)
-            # followers = list(set(followers)) #remove any duplicate entries from followers; we don't want to check the same vehicle multiple times!
-            totfollist = list(set(totfollist))
+#        breaknow = False
+#        if curlead is not None:
+#            curleadlist.insert(0,curlead) #append current leader to current leader list
+#            leaders.insert(0, curlead)
+#            for i in platooninfo[curlead][-1]: #append all of the current leader's followers to the current follower list
+#                followers.insert(0,i)
+#                totfollist.insert(0,i)
+#            # followers = list(set(followers)) #remove any duplicate entries from followers; we don't want to check the same vehicle multiple times!
+#            totfollist = list(set(totfollist))
 
 
         # followersc = followers.copy() #followersc is a copy of followers because we need to modify followers while iterating over it
@@ -934,6 +934,9 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, follower
 
         bestVeh = None
         bestScore = None
+        totfollist = []
+        for i in leaders:
+            totfollist.extend(platooninfo[i][-1])
         for i in totfollist:
             chklead = platooninfo[i][4] #these are all the leaders needed to simulate vehicle i
             if all(j in leaders for j in chklead): #will be true if curlead contains all vehicles in chklead; in that case vehicle i can be simulated
@@ -956,13 +959,19 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, follower
             curlead = bestVeh  # newly added follower becomes the new leader
             leaders.insert(0,
                            curlead)  # append newly added follower to the leader list as well; we have simulated vehicle i, and can now treat it as a leader
-            if curlead in followers:
-                followers.remove(curlead)
+#            if curlead in followers:
+#                followers.remove(curlead)
             totfollist.remove(curlead)
             chklead = platooninfo[curlead][4]
+            #
+            totfollist.extend(platooninfo[curlead][-1])
+            totfollist = list(set(totfollist))
             for j in chklead:
                 if curlead in platooninfo[j][-1]:
                     platooninfo[j][-1].remove(curlead)  # remove i from each of the leader's followers
+                else:
+                    print(str(curlead)+' has already been added, it will be added again ')
+                    continue
                 if len(platooninfo[j][-1]) < 1:  # if a leader has no more followers
                     simcount += -1  # adjust simcount. if simcount reaches 0 our job is finished and we can return what we have, even if curn is not equal to n
                     leaders.remove(j)  # remove it from the list of leaders
@@ -1056,12 +1065,15 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, follower
                     #also need to add all the followers into totfollist because we may potentially add several leaders in this section of the code
                     if curveh in totfollist:
                         totfollist.remove(curveh)
-                    if curveh in followers:
-                        followers.remove(curveh)
+#                    if curveh in followers:
+#                        followers.remove(curveh)
 
                     for j in chklead:
                         if curveh in platooninfo[j][-1]:
                             platooninfo[j][-1].remove(curveh)
+                        else:
+                            print(str(curveh)+' has already been added, it will be added again. inside loop part ')
+                            continue
                         #To be honest I'm not sure at all why the below is here? 11/21/19
 #                        if j not in leaders: #j might be in followers or totfollist in this special case where we resolve loops
 #                            curfix.append(j)
@@ -1070,17 +1082,19 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, follower
                             simcount += -1
                             if j in leaders:
                                 leaders.remove(j)
-                            if j in curleadlist:
-                                curleadlist.remove(j)
+#                            if j in curleadlist:
+#                                curleadlist.remove(j)
+                    totfollist.extend(platooninfo[curveh][-1])
+                    totfollist = list(set(totfollist))
                     #now we see whether or not curveh can be a viable curlead
-                    if len(platooninfo[curveh][-1]) < 1: #if it has no followers it cant be curlead; don't update newlead
-                        leaders.remove(curveh)
-                    else:
-                        #curveh is a viable lead vehicle; add its followers and set newlead = curveh
-                        for j in platooninfo[curveh][-1]:
-                            totfollist.insert(0,j)
-                        totfollist = list(set(totfollist))
-                        newlead = curveh #curveh is viable
+#                    if len(platooninfo[curveh][-1]) < 1: #if it has no followers it cant be curlead; don't update newlead
+#                        leaders.remove(curveh)
+#                    else:
+#                        #curveh is a viable lead vehicle; add its followers and set newlead = curveh
+#                        for j in platooninfo[curveh][-1]:
+#                            totfollist.insert(0,j)
+#                        totfollist = list(set(totfollist))
+#                        newlead = curveh #curveh is viable
 
                 platoons.extend(curfix) #will get nested platoons because curfix is a list
                 curlead = newlead #if no viable leaders were found, this will give curlead = None
@@ -2271,6 +2285,7 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
     meas, platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist = makeplatooninfo(data)
     num_of_leaders = len(leaders)
     num_of_vehicles = len(meas.keys()) - num_of_leaders 
+    platooninfocopy = copy.deepcopy(platooninfo)
     platoonoutput = [] 
     platoonlist = []
     
@@ -2359,8 +2374,9 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
         """
         
     
-    if vehs is not None:
-        platooninfo = platooninfovehs #go back to the original platooninfo after we have made the platoons; this is only for special case where we are calibrating between vehs
+#    if vehs is not None:
+#        platooninfo = platooninfovehs #go back to the original platooninfo after we have made the platoons; this is only for special case where we are calibrating between vehs
+    platooninfo = platooninfocopy
     
     if not extra_output:
         return meas, platooninfo, platoonlist

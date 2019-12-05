@@ -26,11 +26,16 @@ Created on Thu Sep 26 20:31:23 2019
 
 
 #egobj([10,1.6,2,1.3,1.5],*args)
-data = []
-for i in universe: 
-    data.append(i.dx)
-with open('simeg33.33-1.5-2-1.1-1.5IDM_b3.pkl','wb') as f:
-    pickle.dump([data],f)
+#data = []
+#for i in universe: 
+#    data.append(i.dx)
+#with open('simeg33.33-1.5-2-1.1-1.5IDM_b3.pkl','wb') as f:
+#    pickle.dump([data],f)
+
+#import havsim.calibration.helper as helper
+#platoon4 = [995, 998, 1013, 1023]
+#testplatoon2 = [platoon4, [956]]
+#cir = helper.cirdep_metric(testplatoon2, platooninfo, k=0.9, type='num', meas = meas)
 
 #%%
 #cleaning some stuff up for qiwu
@@ -54,3 +59,10 @@ with open('simeg33.33-1.5-2-1.1-1.5IDM_b3.pkl','wb') as f:
 #
 #with open('autodiffeg.pkl','wb') as f:
 #    pickle.dump([x1,x2,p,pfinal, testdata,testdata2,testdata3,testdata4,testdata5,X,Y,times,p7], f)
+
+#%%
+for i in list(meas.keys()): 
+    cur = helper.makeleadinfo([i],platooninfo,meas)
+    temp = [j[0] for j in cur[0]]
+    if len(np.unique(temp)) < len(temp):
+        print(i)
