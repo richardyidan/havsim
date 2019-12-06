@@ -61,8 +61,11 @@ Created on Thu Sep 26 20:31:23 2019
 #    pickle.dump([x1,x2,p,pfinal, testdata,testdata2,testdata3,testdata4,testdata5,X,Y,times,p7], f)
 
 #%%
-for i in list(meas.keys()): 
-    cur = helper.makeleadinfo([i],platooninfo,meas)
-    temp = [j[0] for j in cur[0]]
-    if len(np.unique(temp)) < len(temp):
-        print(i)
+#for i in list(meas.keys()): 
+#    cur = helper.makeleadinfo([i],platooninfo,meas)
+#    temp = [j[0] for j in cur[0]]
+#    if len(np.unique(temp)) < len(temp):
+#        print(i)
+
+#meas, platooninfo,platoons = makeplatoonlist(data,n=5)
+helper.c_metric(384,platoons[0],T,platooninfo,type='follower')

@@ -784,6 +784,8 @@ def fin_dif_wrapper(p,args, *eargs, eps = 1e-8, **kwargs):
     return (out-obj)/eps
 
 def chain_metric(platoon, platooninfo, k = .9, type = 'lead', meas = []):
+    #metric that defines how good a platoon is 
+    #refer to platoon formation pdf for exact definition 
     res = 0
     for i in platoon:
         T = set(range(platooninfo[i][1], platooninfo[i][2]+1))
@@ -792,6 +794,9 @@ def chain_metric(platoon, platooninfo, k = .9, type = 'lead', meas = []):
 
 
 def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas = []):
+    #defines how good a single vehicle in a specific time is. 
+    #refer to platoon formation pdf for exact definition 
+    
     # leadinfo, folinfo= makeleadinfo(platoon, platooninfo, meas),  makefolinfo(platoon, platooninfo, meas)
     # if veh not in platoon:
     #     return 0
@@ -842,9 +847,23 @@ def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas 
     return res
 
 def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh', meas=[]):
+    #platoonlist - list of platoons 
+    
+    #type = veh checks for circular dependencies. For every vehicle which is 
+    #causing a circular dependency it outputs: 
+    # tuple of [vehicle, list of lead vehicles, list of lead vehicles platoon indices], vehicle platoon index
+    #where vehicle is the vehicle with the circular dependency, which it has becuase of lead vehicles. 
+    
+    #type = num quantifies how bad a circular dependency is by computing 
+    #the change to chain metric when adding the lead vehicle to the platoon 
+    #with the circular dependency. Output is a list of floats, same length as platoonlist. 
     if type == 'veh':
         cirList = []
         after = set([])
+        veh2platoon = {} #converts vehicle to platoon index
+        for i in range(len(platoonlist)):
+            for j in platoonlist[i]: 
+                veh2platoon[j] = i
         for i in range(len(platoonlist)):
             after.update(platoonlist[i])
         for i in range(len(platoonlist)):
@@ -853,8 +872,9 @@ def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh', meas=[]):
             for j in range(len(platoonlist[i])):
                 leaders = [k[0] for k in leadinfo[j]]
                 leaders = set(leaders)
-                if len(leaders.intersection(after))>0:
-                    cirList.append((platoonlist[i][j], i))
+                circleadveh = leaders.intersection(after)
+                if len(circleadveh)>0:
+                    cirList.append(([platoonlist[i][j], list(circleadveh), [veh2platoon[k] for k in circleadveh]], i))
         return cirList
     elif type == 'num':
         res = 0

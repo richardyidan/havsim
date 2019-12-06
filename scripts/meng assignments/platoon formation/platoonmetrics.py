@@ -338,18 +338,16 @@ def benchmark(platoon_list, meas,platooninfo, n = 5, k = .9):
     #counting circular dependencies
     for i in violation:
         platoon_set.add(i[1])
-        violate_veh_set.add(i[0])
+        violate_veh_set.add(i[0][0])
     average = sum(chain_metric_scores)/len(chain_metric_scores)
     median = list(sorted(chain_metric_scores))[len(chain_metric_scores)//2]
     std = statistics.stdev(chain_metric_scores)
-    num_veh = len(violation)
     nover = np.asarray(lenlist) 
     nover = nover[nover>n]
 
-
     print('number vehicles/number unique vehicles:',np.sum(lenlist),'/',len(veh_set))
     print('normal chain score avg/med/sdev:', round(average,2),'/',round(median,2),'/', round(std,2))
-    print('number of circ. dep. vehicles:', len(violate_veh_set), "\nfraction of total vehicles/platoons:", round(num_veh/len(veh_set),5),'/',
+    print('number of circ. dep. vehicles:', len(violate_veh_set), "\nfraction of total vehicles/platoons:", round(len(violate_veh_set)/len(veh_set),5),'/',
           round(len(platoon_set)/len(platoon_list),5))
     print('average/median platoon size:', round(np.mean(lenlist),5),"/",np.median(lenlist), 
           "\nmax platoon size / % platoons over n:", max(lenlist),' / ',round(len(nover)/len(lenlist),5))

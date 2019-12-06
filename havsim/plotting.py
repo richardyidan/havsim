@@ -1251,7 +1251,7 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
     return im_ani
 
 
-def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsim=True, datalen=9):
+def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsim=True, datalen=9, speed_limit = [] ):
     #plots vehicles platoon using data meas. 
     
     # platoon = [] - if given as a platoon, only plots those vehicles in the platoon (e.g. [[],1,2,3] )
@@ -1275,7 +1275,7 @@ def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsi
 
     # scatter_pts = ax.scatter([], [], c='k')
     # im = ax.imshow([(100,100)], origin='lower')
-    scatter_pts = ax.scatter([], [], c=[], cmap=cm.get_cmap('RdYlBu'), marker=">")
+    scatter_pts = ax.scatter([], [], c=[], cmap=palettable.colorbrewer.diverging.RdYlGn_4.mpl_colormap, marker=">") #cm.get_cmap('RdYlBu')
 
     # fig.colorbar(im,cmap=cm.get_cmap('RdYlBu'))
     # for i in usetime:
@@ -1286,7 +1286,19 @@ def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsi
 
     # im_ani = animation.ArtistAnimation(fig,ims,interval=3)
     annotionList = []
-    norm = plt.Normalize(0, 80)
+    if speed_limit == []:
+        maxspeed = 0
+        minspeed = math.inf
+        for i in followerchain.keys():
+            curmax = max(meas[i][:,3])
+            curmin = min(meas[i][:,3])
+            if curmin < minspeed:
+                minspeed = curmin
+            if curmax > maxspeed:
+                maxspeed = curmax
+        norm = plt.Normalize(minspeed,maxspeed)
+    else:
+        norm = plt.Normalize(speed_limit[0], speed_limit[1])
     # divider = make_axes_locatable(ax)
     # cax = divider.append_axes("right", size="25%", pad=0.2)
 
@@ -1335,10 +1347,10 @@ def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsi
     # fig.colorbar(scatter_pts, cmap=cm.get_cmap('RdYlBu'), norm=norm)
     # fig.colorbar(scatter_pts, cmap=cm.get_cmap('RdYlBu'))
 
-    im_ani = animation.FuncAnimation(fig, aniFunc, init_func=init, frames=len(usetime), interval=3)
+    out = animation.FuncAnimation(fig, aniFunc, init_func=init, frames=len(usetime), interval=3)
 
-    plt.show()
-    return im_ani
+#    plt.show()
+    return out
 
 
 def wtplot(meas, ID):
