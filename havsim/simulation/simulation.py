@@ -4,11 +4,10 @@
 houses the main code for running simulations 
 
 TO DO /
-     some quick modifications to get plotting api to work on sim format so we can properly debug/make pretty pictures (change sim into something we can treat as meas)
-     and write extended abstract
-    
     implementing boundary conditions 
     getting networks working (need to handle changing roads, some rule for merging) (relaxation, mobil)
+    want some loss function that won't end up convering to a lower speed like the l2v will - 
+    something that balances between stability and high speed. 
     how to do the adjoint calculation
     
     paper on AV control
@@ -17,7 +16,7 @@ TO DO /
     
     add some more models
     
-    at some point will probably need to refactor this code again so it's in a polished state-
+    at some point will probably (?) need to refactor this code again so it's in a polished state-
     need to think about exactly what we need out of states, actions, how to handle things like different models,
     different update functions, handling derivatives, handling different loss functions, how lane changing will work 
     etc. 
