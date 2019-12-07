@@ -123,3 +123,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+scripts/2018 AY papers/calculate adjoint system.nb

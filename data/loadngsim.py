@@ -142,7 +142,7 @@ import csv
 import pickle
 import copy 
 
-from ..havsim.calibration.opt import makeplatoonlist
+from havsim.calibration.algs import makeplatoonlist
 
 
 
@@ -406,9 +406,12 @@ def re_differentiate(data,dataind=[3,4,9,8,6,2,5]):
 
 #with open('mydata.pkl','wb') as f:
 #    pickle.dump([rawdata, truedata, data, trueextradata], f) #save data 
-
-with open('mydata.pkl', 'rb') as f:
-    rawdata, truedata, data, trueextradata = pickle.load(f) #load data 
+try: 
+    with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/datasets/trajectory data/mydata.pkl', 'rb') as f:
+        rawdata, truedata, data, trueextradata = pickle.load(f) #load data 
+except: 
+    with open('/home/rlk268/data/mydata.pkl', 'rb') as f:
+        rawdata, truedata, data, trueextradata = pickle.load(f) #load data 
     
 ####################################################################################
     

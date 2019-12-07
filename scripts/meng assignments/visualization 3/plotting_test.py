@@ -159,11 +159,11 @@ of all the current artists shown, and I believe this will make it faster.
 make it so the usetime keyword works to give the times you want to animate. Usetime should be a list of all frames to animate. 
 colorbar is getting cutoff in the figure; make it so you can see the entire colorbar. 
 """
-# vehlist = []
-# [vehlist.extend(i[1:]) for i in platoonlist]
-# animatetraj(meas,platooninfo,vehlist,usetime=list(range(2600,2700))) #the usetime keyword no longer works, fix this
+#vehlist = []
+#[vehlist.extend(i[1:]) for i in laneplatoons]
+#animatetraj(meas,platooninfo,vehlist,usetime=list(range(2600,2700))) #the usetime keyword no longer works, fix this
 
-# animatetraj(meas,platooninfo) #plot all vehicles 
+havsim.plotting.animatetraj(meas,platooninfo) #plot all vehicles 
 
 
 

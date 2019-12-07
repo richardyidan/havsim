@@ -196,7 +196,7 @@ def calibrate_tnc2(plist,bounds, meas,platooninfo,platoonlist,makeleadfolinfo,pl
         counter = 0
         leadinfo,folinfo,rinfo = makeleadfolinfo(i,platooninfo,sim)
         #first new part is here - need to adjust the length of bounds and length of parameters based on the size of the platoon
-        nveh = len(i)-1
+        nveh = len(i)
 
         curp = np.tile(plist[counter],(nveh,1)) #first guess is always the provided guess for all vehicles. 
         usebounds = np.tile(bounds,(nveh,1))
@@ -223,7 +223,7 @@ def calibrate_tnc2(plist,bounds, meas,platooninfo,platoonlist,makeleadfolinfo,pl
         obj = helper.SEobj_pervehicle(meas,sim,platooninfo,i) #list of (individual) objective functions. This is needed for next step
         rmselist = [] 
         for j in range(nveh): #convert each individual objective to individual rmse
-            temp = helper.convert_to_rmse(obj[j],platooninfo,[[],i[j+1]])
+            temp = helper.convert_to_rmse(obj[j],platooninfo,[i[j]])
             rmselist.append(temp)
             
         bfgs = list(bfgs) #need to convert to list for next step 
@@ -285,7 +285,7 @@ def calibrate_tnc2(plist,bounds, meas,platooninfo,platoonlist,makeleadfolinfo,pl
             obj = helper.SEobj_pervehicle(meas,sim,platooninfo,i)
             rmselist = [] 
             for j in range(nveh): #convert each individual objective to individual rmse
-                temp = helper.convert_to_rmse(obj[j],platooninfo,[[],i[j+1]])
+                temp = helper.convert_to_rmse(obj[j],platooninfo,[i[j]])
                 rmselist.append(temp)
                 
             rebfgs = list(rebfgs) #see above
@@ -308,8 +308,13 @@ def calibrate_tnc2(plist,bounds, meas,platooninfo,platoonlist,makeleadfolinfo,pl
         rmse.append(currmse)
             
         if order ==0:
-            for j in i[1:]: #reset simulation to measurements for next platoon. you can change this part as desired for the desired calibration strategy. 
+            for j in i: #reset simulation to measurements for next platoon. you can change this part as desired for the desired calibration strategy. 
                 sim[j] = meas[j].copy()
+        elif order ==1: #need to make sure simulation loaded in is the best one found
+            if objder: 
+                obj, grad = platoonobjfn(bfgs[0],model, modeladjsys, modeladj, meas, sim, platooninfo, i, leadinfo, folinfo,rinfo,*args)
+            else: 
+                obj = platoonobjfn(bfgs[0],model, modeladjsys, modeladj, meas, sim, platooninfo, i, leadinfo, folinfo,rinfo,*args)
     
     return out, times, rmse
 
@@ -611,7 +616,7 @@ def calibrate_GA(bounds, meas,platooninfo,platoonlist,makeleadfolinfo, platoonob
     rmse = []
     
     for i in platoonlist: 
-        nveh = len(i)-1
+        nveh = len(i)
         usebounds = np.tile(bounds,(nveh,1))
         leadinfo,folinfo,rinfo = makeleadfolinfo(i,platooninfo,sim)
         
@@ -626,8 +631,10 @@ def calibrate_GA(bounds, meas,platooninfo,platoonlist,makeleadfolinfo, platoonob
         rmse.append(currmse)
             
         if order ==0:
-            for j in i[1:]: #reset simulation to measurements for next platoon
+            for j in i: #reset simulation to measurements for next platoon
                 sim[j] = meas[j].copy()
+        elif order ==1:
+            obj = platoonobjfn(GA['x'],model, modeladjsys, modeladj, meas, sim, platooninfo, i, leadinfo, folinfo,rinfo,*args)
     
     return out, times, rmse
 
