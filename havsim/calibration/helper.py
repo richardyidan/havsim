@@ -820,6 +820,8 @@ def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas 
                 continue
             temp.update(range(i[1], i[2]+1))
         L = T.intersection(temp)
+        if len(L)>0:
+            print(veh, len(L), depth)
         return L
 
     def getLead(veh, platoon, T):
@@ -830,6 +832,7 @@ def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas 
         for i in targetsList:
             if i[0] in platoon and (i[1] in T or i[2] in T):
                 leads.append(i[0])
+        leads = list(set(leads))
         return leads
 
     def getTimes(veh, lead, T):
@@ -837,11 +840,13 @@ def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas 
         temp = set([])
         for i in targetsList:
             if i[0] == lead:
-                temp = T.intersection(set(range(i[1], i[2]+1)))
+                temp.update(range(i[1], i[2]+1))
+        temp = T.intersection(temp)
         return temp
 
     res = len(getL(veh, platoon, T))
     leads = getLead(veh, platoon, T)
+
     for i in leads:
         res += k*c_metric(i, platoon, getTimes(veh, i, T), platooninfo, k=k, type=type, depth=depth+1, meas=meas)
     return res
@@ -885,22 +890,28 @@ def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh', meas=[]):
         for i in range(len(platoonlist)): #i is current platoon
             after -= set(platoonlist[i]) #remove vehicles from current platoon 
             leadinfo= makeleadinfo(platoonlist[i], platooninfo, meas)
+            temp = []
             for j in range(len(platoonlist[i])):
                 leaders = [k[0] for k in leadinfo[j]]
                 leaders = set(leaders)
                 leaders_after = leaders.intersection(after) #leaders_after are any leaders of i which are not yet calibrated
                 if len(leaders_after) > 0:
-                    cirList.append((list(leaders_after), i))
+                    temp.append((list(leaders_after), i))
                 else:
-                    cirList.append(None)
+                    temp.append(None)
+            cirList.append(temp)
         res = []
         for i in cirList:
             if i == None: 
                 res.append(0)
-            else: 
-                for j in i[0]:
-                    T = set(range(platooninfo[j][1], platooninfo[j][2]+1))
-                    res.append(c_metric(j, platoonlist[i[1]], T, platooninfo, k=k, type='follower',meas = meas))
+            else:
+                temp = 0
+                for j in i:
+                    if j:
+                        for l in j[0]:
+                            T = set(range(platooninfo[l][1], platooninfo[l][2]+1))
+                            temp += c_metric(l, platoonlist[j[1]], T, platooninfo, k=k, type='follower',meas = meas)
+            res.append(temp)
         return res
 
 def plotformat(sim, auxinfo, roadinfo, endtimeind = 3000, density = 2, indlist = [], specialind = 21):

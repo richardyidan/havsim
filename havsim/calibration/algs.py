@@ -2258,7 +2258,7 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
 
     while simcount > 0:
         #make a platoonplatoon
-        platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, platoons = makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist,
+        platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, platoons = makeplatoon(platooninfo, leaders, simcount, curlead, totfollist,
                                                                                                                             followers, curleadlist, meas=meas, cycle_num=10, n=n)       
         platoonlist.extend(platoons)
         #append it to platoonoutput (output from the function)
