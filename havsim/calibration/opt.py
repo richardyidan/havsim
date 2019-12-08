@@ -12,6 +12,7 @@ All calibration related functions which set up optimization problems, including 
             -many of the problems in general features/QOL can be solved by using the new simulation code in place of current calibration code
         	-function for delay and LL model needs to be tested/debugged still, implement LL as DE, implement other models  
             and update the documentation in model info pdf 
+        -make sure the adjoint system is being calculated correctly with boundary conditions 
             
         -should refactor calibration code to be cleaner, including a polished api for users
         -create test script that can be used to check for bugs in the calibration code
