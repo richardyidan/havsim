@@ -190,11 +190,13 @@ def makeleadinfo(platoon, platooninfo, sim, *args):
     
     return leadinfo
 
-def makefolinfo(platoon, platooninfo, sim, *args, allfollowers = True):
+def makefolinfo(platoon, platooninfo, sim, *args, allfollowers = True, endtime = 'Tn'):
     #same as leadinfo but it gives followers instead of leaders. 
     #followers computed ONLY OVER SIMULATED TIMES + BOUNDARY CONDITION TIMES (t_n - T_nm1 + T_nm1 - T_n)
     #allfollowers = True -> gives all followers, even if they aren't in platoon
     #allfollowers = False -> only gives followers in the platoon (needed for adjoint calculation, adjoint variables depend on followers, not leaders.)
+    #endtime = 'Tn' calculates followers between t_n, T_n, otherwise calculated between t_n, T_nm1, 
+    #so give endtime = 'Tnm1' and it will not compute followers over boundary condition times 
     
     #EXAMPLE
     ##    platoons = [[],5,7] means we want to calibrate vehicles 5 and 7 in a platoon
@@ -206,8 +208,10 @@ def makefolinfo(platoon, platooninfo, sim, *args, allfollowers = True):
     for i in platoon:
         curfolinfo = []
         t_nstar, t_n, T_nm1, T_n= platooninfo[i][0:4]
-        
-        follist = sim[i][t_n-t_nstar:T_n-t_nstar+1,5] #list of followers
+        if endtime == 'Tn':
+            follist = sim[i][t_n-t_nstar:T_n-t_nstar+1,5] #list of followers
+        else: 
+            follist = sim[i][t_n-t_nstar:T_nm1-t_nstar+1,5]
         curfol = follist[0]
         unfinished = False
         
