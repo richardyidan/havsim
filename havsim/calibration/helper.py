@@ -810,8 +810,19 @@ def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas 
         leadinfo = makeleadinfo([veh], platooninfo, meas)
         targetsList = leadinfo[0]
     else:
-        folinfo = makefolinfo([veh], platooninfo, meas)
-        targetsList = folinfo[0]
+        folinfo = makefolinfo([veh], platooninfo, meas, endtime='Tnm1')
+        temp = folinfo[0]
+        targetsList = []
+        for i in temp:
+            Tnstart = platooninfo[i[0]][1]
+            Tnm1 = platooninfo[i[0]][2]
+            start = max(Tnstart, i[1])
+            end = min(Tnm1, i[2])
+            if start<end:
+                targetsList.append([i[0], start, end])
+
+
+
 
     def getL(veh, platoon, T):
         L = set([])
