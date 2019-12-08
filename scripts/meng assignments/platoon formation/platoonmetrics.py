@@ -210,27 +210,27 @@ platoon4 = [995, 998, 1013, 1023]
 # cir = helper.cirdep_metric(testplatoon2, platooninfo, k=k, type='num',meas = meas)
 # print('circular metric testplatoon2 result is '+str(cir[0]))
 # print('expected result is '+str(37+k*13))
-#
-# testplatoon3 = [[925, 937, 956], [920]]
-# cir = helper.cirdep_metric(testplatoon3, platooninfo, k=k, type='num', meas = meas)
-# print('circular metric testplatoon3 result is '+str(cir[0]))
-# print('expected result is '+str(485+k*445+k**2*419))
-# #should be 1224.89
-#
-# testplatoon4 = [[393, 409, 420], [395]]
-# cir = helper.cirdep_metric(testplatoon4, platooninfo, k=k, type='num', meas = meas)
-# print('circular metric testplatoon4 result is '+str(cir[0]))
-# print('expected result is '+str(193 + k*163+k*18 + k**2*103))
+
+testplatoon3 = [[925, 937, 956], [920]]
+cir = helper.cirdep_metric(testplatoon3, platooninfo, k=k, type='num', meas = meas)
+print('circular metric testplatoon3 result is '+str(cir[0]))
+print('expected result is '+str(485+k*445+k**2*419))
+#should be 1224.89
+
+testplatoon4 = [[393, 409, 420], [395]]
+cir = helper.cirdep_metric(testplatoon4, platooninfo, k=k, type='num', meas = meas)
+print('circular metric testplatoon4 result is '+str(cir[0]))
+print('expected result is '+str(193 + k*163+k*18 + k**2*103))
 
 testplatoon5 = [[393, 409, 420],[395, 411, 389]]
 cir = helper.cirdep_metric(testplatoon5, platooninfo, k=k, type='num', meas = meas)
 print('circular metric testplatoon5 result is '+str(cir[0]))
 print('expected result is '+str(193 + k*163+k*18 + k**2*103 + 190+27+k*(22+34+33) + 244))
-
-testplatoon6 = [[393, 409, 420],[395, 411], [389]]
-cir = helper.cirdep_metric(testplatoon6, platooninfo, k=k, type='num', meas = meas)
-print('circular metric testplatoon6 result is '+str(cir[0]))
-print('expected result is '+str(193 + k*163+k*18 + k**2*103 + 190+27+k*(22+34+33) + 244))
+#
+# testplatoon6 = [[393, 409, 420],[395, 411], [389]]
+# cir = helper.cirdep_metric(testplatoon6, platooninfo, k=k, type='num', meas = meas)
+# print('circular metric testplatoon6 result is '+str(cir[0]))
+# print('expected result is '+str(193 + k*163+k*18 + k**2*103 + 190+27+k*(22+34+33) + 244))
 
 platoon = [391, 335, 326]
 platoon0  = [381,391,335,326,334]

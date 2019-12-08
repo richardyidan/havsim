@@ -6,7 +6,8 @@ helper functions for calibration module; these functions don't implement any cor
 """
 import numpy as np 
 import heapq
-import math 
+import math
+from collections import defaultdict
 
 def checksequential(data, dataind = 1, pickfirst = False):	
 #	checks that given data are all sequential in time (i.e. each row of data advances one frameID)
@@ -810,7 +811,8 @@ def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas 
         leadinfo = makeleadinfo([veh], platooninfo, meas)
         targetsList = leadinfo[0]
     else:
-        folinfo = makefolinfo([veh], platooninfo, meas, endtime='Tnm1')
+        folinfo = makefolinfo([veh], platooninfo, meas)
+        # targetsList = folinfo[0]
         temp = folinfo[0]
         targetsList = []
         for i in temp:
@@ -900,18 +902,27 @@ def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh', meas=[]):
         res = 0
         cirList = []
         after = set([])
+        leader_violate_map = defaultdict(list)
         for i in range(len(platoonlist)): #get set of all vehicles
             after.update(platoonlist[i])
         for i in range(len(platoonlist)): #i is current platoon
             after -= set(platoonlist[i]) #remove vehicles from current platoon 
             leadinfo= makeleadinfo(platoonlist[i], platooninfo, meas)
             temp = []
+
             for j in range(len(platoonlist[i])):
                 leaders = [k[0] for k in leadinfo[j]]
                 leaders = set(leaders)
                 leaders_after = leaders.intersection(after) #leaders_after are any leaders of i which are not yet calibrated
                 if len(leaders_after) > 0:
-                    temp.append((list(leaders_after), i))
+                    # temp.append((list(leaders_after), i))
+
+                    violated_leaders = [v for v in leaders_after if i not in leader_violate_map[v]]
+                    if violated_leaders: # Remove duplicated invoking of chain matric
+                        temp.append((violated_leaders, i))
+                    for l in leaders_after:
+                        leader_violate_map[l].append(i)
+
                 else:
                     temp.append(None)
             cirList.append(temp)
@@ -924,7 +935,7 @@ def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh', meas=[]):
                 for j in i:
                     if j:
                         for l in j[0]:
-                            T = set(range(platooninfo[l][1], platooninfo[l][2]+1))
+                            T = set(range(platooninfo[l][1], platooninfo[l][3]+1))
                             temp += c_metric(l, platoonlist[j[1]], T, platooninfo, k=k, type='follower',meas = meas)
             res.append(temp)
         return res
