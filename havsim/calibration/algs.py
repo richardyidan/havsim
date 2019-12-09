@@ -856,7 +856,7 @@ def makeplatoon33(platooninfo, leaders, simcount, curlead, totfollist, followers
 
 # Another modification for 3.3
 
-def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, meas=[], cycle_num=100, n=10, graphtype = 'digraph'):
+def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[], cycle_num=100, n=10):
 #	input:
 #    meas, (see function makeplatooninfo)
 #
@@ -913,7 +913,8 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, follower
             chklead = platooninfo[i][4] #these are all the leaders needed to simulate vehicle i
             if all(j in leaders for j in chklead): #will be true if curlead contains all vehicles in chklead; in that case vehicle i can be simulated
                 platoons.append(i) #append vehicle i to list of followers in current platoon
-                score = chain_metric(platoons, platooninfo, meas=meas) #change to c_metric
+                T = set(range(platooninfo[i][1], platooninfo[i][2] + 1))
+                score = c_metric(i, platoons, T, platooninfo, meas=meas)  #change to c_metric
                 platoons.pop()
                 if bestScore == None:
                     bestScore = score
@@ -943,10 +944,11 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, follower
             bestGlen = float('inf')
             bestGedge = float('inf')
             for j in totfollist: #for loop to choose the smallest network possible
-                if graphtype == 'digraph':
-                    G = nx.DiGraph()
-                else:
-                    G = nx.Graph()
+                # if graphtype == 'digraph':
+                #     G = nx.DiGraph()
+                # else:
+                #     G = nx.Graph()
+                G = nx.DiGraph()
                 prevfolfix = [] #vehicles that we have already added all of their problem leaders to the network
                 nextfolfix = [] #these are vehicles we need to add their problem leaders to the network after we deal with the current folfix
                 folfix = j
@@ -974,58 +976,209 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, follower
                     bestGlen = len(G.nodes())
                     bestGedge = len(G.edges())
             #actually we have to use digraph so this keyword is pointless
-            if graphtype == 'digraph':
-                cyclebasis = nx.simple_cycles(bestG) #get cycle basis (this is a generator)
-            else:
-                cyclebasis = nx.cycle_basis(bestG)
-            #first get the universe and subsets for the set cover problem    
-            universe = list(bestG.nodes()) #universe for set cover
-            subsets = list(cyclebasis) #takes a long time to convert generator to list when the generator is very long; this is what dominates the cost
-            for i in range(len(subsets)):
-                subsets[i] = set(subsets[i])
-            #actually we want to solve a hitting set problem, but we do this with a set cover algorithm, so we have some extra conversion to do
-            HSuni = list(range(len(subsets))) #read variable name as hitting set universe; universe for the hitting set HSuni[0] corresponds to subsets[0]
-            HSsubsets = [] #this is the list of subsets for the hitting set
-            for i in range(len(universe)): #each member of universe we need to replace with a set
-                curveh = universe[i] #current member of universe
-                cursubset = set() #initialize the set we will replace it with
-                for j in range(len(subsets)): #
-                    if curveh in subsets[j]: # if i is in subsets[j] then we add the index to the current set for i
-                        cursubset.add(j)
-                HSsubsets.append(cursubset)
-            result = helper.greedy_set_cover(HSsubsets,HSuni) #solve the set cover problem which gives us the HSsubsets which cover HSuni
+            # if graphtype == 'digraph':
+            #     cyclebasis = nx.simple_cycles(bestG) #get cycle basis (this is a generator)
+            # else:
+            #     cyclebasis = nx.cycle_basis(bestG)
+            cyclebasis = nx.simple_cycles(bestG)
 
-            #now we take the output to the hitting set problem, and these vehicles get added. 
-            curfix = [] #curfix will be all the vehicles in the result
-            for i in result:
-                curveh = universe[HSsubsets.index(i)] #vehicle ID of the corresponding vehicle in the hitting set
-                curfix.append(curveh)
-                chklead = platooninfo[curveh][4]
+            def original():
+                nonlocal simcount, curn, platoons, totfollist
+                #first get the universe and subsets for the set cover problem
+                universe = list(bestG.nodes()) #universe for set cover
 
-                leaders.insert(0,curveh) #curveh will be simulated now so we can insert it into leaders
-                if curveh in totfollist:
-                    totfollist.remove(curveh)
 
-                for j in chklead:
-                    platooninfo[j][-1].remove(curveh)
-                    if len(platooninfo[j][-1]) < 1:  #remove a leader if all followers are gone
-                        simcount += -1
-                        if j in leaders:
-                            leaders.remove(j)
-                totfollist.extend(platooninfo[curveh][-1])
-                totfollist = list(set(totfollist))
-            
-            #update platoons accordingly 
-            if curn + len(curfix) > n:
-                platoonsout.append(platoons)
-                platoons = curfix
-                curn = len(curfix)
-            else: 
-                platoons.extend(curfix)
-                curn = curn + len(curfix)
-    #right before we terminate, add the most recent platoon            
-    platoonsout.append(platoons)            
-    return platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, platoonsout
+                subsets = list(cyclebasis) #takes a long time to convert generator to list when the generator is very long; this is what dominates the cost
+                for i in range(len(subsets)):
+                    subsets[i] = set(subsets[i])
+                #actually we want to solve a hitting set problem, but we do this with a set cover algorithm, so we have some extra conversion to do
+                HSuni = list(range(len(subsets))) #read variable name as hitting set universe; universe for the hitting set HSuni[0] corresponds to subsets[0]
+                HSsubsets = [] #this is the list of subsets for the hitting set
+                for i in range(len(universe)): #each member of universe we need to replace with a set
+                    curveh = universe[i] #current member of universe
+                    cursubset = set() #initialize the set we will replace it with
+                    for j in range(len(subsets)): #
+                        if curveh in subsets[j]: # if i is in subsets[j] then we add the index to the current set for i
+                            cursubset.add(j)
+                    HSsubsets.append(cursubset)
+                result = helper.greedy_set_cover(HSsubsets,HSuni) #solve the set cover problem which gives us the HSsubsets which cover HSuni
+
+                #now we take the output to the hitting set problem, and these vehicles get added.
+                curfix = [] #curfix will be all the vehicles in the result
+                for i in result:
+                    curveh = universe[HSsubsets.index(i)] #vehicle ID of the corresponding vehicle in the hitting set
+                    curfix.append(curveh)
+                    chklead = platooninfo[curveh][4]
+
+                    leaders.insert(0,curveh) #curveh will be simulated now so we can insert it into leaders
+                    if curveh in totfollist:
+                        totfollist.remove(curveh)
+
+                    for j in chklead:
+                        platooninfo[j][-1].remove(curveh)
+                        if len(platooninfo[j][-1]) < 1:  #remove a leader if all followers are gone
+                            simcount += -1
+                            if j in leaders:
+                                leaders.remove(j)
+                    totfollist.extend(platooninfo[curveh][-1])
+                    totfollist = list(set(totfollist))
+
+                #update platoons accordingly
+                if curn + len(curfix) > n:
+                    platoonsout.append(platoons)
+                    platoons = curfix
+                    curn = len(curfix)
+                else:
+                    platoons.extend(curfix)
+                    curn = curn + len(curfix)
+
+            def modification341():
+                nonlocal simcount, curlead, totfollist
+                universe = list(bestG.nodes())  # universe for set cover
+
+                subsets = []
+                count = 0
+                while count < cycle_num:
+                    try:
+                        subsets.append(next(cyclebasis))
+                    except:
+                        break
+                    count += 1
+
+                # subsets = list(cyclebasis) #takes a long time to convert generator to list when the generator is very long; this is what dominates the cost
+                for i in range(len(subsets)):
+                    subsets[i] = set(subsets[i])
+                # now we have what is needed for the set cover problem, and we need to convert this into a hitting set problem.
+                HSuni = list(range(len(
+                    subsets)))  # read variable name as hitting set universe; universe for the hitting set HSuni[0] corresponds to subsets[0]
+                HSsubsets = []  # this is the list of subsets for the hitting set
+                for i in range(len(universe)):  # each member of universe we need to replace with a set
+                    curveh = universe[i]  # current member of universe
+                    cursubset = set()  # initialize the set we will replace it with
+                    for j in range(len(subsets)):  #
+                        if curveh in subsets[j]:  # if i is in subsets[j] then we add the index to the current set for i
+                            cursubset.add(j)
+                    HSsubsets.append(cursubset)
+                result = helper.greedy_set_cover(HSsubsets,
+                                                 HSuni)  # solve the set cover problem which gives us the HSsubsets which cover HSuni
+
+                # now we have to convert the output of the set cover algorithm back to the actual vehicles we will be simulating
+                newlead = None  # initilize the new curlead as none
+                curfix = []  # curfix will be all the vehicles in the result
+                for i in result:
+                    curveh = universe[HSsubsets.index(i)]  # vehicle ID of the corresponding vehicle in the hitting set
+                    curfix.append(curveh)
+                    chklead = platooninfo[curveh][4]
+
+                    leaders.insert(0, curveh)  # curveh will be simulated now so we can insert it into leaders
+                    # also need to add all the followers into totfollist because we may potentially add several leaders in this section of the code
+                    if curveh in totfollist:
+                        totfollist.remove(curveh)
+
+                    for j in chklead:
+                        if curveh in platooninfo[j][-1]:
+                            platooninfo[j][-1].remove(curveh)
+                        # To be honest I'm not sure at all why the below is here? 11/21/19
+                        #                        if j not in leaders: #j might be in followers or totfollist in this special case where we resolve loops
+                        #                            curfix.append(j)
+                        # I think can just comment out the above
+                        if len(platooninfo[j][-1]) < 1:  # remove a leader if all followers are gone
+                            simcount += -1
+                            if j in leaders:
+                                leaders.remove(j)
+                    # now we see whether or not curveh can be a viable curlead
+                    if len(platooninfo[curveh][
+                               -1]) < 1:  # if it has no followers it cant be curlead; don't update newlead
+                        leaders.remove(curveh)
+                    else:
+                        # curveh is a viable lead vehicle; add its followers and set newlead = curveh
+                        for j in platooninfo[curveh][-1]:
+                            totfollist.insert(0, j)
+                        totfollist = list(set(totfollist))
+                        newlead = curveh  # curveh is viable
+
+                platoons.extend(curfix)  # will get nested platoons because curfix is a list
+                curlead = newlead  # if no viable leaders were found, this will give curlead = None
+            def modification342():
+                nonlocal simcount, totfollist, platoons, curn, curlead
+                count = 1000
+                bestCurFix = None
+                while count > 0:  # check first 1000 cycles
+                    count -= 1
+                    curfix = []
+                    try:
+                        cycle = next(cyclebasis)
+                    except:
+                        break
+                    #
+                    candidates = list(cycle)
+                    curfix.extend(candidates)
+                    #                   #see how many vehicles we would have to add, curfix is list of all vehicles
+                    # will add the smallest curfix
+                    totfollist_copy = list(totfollist)
+                    while True:
+                        extraLeaders = []
+                        for i in candidates:
+                            extraLeaders.extend(platooninfo[i][4])
+                        extraLeaders = list(set(extraLeaders) - set(cycle))
+                        curfix.extend(extraLeaders)
+                        curfix = list(set(curfix))
+                        candidates = []
+                        #
+                        Done = True
+                        removed = []
+                        #
+                        for i in extraLeaders:
+                            if i in totfollist_copy:
+                                candidates.append(i)
+                                removed.append(i)
+                                Done = False
+                        for i in removed:
+                            totfollist_copy.remove(i)
+                        if Done:
+                            break
+                    if not bestCurFix:
+                        bestCurFix = curfix
+                    else:
+                        if len(curfix) < len(bestCurFix):
+                            bestCurFix = curfix
+                #
+                for i in bestCurFix:  # add all vehicles in best cycle
+                    curveh = i  # vehicle ID of the corresponding vehicle in the hitting set
+                    chklead = platooninfo[curveh][4]
+
+                    leaders.insert(0, curveh)  # curveh will be simulated now so we can insert it into leaders
+                    if curveh in totfollist:
+                        totfollist.remove(curveh)
+
+                    for j in chklead:
+                        if curveh in platooninfo[j][-1]:
+                            platooninfo[j][-1].remove(curveh)
+                        if len(platooninfo[j][-1]) < 1:  # remove a leader if all followers are gone
+                            simcount += -1
+                            if j in leaders:
+                                leaders.remove(j)
+                    totfollist.extend(platooninfo[curveh][-1])
+                    totfollist = list(set(totfollist))
+
+
+
+                if curn + len(bestCurFix) > n and platoons:
+                    platoonsout.append(platoons)
+                    platoons = bestCurFix
+                    curn = len(bestCurFix)
+                else:
+                    platoons.extend(bestCurFix)
+                    curn = curn + len(bestCurFix)
+                # platoons.extend(bestCurFix)
+                # otherwise curlead will be the last viable vehicle in result
+
+            modification342()
+    #right before we terminate, add the most recent platoon
+    print(platoons)
+
+    platoonsout.append(platoons)
+    return platooninfo, leaders, simcount, curlead, totfollist, platoonsout
 
 
 
@@ -1497,14 +1650,16 @@ def makeplatoon342(platooninfo, leaders, simcount, curlead, totfollist, follower
 #
                         Done = True
                         removed = []
+
+                        totfollist_copy = list(totfollist)
 #
                         for i in extraLeaders:
-                            if i in totfollist: 
+                            if i in totfollist_copy:
                                 candidates.append(i)
                                 removed.append(i)
                                 Done = False
                         for i in removed:
-                            totfollist.remove(i)
+                            totfollist_copy.remove(i)
                         if Done:
                             break
                     if not bestCurFix:
@@ -2258,8 +2413,10 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
 
     while simcount > 0:
         #make a platoonplatoon
-        platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, platoons = makeplatoon(platooninfo, leaders, simcount, curlead, totfollist,
-                                                                                                                            followers, curleadlist, meas=meas, cycle_num=10, n=n)       
+        # platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, platoons = makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist,
+        platooninfo, leaders, simcount, curlead, totfollist, platoons = makeplatoon332(
+            platooninfo, leaders, simcount, curlead, totfollist,
+            meas=meas, cycle_num=10, n=n)
         platoonlist.extend(platoons)
         #append it to platoonoutput (output from the function)
         platoonoutput.append(platoons)

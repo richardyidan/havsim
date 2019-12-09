@@ -788,17 +788,17 @@ def fin_dif_wrapper(p,args, *eargs, eps = 1e-8, **kwargs):
         out[i] = objfun(curp,*args)
     return (out-obj)/eps
 
-def chain_metric(platoon, platooninfo, k = .9, type = 'lead', meas = []):
+def chain_metric(platoon, platooninfo, meas, k=.9, metrictype='lead'):
     #metric that defines how good a platoon is 
     #refer to platoon formation pdf for exact definition 
     res = 0
     for i in platoon:
         T = set(range(platooninfo[i][1], platooninfo[i][2]+1))
-        res += c_metric(i, platoon, T, platooninfo, k, type, meas=meas)
+        res += c_metric(i, platoon, T, platooninfo, meas=meas, k=k, metrictype=metrictype)
     return res
 
 
-def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas = []):
+def c_metric(veh, platoon, T, platooninfo, meas, k=.9, metrictype='lead', depth=0):
     #defines how good a single vehicle in a specific time is. 
     #refer to platoon formation pdf for exact definition 
     
@@ -807,7 +807,7 @@ def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas 
     #     return 0
     # targetsList = leadinfo[platoon.index(veh)] if type == 'lead' else folinfo[platoon.index(veh)]
     veh = int(veh)
-    if type == 'lead':
+    if metrictype == 'lead':
         leadinfo = makeleadinfo([veh], platooninfo, meas)
         targetsList = leadinfo[0]
     else:
@@ -837,8 +837,8 @@ def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas 
                 continue
             temp.update(range(i[1], i[2]+1))
         L = T.intersection(temp)
-        if len(L)>0:
-            print(veh, len(L), depth)
+        # if len(L)>0:
+        #     print(veh, len(L), depth)
         return L
 
     def getLead(veh, platoon, T):
@@ -865,10 +865,10 @@ def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas 
     leads = getLead(veh, platoon, T)
 
     for i in leads:
-        res += k*c_metric(i, platoon, getTimes(veh, i, T), platooninfo, k=k, type=type, depth=depth+1, meas=meas)
+        res += k * c_metric(i, platoon, getTimes(veh, i, T), platooninfo, meas=meas, k=k, metrictype=metrictype, depth=depth + 1)
     return res
 
-def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh', meas=[]):
+def cirdep_metric(platoonlist, platooninfo, meas, k=.9, metrictype='veh'):
     #platoonlist - list of platoons 
     
     #type = veh checks for circular dependencies. For every vehicle which is 
@@ -879,7 +879,7 @@ def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh', meas=[]):
     #type = num quantifies how bad a circular dependency is by computing 
     #the change to chain metric when adding the lead vehicle to the platoon 
     #with the circular dependency. Output is a list of floats, same length as platoonlist. 
-    if type == 'veh':
+    if metrictype == 'veh':
         cirList = []
         after = set([])
         veh2platoon = {} #converts vehicle to platoon index
@@ -898,7 +898,7 @@ def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh', meas=[]):
                 if len(circleadveh)>0:
                     cirList.append(([platoonlist[i][j], list(circleadveh), [veh2platoon[k] for k in circleadveh]], i))
         return cirList
-    elif type == 'num':
+    elif metrictype == 'num':
         res = 0
         cirList = []
         after = set([])
@@ -936,7 +936,7 @@ def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh', meas=[]):
                     if j:
                         for l in j[0]:
                             T = set(range(platooninfo[l][1], platooninfo[l][3]+1))
-                            temp += c_metric(l, platoonlist[j[1]], T, platooninfo, k=k, type='follower',meas = meas)
+                            temp += c_metric(l, platoonlist[j[1]], T, platooninfo, meas=meas, k=k, metrictype='follower')
             res.append(temp)
         return res
 

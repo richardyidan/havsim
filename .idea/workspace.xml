@@ -2,8 +2,11 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="8ccab746-000a-431f-a5f1-2f86bef0e33b" name="Default" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
+      <change beforePath="$PROJECT_DIR$/havsim/calibration/algs.py" afterPath="$PROJECT_DIR$/havsim/calibration/algs.py" />
       <change beforePath="$PROJECT_DIR$/havsim/calibration/helper.py" afterPath="$PROJECT_DIR$/havsim/calibration/helper.py" />
       <change beforePath="$PROJECT_DIR$/scripts/meng assignments/platoon formation/platoonmetrics.py" afterPath="$PROJECT_DIR$/scripts/meng assignments/platoon formation/platoonmetrics.py" />
+      <change beforePath="$PROJECT_DIR$/scripts/meng assignments/platoon formation/platoonvis.py" afterPath="$PROJECT_DIR$/scripts/meng assignments/platoon formation/platoonvis.py" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="TRACKING_ENABLED" value="true" />
@@ -17,7 +20,7 @@
       <file leaf-file-name="plotting.py" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/havsim/plotting.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="15">
+            <state relative-caret-position="10350">
               <caret line="711" column="99" lean-forward="false" selection-start-line="711" selection-start-column="99" selection-end-line="711" selection-end-column="99" />
               <folding />
             </state>
@@ -47,21 +50,20 @@
       <file leaf-file-name="platoonmetrics.py" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/scripts/meng assignments/platoon formation/platoonmetrics.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="246">
-              <caret line="225" column="26" lean-forward="false" selection-start-line="225" selection-start-column="13" selection-end-line="225" selection-end-column="26" />
+            <state relative-caret-position="-129">
+              <caret line="330" column="0" lean-forward="false" selection-start-line="330" selection-start-column="0" selection-end-line="330" selection-end-column="0" />
               <folding>
                 <element signature="e#90#103#0" expanded="true" />
-                <marker date="1575845995434" expanded="true" signature="7669:7893" ph="..." />
               </folding>
             </state>
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="algs.py" pinned="false" current-in-tab="false">
+      <file leaf-file-name="algs.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/havsim/calibration/algs.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="20070">
-              <caret line="1343" column="4" lean-forward="false" selection-start-line="1343" selection-start-column="4" selection-end-line="1343" selection-end-column="4" />
+            <state relative-caret-position="-107">
+              <caret line="1070" column="14" lean-forward="false" selection-start-line="1070" selection-start-column="14" selection-end-line="1070" selection-end-column="14" />
               <folding />
             </state>
           </provider>
@@ -77,11 +79,11 @@
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="helper.py" pinned="false" current-in-tab="true">
+      <file leaf-file-name="helper.py" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/havsim/calibration/helper.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="-59">
-              <caret line="924" column="0" lean-forward="true" selection-start-line="924" selection-start-column="0" selection-end-line="924" selection-end-column="0" />
+            <state relative-caret-position="12495">
+              <caret line="836" column="24" lean-forward="false" selection-start-line="836" selection-start-column="24" selection-end-line="836" selection-end-column="24" />
               <folding>
                 <element signature="e#162#180#0" expanded="true" />
               </folding>
@@ -106,6 +108,7 @@
   <component name="FindInProjectRecents">
     <findStrings>
       <find>makeplatoon(</find>
+      <find>makeplatoonlist</find>
       <find>cirde</find>
     </findStrings>
   </component>
@@ -118,17 +121,17 @@
         <option value="$PROJECT_DIR$/scripts/meng assignments/visualization 3/plotting_test.py" />
         <option value="$PROJECT_DIR$/havsim/plotting.py" />
         <option value="$PROJECT_DIR$/scripts/meng assignments/visualization 3/plottingtestnew.py" />
-        <option value="$PROJECT_DIR$/havsim/calibration/algs.py" />
-        <option value="$PROJECT_DIR$/scripts/meng assignments/platoon formation/platoonmetrics.py" />
         <option value="$PROJECT_DIR$/havsim/calibration/helper.py" />
+        <option value="$PROJECT_DIR$/scripts/meng assignments/platoon formation/platoonmetrics.py" />
+        <option value="$PROJECT_DIR$/havsim/calibration/algs.py" />
       </list>
     </option>
   </component>
   <component name="ProjectFrameBounds">
-    <option name="x" value="131" />
-    <option name="y" value="24" />
-    <option name="width" value="1119" />
-    <option name="height" value="758" />
+    <option name="x" value="72" />
+    <option name="y" value="23" />
+    <option name="width" value="1409" />
+    <option name="height" value="811" />
   </component>
   <component name="ProjectInspectionProfilesVisibleTreeState">
     <entry key="Project Default">
@@ -165,8 +168,6 @@
       <foldersAlwaysOnTop value="true" />
     </navigator>
     <panes>
-      <pane id="Scope" />
-      <pane id="Scratches" />
       <pane id="ProjectPane">
         <subPane>
           <expand>
@@ -219,6 +220,8 @@
           <select />
         </subPane>
       </pane>
+      <pane id="Scope" />
+      <pane id="Scratches" />
     </panes>
   </component>
   <component name="PropertiesComponent">
@@ -321,18 +324,18 @@
     <servers />
   </component>
   <component name="ToolWindowManager">
-    <frame x="131" y="24" width="1119" height="758" extended-state="0" />
+    <frame x="72" y="23" width="1409" height="811" extended-state="0" />
     <editor active="true" />
     <layout>
-      <window_info id="Project" active="true" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.24134791" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
+      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.19092219" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
       <window_info id="TODO" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="6" side_tool="false" content_ui="tabs" />
-      <window_info id="Event Log" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="7" side_tool="true" content_ui="tabs" />
-      <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.32880846" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
+      <window_info id="Event Log" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.36871508" sideWeight="0.5230548" order="7" side_tool="true" content_ui="tabs" />
+      <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.3282123" sideWeight="0.47622478" order="2" side_tool="false" content_ui="tabs" />
       <window_info id="Version Control" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Python Console" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Structure" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.25" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Terminal" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
-      <window_info id="Debug" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.39819005" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
+      <window_info id="Debug" active="true" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.36871508" sideWeight="0.47694525" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Favorites" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="2" side_tool="true" content_ui="tabs" />
       <window_info id="Cvs" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.25" sideWeight="0.5" order="4" side_tool="false" content_ui="tabs" />
       <window_info id="Message" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
@@ -360,14 +363,14 @@
           <option name="timeStamp" value="30" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/havsim/calibration/helper.py</url>
-          <line>940</line>
-          <option name="timeStamp" value="79" />
+          <url>file://$PROJECT_DIR$/scripts/meng assignments/platoon formation/platoonmetrics.py</url>
+          <line>330</line>
+          <option name="timeStamp" value="85" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/havsim/calibration/helper.py</url>
-          <line>840</line>
-          <option name="timeStamp" value="82" />
+          <url>file://$PROJECT_DIR$/havsim/calibration/algs.py</url>
+          <line>1165</line>
+          <option name="timeStamp" value="93" />
         </line-breakpoint>
       </breakpoints>
       <default-breakpoints>
@@ -377,20 +380,22 @@
           </properties>
         </breakpoint>
       </default-breakpoints>
-      <option name="time" value="84" />
+      <option name="time" value="95" />
     </breakpoint-manager>
-    <watches-manager>
-      <configuration name="PythonConfigurationType">
-        <watch expression="max(temp)" language="Python" />
-        <watch expression="max(L)" language="Python" />
-        <watch expression="max(T)" language="Python" />
-        <watch expression="platooninfo[389]" language="Python" />
-        <watch expression="platooninfo[920]" language="Python" />
-      </configuration>
-    </watches-manager>
+    <watches-manager />
   </component>
   <component name="debuggerHistoryManager">
     <expressions id="watch">
+      <expression>
+        <expression-string>len(totfollist_copy)</expression-string>
+        <language-id>Python</language-id>
+        <evaluation-mode>EXPRESSION</evaluation-mode>
+      </expression>
+      <expression>
+        <expression-string>len(totfollist)</expression-string>
+        <language-id>Python</language-id>
+        <evaluation-mode>EXPRESSION</evaluation-mode>
+      </expression>
       <expression>
         <expression-string>platooninfo[920]</expression-string>
         <language-id>Python</language-id>
@@ -428,16 +433,6 @@
       </expression>
       <expression>
         <expression-string>platooninfo[1]</expression-string>
-        <language-id>Python</language-id>
-        <evaluation-mode>EXPRESSION</evaluation-mode>
-      </expression>
-      <expression>
-        <expression-string>bisect.bisect_left(spaceInterval, spacea[j][0])</expression-string>
-        <language-id>Python</language-id>
-        <evaluation-mode>EXPRESSION</evaluation-mode>
-      </expression>
-      <expression>
-        <expression-string>alldata[:,7]</expression-string>
         <language-id>Python</language-id>
         <evaluation-mode>EXPRESSION</evaluation-mode>
       </expression>
@@ -520,7 +515,6 @@
           <caret line="166" column="3" lean-forward="true" selection-start-line="166" selection-start-column="3" selection-end-line="166" selection-end-column="3" />
           <folding>
             <element signature="e#90#103#0" expanded="true" />
-            <marker date="1575845995434" expanded="true" signature="7669:7893" ph="..." />
           </folding>
         </state>
       </provider>
@@ -575,7 +569,6 @@
           <caret line="99" column="4" lean-forward="false" selection-start-line="99" selection-start-column="4" selection-end-line="99" selection-end-column="4" />
           <folding>
             <element signature="e#90#103#0" expanded="true" />
-            <marker date="1575845995434" expanded="true" signature="7669:7893" ph="..." />
           </folding>
         </state>
       </provider>
@@ -638,7 +631,6 @@
           <caret line="187" column="0" lean-forward="false" selection-start-line="187" selection-start-column="0" selection-end-line="187" selection-end-column="0" />
           <folding>
             <element signature="e#90#103#0" expanded="true" />
-            <marker date="1575845995434" expanded="true" signature="7669:7893" ph="..." />
           </folding>
         </state>
       </provider>
@@ -673,7 +665,6 @@
           <caret line="187" column="0" lean-forward="true" selection-start-line="187" selection-start-column="0" selection-end-line="187" selection-end-column="0" />
           <folding>
             <element signature="e#90#103#0" expanded="true" />
-            <marker date="1575845995434" expanded="true" signature="7669:7893" ph="..." />
           </folding>
         </state>
       </provider>
@@ -756,7 +747,6 @@
           <caret line="139" column="41" lean-forward="true" selection-start-line="139" selection-start-column="41" selection-end-line="139" selection-end-column="41" />
           <folding>
             <element signature="e#90#103#0" expanded="true" />
-            <marker date="1575845995434" expanded="true" signature="7669:7893" ph="..." />
           </folding>
         </state>
       </provider>
@@ -847,10 +837,10 @@
         </state>
       </provider>
     </entry>
-    <entry file="file:///Library/Frameworks/Python.framework/Versions/3.6/lib/python3.6/codecs.py">
+    <entry file="file://$PROJECT_DIR$/havsim/plotting.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="4620">
-          <caret line="308" column="0" lean-forward="false" selection-start-line="308" selection-start-column="0" selection-end-line="308" selection-end-column="0" />
+        <state relative-caret-position="10350">
+          <caret line="711" column="99" lean-forward="false" selection-start-line="711" selection-start-column="99" selection-end-line="711" selection-end-column="99" />
           <folding />
         </state>
       </provider>
@@ -863,40 +853,39 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/havsim/calibration/algs.py">
+    <entry file="file:///Library/Frameworks/Python.framework/Versions/3.6/lib/python3.6/codecs.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="20070">
-          <caret line="1343" column="4" lean-forward="false" selection-start-line="1343" selection-start-column="4" selection-end-line="1343" selection-end-column="4" />
+        <state relative-caret-position="4620">
+          <caret line="308" column="0" lean-forward="false" selection-start-line="308" selection-start-column="0" selection-end-line="308" selection-end-column="0" />
           <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/havsim/plotting.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="15">
-          <caret line="711" column="99" lean-forward="false" selection-start-line="711" selection-start-column="99" selection-end-line="711" selection-end-column="99" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/scripts/meng assignments/platoon formation/platoonmetrics.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="246">
-          <caret line="225" column="26" lean-forward="false" selection-start-line="225" selection-start-column="13" selection-end-line="225" selection-end-column="26" />
-          <folding>
-            <element signature="e#90#103#0" expanded="true" />
-            <marker date="1575845995434" expanded="true" signature="7669:7893" ph="..." />
-          </folding>
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/havsim/calibration/helper.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-59">
-          <caret line="924" column="0" lean-forward="true" selection-start-line="924" selection-start-column="0" selection-end-line="924" selection-end-column="0" />
+        <state relative-caret-position="12495">
+          <caret line="836" column="24" lean-forward="false" selection-start-line="836" selection-start-column="24" selection-end-line="836" selection-end-column="24" />
           <folding>
             <element signature="e#162#180#0" expanded="true" />
           </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/scripts/meng assignments/platoon formation/platoonmetrics.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="-129">
+          <caret line="330" column="0" lean-forward="false" selection-start-line="330" selection-start-column="0" selection-end-line="330" selection-end-column="0" />
+          <folding>
+            <element signature="e#90#103#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/havsim/calibration/algs.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="-107">
+          <caret line="1070" column="14" lean-forward="false" selection-start-line="1070" selection-start-column="14" selection-end-line="1070" selection-end-column="14" />
+          <folding />
         </state>
       </provider>
     </entry>

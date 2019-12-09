@@ -13,8 +13,8 @@ def platoonvis(meas,platooninfo,platoonlist):
     scores = []
     badplatoons = {}
     for i in platoonlist:
-            scores.append(helper.chain_metric(i, platooninfo, k = k, meas = meas)/len(i))
-    violation = helper.cirdep_metric(platoonlist, platooninfo, type='veh', meas= meas)
+            scores.append(helper.chain_metric(i, platooninfo, meas=meas, k=k) / len(i))
+    violation = helper.cirdep_metric(platoonlist, platooninfo, meas=meas, metrictype='veh')
     for i in violation: 
         try:
             badplatoons[i[1]].append(i[0])
@@ -34,13 +34,13 @@ useless =[] #for every useless vehicle, tuple of (vehicle, platoon, platoonindex
 for platcount, i in enumerate(platoons): 
     for count, j in enumerate(i):
         T = set(range(platooninfo[j][1],platooninfo[j][2]+1))
-        cur = helper.c_metric(j,i,T,platooninfo,meas=meas)
+        cur = helper.c_metric(j, i, T, platooninfo, meas=meas)
 #        try:
 #            cur2 = helper.c_metric(j,i,T,platooninfo,type ='follower')
 #        except: 
 #            print(j)
 #            print(i)
-        cur2 = helper.c_metric(j,i,T,platooninfo,type ='follower',meas = meas)
+        cur2 = helper.c_metric(j, i, T, platooninfo, meas=meas, metrictype='follower')
         if cur ==0 and cur2 == 0:
             cmetriclist.append(True)
             useless.append((j,i,platcount))
