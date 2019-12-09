@@ -207,30 +207,31 @@ print()
 k = .9
 platoon4 = [995, 998, 1013, 1023]
 testplatoon2 = [platoon4, [956]]
-# cir = helper.cirdep_metric(testplatoon2, platooninfo, meas=meas, k=k, metrictype='num')
-# print('circular metric testplatoon2 result is '+str(cir[0]))
-# print('expected result is '+str(37+k*13))
+
+cir = helper.cirdep_metric(testplatoon2, platooninfo, k=k, type='num',meas = meas)
+print('circular metric testplatoon2 result is '+str(cir[0]))
+print('expected result is '+str(37+k*13))
+
+testplatoon3 = [[925, 937, 956], [920]]
+cir = helper.cirdep_metric(testplatoon3, platooninfo, k=k, type='num', meas = meas)
+print('circular metric testplatoon3 result is '+str(cir[0]))
+print('expected result is '+str(509 + k*469+k**2*440))
+#should be 1224.89
+
+testplatoon4 = [[393, 409, 420], [395]]
+cir = helper.cirdep_metric(testplatoon4, platooninfo, k=k, type='num', meas = meas)
+print('circular metric testplatoon4 result is '+str(cir[0]))
+print('expected result is '+str(193 + k*163+k*18 + k**2*103))
+
+testplatoon5 = [[393, 409, 420],[395, 411, 389]]
+cir = helper.cirdep_metric(testplatoon5, platooninfo, k=k, type='num', meas = meas)
+print('circular metric testplatoon5 result is '+str(cir[0]))
+print('expected result is '+str(193 + k*163+k*18 + k**2*103 + 190+27+k*(22+34+33) + 244))
 #
-# testplatoon3 = [[925, 937, 956], [920]]
-# cir = helper.cirdep_metric(testplatoon3, platooninfo, meas=meas, k=k, metrictype='num')
-# print('circular metric testplatoon3 result is '+str(cir[0]))
-# print('expected result is '+str(485+k*445+k**2*419))
-# #should be 1224.89
-#
-# testplatoon4 = [[393, 409, 420], [395]]
-# cir = helper.cirdep_metric(testplatoon4, platooninfo, meas=meas, k=k, metrictype='num')
-# print('circular metric testplatoon4 result is '+str(cir[0]))
-# print('expected result is '+str(193 + k*163+k*18 + k**2*103))
-#
-# testplatoon5 = [[393, 409, 420],[395, 411, 389]]
-# cir = helper.cirdep_metric(testplatoon5, platooninfo, meas=meas, k=k, metrictype='num')
-# print('circular metric testplatoon5 result is '+str(cir[0]))
-# print('expected result is '+str(193 + k*163+k*18 + k**2*103 + 190+27+k*(22+34+33) + 244))
-#
-# testplatoon6 = [[393, 409, 420],[395, 411], [389]]
-# cir = helper.cirdep_metric(testplatoon6, platooninfo, meas=meas, k=k, metrictype='num')
-# print('circular metric testplatoon6 result is '+str(cir[0]))
-# print('expected result is '+str(193 + k*163+k*18 + k**2*103 + 190+27+k*(22+34+33) + 244))
+testplatoon6 = [[393, 409, 420],[395, 411], [389]]
+cir = helper.cirdep_metric(testplatoon6, platooninfo, k=k, type='num', meas = meas)
+print('circular metric testplatoon6 result is '+str(cir[0]))
+print('expected result is '+str(193 + k*163+k*18 + k**2*103 + 190+27+k*(22+34+33) + 244))
 
 platoon = [391, 335, 326]
 platoon0  = [381,391,335,326,334]
@@ -240,34 +241,34 @@ platoon3 = [259, 247, 315, 237]
 platoon4 = [995, 998, 1013, 1023]
 platoon5 = [393,409,420]
 
-# res = helper.chain_metric(platoon, platooninfo, meas=meas, k=k)
-# print('chain metric platoon result is '+str(res))
-# print('expected result is '+str(34))
-#
-# res = helper.chain_metric(platoon0, platooninfo, meas=meas, k=k)
-# print('chain metric platoon0 result is '+str(res))
-# print('expected result is '+str(507 + 34 + 59 + 194 + 56))
-#
-# res = helper.chain_metric(platoon1, platooninfo, meas=meas, k=k)
-# print('chain metric platoon1 result is '+str(res))
-# print('expected result is '+str(225+28+3*k))
-#
-# res = helper.chain_metric(platoon2, platooninfo, meas=meas, k=k)
-# print('chain metric platoon2 result is '+str(res))
-# print('expected result is '+str(40))
-#
-# res = helper.chain_metric(platoon3, platooninfo, meas=meas, k=k)
-# print('chain metric platoon3 result is '+str(res))
-# print('expected result is '+str(846+400*k))
-#
-# res = helper.chain_metric(platoon4, platooninfo, meas=meas, k=k)
-# print('chain metric platoon4 result is '+str(res))
-# print('expected result is '+str(1557+k*992+k**2*464))
-#
-# res = helper.chain_metric(platoon5, platooninfo, meas=meas, k=k)
-# print('chain metric platoon5 result is '+str(res))
-# print('expected result is '+str(163+103+190+40+34+33+k*103))
-# print()
+res = helper.chain_metric(platoon,platooninfo,k=k,meas = meas)
+print('chain metric platoon result is '+str(res))
+print('expected result is '+str(34))
+
+res = helper.chain_metric(platoon0,platooninfo,k=k,meas = meas)
+print('chain metric platoon0 result is '+str(res))
+print('expected result is '+str(507 + 34 + 59 + 194 + 56))
+
+res = helper.chain_metric(platoon1,platooninfo,k=k,meas = meas)
+print('chain metric platoon1 result is '+str(res))
+print('expected result is '+str(225+28+3*k))
+
+res = helper.chain_metric(platoon2,platooninfo,k=k,meas = meas)
+print('chain metric platoon2 result is '+str(res))
+print('expected result is '+str(40))
+
+res = helper.chain_metric(platoon3,platooninfo,k=k,meas = meas)
+print('chain metric platoon3 result is '+str(res))
+print('expected result is '+str(846+400*k))
+
+res = helper.chain_metric(platoon4,platooninfo,k=k,meas = meas)
+print('chain metric platoon4 result is '+str(res))
+print('expected result is '+str(1557+k*992+k**2*464))
+
+res = helper.chain_metric(platoon5,platooninfo,k=k,meas = meas)
+print('chain metric platoon5 result is '+str(res))
+print('expected result is '+str(163+103+190+40+34+33+k*103))
+print()
 #
 #%%
 
@@ -286,11 +287,11 @@ platoon5 = [393,409,420]
 #925 violates circular dependency because 925 follows 920
 #
 #testplatoon3:
-#484 when 920 has follower 925 in [2635, 3119]
-#k*444 when 925 has follower 937 in [2675, 3119]
-#k**2 * 418 when 937 has follower 956 in [2701, 3119]
+#509 when 920 has follower 925 in [2635, 3143]
+#k*469 when 925 has follower 937 in [2675, 3143]
+#k**2 * 440 when 937 has follower 956 in [2701, 3140]
 #
-#metric = 485 + k*445 + k**2 * 419
+#metric = 509 + k*469+k**2*440
 #
 #testplatoon4:  [[393, 409, 420],[395]]
 #circular dependency because 393 follows 395
