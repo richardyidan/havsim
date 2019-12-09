@@ -856,7 +856,7 @@ def makeplatoon33(platooninfo, leaders, simcount, curlead, totfollist, followers
 
 # Another modification for 3.3
 
-def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[], cycle_num=100, n=10):
+def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[], cycle_num=100, n=10, X = None, Y = 3):
 #	input:
 #    meas, (see function makeplatooninfo)
 #
@@ -866,12 +866,7 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
 #
 #    simcount (see function makeplatooninfo), - note that makeplatoon modifies this value; it keeps track of how many vehicles still have followers yet to be simulated
 #
-#    curlead - output from makeplatooninfo. This controls what vehicle we currently prioritize; that vehicle followers are attempted to be added first. updated
-#    during the execution and outputted to be used in the next platoon. DEPRECATED 12/5/19
-#
 #    totfollist - output from makeplatooninfo. updated during execution. this is all followers of every vehicle in leaders 
-#
-#    followers - output from makeplatooninfo. updated during execution. vehicles in followers have priority of being added. DEPRECATED 12/5/19
 #
 #    n = 10: n controls how big the maximum platoon size is. n is the number of following vehicles (i.e. simulated vehicles)
 #
@@ -885,11 +880,7 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
 #
 #    simcount, how many more vehicles have followers that can be simulated. when simcount = 0 all vehicles in the data have been simulated.
 #
-#    curlead - current leader. this will be the last vehicle added.
-#
 #    totfollist - updated total list of followers. updated because any simulted vehicle is added as a new leader
-#
-#    followers - updated current candidate followers. updated as we add new leaders to curleadlist and simulate followers.
 #
 #    platoons - the list of vehicles
 
@@ -934,52 +925,32 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
 
         else: #resolve circular dependency 
            #look for circular dependencies; we will look at the smallest possible graph hence the for loop
-            bestG = None
-            bestGlen = float('inf')
-            bestGedge = float('inf')
-            for j in totfollist: #for loop to choose the smallest network possible
-                # if graphtype == 'digraph':
-                #     G = nx.DiGraph()
-                # else:
-                #     G = nx.Graph()
-                G = nx.DiGraph()
-                prevfolfix = [] #vehicles that we have already added all of their problem leaders to the network
-                nextfolfix = [] #these are vehicles we need to add their problem leaders to the network after we deal with the current folfix
-                folfix = j
-                G.add_node(folfix)
-                chklead = platooninfo[folfix][4]
-                for i in chklead:
-                    if i not in leaders:
-                        G.add_node(i) #add them to network
-                        G.add_edge(folfix,i) #add an edge from folfix to the leader its missing (i)
-                        if i not in prevfolfix: #if we haven't already done this for i
-                            nextfolfix.append(i) #add i to the list of vehicles we need to check
-                prevfolfix.append(folfix) #after we have checked i we don't have to check it again so put it in prevfolfix
-                while len(nextfolfix) > 0:  #keep checking everything in netfolfix until everything needed is in prevfolfix: at that point netfolfix can't get bigger
-                    folfix = nextfolfix.pop()
-                    chklead = platooninfo[folfix][4]
-                    for i in chklead:
-                        if i not in leaders:
-                            G.add_node(i)
-                            G.add_edge(folfix,i)
-                            if i not in prevfolfix:
-                                nextfolfix.append(i)
-                    prevfolfix.append(folfix)
-                if len(G.nodes()) < bestGlen or len(G.edges())<bestGedge:
-                    bestG = G.copy()
-                    bestGlen = len(G.nodes())
-                    bestGedge = len(G.edges())
-            #actually we have to use digraph so this keyword is pointless
-            # if graphtype == 'digraph':
-            #     cyclebasis = nx.simple_cycles(bestG) #get cycle basis (this is a generator)
-            # else:
-            #     cyclebasis = nx.cycle_basis(bestG)
-            cyclebasis = nx.simple_cycles(bestG)
+            G = nx.DiGraph()
+            depth = {j: 0 for j in totfollist}
+            curdepth = set(totfollist)
+            alreadyadded = set(totfollist) 
+            dcount = 0 #depth count 
+            while len(curdepth) > 0 and dcount <= Y:
+                nextdepth = set()
+                for j in curdepth: 
+                    for i in platooninfo[j][4]:
+                        if i not in leaders: 
+                            G.add_edge(j,i)
+                            try:
+                                if dcount < depth[i]: #can update depth only if its less
+                                    depth[i] = dcount
+                            except: #except if depth[i] doesn't exist; can initialize
+                                depth[i] = dcount
+                            if i not in alreadyadded and i not in curdepth:
+                                nextdepth.add(i)
+                alreadyadded = alreadyadded.union(curdepth)
+                curdepth = nextdepth 
+            cyclebasis = nx.simple_cycles(G)
 
             def original():
                 nonlocal simcount, curn, platoons, totfollist
                 #first get the universe and subsets for the set cover problem
-                universe = list(bestG.nodes()) #universe for set cover
+                universe = list(G.nodes()) #universe for set cover
 
 
                 subsets = list(cyclebasis) #takes a long time to convert generator to list when the generator is very long; this is what dominates the cost
@@ -1028,7 +999,7 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
 
             def modification341():
                 nonlocal simcount, curlead, totfollist
-                universe = list(bestG.nodes())  # universe for set cover
+                universe = list(G.nodes())  # universe for set cover
 
                 subsets = []
                 count = 0
@@ -1167,7 +1138,8 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
                 # platoons.extend(bestCurFix)
                 # otherwise curlead will be the last viable vehicle in result
 
-            original()
+#            original()
+            modification342()
     #right before we terminate, add the most recent platoon
 #    print(platoons)
 
