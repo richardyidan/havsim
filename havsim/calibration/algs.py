@@ -897,12 +897,6 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
     platoonsout = []
     platoons = [] #output
     curn = 0 #current n value
-    
-    #choose how to add first vehicle
-    #want to use hueristics - keep track of lane last vehicle was added in. 
-    #prioritize adding in this same lane. 
-    #if that's not possible, add vehicle with longest simulated time. 
-#    for i in totfollist: 
         
     #extra heuristic - 
     while curn < n and simcount > 0: #loop which will be exited when the platoon is of size desired n or when no more vehicles can be added
@@ -1173,9 +1167,9 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
                 # platoons.extend(bestCurFix)
                 # otherwise curlead will be the last viable vehicle in result
 
-            modification342()
+            original()
     #right before we terminate, add the most recent platoon
-    print(platoons)
+#    print(platoons)
 
     platoonsout.append(platoons)
     return platooninfo, leaders, simcount, curlead, totfollist, platoonsout
