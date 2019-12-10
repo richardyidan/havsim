@@ -934,9 +934,10 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
                 #so instead we will try to add the smaller cyclers first
                 #if you don't do this you will get needlessly large cycles. 
                 Glen = math.inf
+                Gedge= math.inf
                 for i in totfollist:
                     curG, depth = makedepgraph([i],leaders,platooninfo,math.inf)
-                    if len(curG.nodes()) < Glen:
+                    if len(curG.nodes()) < Glen or len(curG.edges())<Gedge:
                         G = curG
                 cyclebasis = nx.simple_cycles(G)
                 
