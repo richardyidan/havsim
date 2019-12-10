@@ -939,10 +939,11 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
                     curG, depth = makedepgraph([i],leaders,platooninfo,math.inf)
                     if len(curG.nodes()) < Glen or len(curG.edges())<Gedge:
                         G = curG
+                        Glen = len(G.nodes())
+                        Gedge = len(G.edges())
                 cyclebasis = nx.simple_cycles(G)
                 
                 universe = list(G.nodes()) #universe for set cover
-
                 subsets = []
                 count = 0
                 while count < cycle_num:
@@ -988,7 +989,7 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
 
                 #update platoons accordingly
 #                print(platoonsout)
-#                print(curfix)
+                print(curfix)
                 if curn + len(curfix) > n and curn > 0:
                     platoonsout.append(platoons)
                     platoons = curfix
@@ -1101,7 +1102,6 @@ def makedepgraph(totfollist,leaders,platooninfo, Y):
         alreadyadded = alreadyadded.union(curdepth)
         curdepth = nextdepth 
     return G, depth
-    
 # Modification 3.4.1
 
 def makeplatoon341(platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, meas=[], cycle_num=10, n=10, graphtype = 'digraph'):

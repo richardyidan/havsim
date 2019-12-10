@@ -68,4 +68,19 @@ Created on Thu Sep 26 20:31:23 2019
 #        print(i)
 
 #meas, platooninfo,platoons = makeplatoonlist(data,n=5)
-helper.c_metric(384,platoons[0],T,platooninfo,type='follower')
+#helper.c_metric(384,platoons[0],T,platooninfo,type='follower')
+
+#%%
+from havsim.calibration.algs import makedepgraph, oldmakedepgraph
+totfollist = [672.0, 503.0, 582.0, 423.0, 455.0, 518.0, 435.0, 533.0, 470.0, 439.0, 413.0, 511.0]
+leaders = [492.0, 521.0, 460.0, 380.0, 420.0, 409.0, 400.0, 411.0, 406.0, 394.0, 312.0, 657.0, 613.0, 384.0]
+
+Glen = math.inf
+Gedge= math.inf
+for i in totfollist:
+    curG, depth = makedepgraph([i],leaders,platooninfo,math.inf)
+    if len(curG.nodes()) < Glen or len(curG.edges())<Gedge:
+        G = curG
+        print('best new G is '+str(i)+' source with '+str(len(G.nodes()))+' nodes')
+        
+oldG = oldmakedepgraph(totfollist,leaders,platooninfo)
