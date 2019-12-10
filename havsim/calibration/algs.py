@@ -10,6 +10,7 @@ import networkx as nx
 import copy 
 import scipy.stats as ss
 from havsim.calibration.helper import chain_metric, c_metric
+import math
 
 def makefollowerchain2(leadID, dataset, n=1, picklane = 0 ):
 	
@@ -924,36 +925,26 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
                     leaders.remove(j)  # remove it from the list of leaders
 
         else: #resolve circular dependency 
-           #look for circular dependencies; we will look at the smallest possible graph hence the for loop
-            G = nx.DiGraph()
-            depth = {j: 0 for j in totfollist}
-            curdepth = set(totfollist)
-            alreadyadded = set(totfollist) 
-            dcount = 0 #depth count 
-            while len(curdepth) > 0 and dcount <= Y:
-                nextdepth = set()
-                for j in curdepth: 
-                    for i in platooninfo[j][4]:
-                        if i not in leaders: 
-                            G.add_edge(j,i)
-                            try:
-                                if dcount < depth[i]: #can update depth only if its less
-                                    depth[i] = dcount
-                            except: #except if depth[i] doesn't exist; can initialize
-                                depth[i] = dcount
-                            if i not in alreadyadded and i not in curdepth:
-                                nextdepth.add(i)
-                alreadyadded = alreadyadded.union(curdepth)
-                curdepth = nextdepth 
-            cyclebasis = nx.simple_cycles(G)
+           
 
             def original():
                 nonlocal simcount, curn, platoons, totfollist
-                #first get the universe and subsets for the set cover problem
+                #iterate over all followers, try to find the graph with least amount of followers
+                #we do this because we don't use the depth argument to keep track of which cycles are preferable,
+                #so instead we will try to add the smaller cyclers first
+                #if you don't do this you will get needlessly large cycles. 
+                Glen = math.inf
+                for i in totfollist:
+                    curG, depth = makedepgraph([i],leaders,platooninfo,math.inf)
+                    if len(curG.nodes()) < Glen:
+                        G = curG
+                cyclebasis = nx.simple_cycles(G)
+                
                 universe = list(G.nodes()) #universe for set cover
 
 
                 subsets = list(cyclebasis) #takes a long time to convert generator to list when the generator is very long; this is what dominates the cost
+                
                 for i in range(len(subsets)):
                     subsets[i] = set(subsets[i])
                 #actually we want to solve a hitting set problem, but we do this with a set cover algorithm, so we have some extra conversion to do
@@ -989,7 +980,9 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
                     totfollist = list(set(totfollist))
 
                 #update platoons accordingly
-                if curn + len(curfix) > n:
+#                print(platoonsout)
+#                print(curfix)
+                if curn + len(curfix) > n and curn > 0:
                     platoonsout.append(platoons)
                     platoons = curfix
                     curn = len(curfix)
@@ -997,75 +990,11 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
                     platoons.extend(curfix)
                     curn = curn + len(curfix)
 
-            def modification341():
-                nonlocal simcount, curlead, totfollist
-                universe = list(G.nodes())  # universe for set cover
-
-                subsets = []
-                count = 0
-                while count < cycle_num:
-                    try:
-                        subsets.append(next(cyclebasis))
-                    except:
-                        break
-                    count += 1
-
-                # subsets = list(cyclebasis) #takes a long time to convert generator to list when the generator is very long; this is what dominates the cost
-                for i in range(len(subsets)):
-                    subsets[i] = set(subsets[i])
-                # now we have what is needed for the set cover problem, and we need to convert this into a hitting set problem.
-                HSuni = list(range(len(
-                    subsets)))  # read variable name as hitting set universe; universe for the hitting set HSuni[0] corresponds to subsets[0]
-                HSsubsets = []  # this is the list of subsets for the hitting set
-                for i in range(len(universe)):  # each member of universe we need to replace with a set
-                    curveh = universe[i]  # current member of universe
-                    cursubset = set()  # initialize the set we will replace it with
-                    for j in range(len(subsets)):  #
-                        if curveh in subsets[j]:  # if i is in subsets[j] then we add the index to the current set for i
-                            cursubset.add(j)
-                    HSsubsets.append(cursubset)
-                result = helper.greedy_set_cover(HSsubsets,
-                                                 HSuni)  # solve the set cover problem which gives us the HSsubsets which cover HSuni
-
-                # now we have to convert the output of the set cover algorithm back to the actual vehicles we will be simulating
-                newlead = None  # initilize the new curlead as none
-                curfix = []  # curfix will be all the vehicles in the result
-                for i in result:
-                    curveh = universe[HSsubsets.index(i)]  # vehicle ID of the corresponding vehicle in the hitting set
-                    curfix.append(curveh)
-                    chklead = platooninfo[curveh][4]
-
-                    leaders.insert(0, curveh)  # curveh will be simulated now so we can insert it into leaders
-                    # also need to add all the followers into totfollist because we may potentially add several leaders in this section of the code
-                    if curveh in totfollist:
-                        totfollist.remove(curveh)
-
-                    for j in chklead:
-                        if curveh in platooninfo[j][-1]:
-                            platooninfo[j][-1].remove(curveh)
-                        # To be honest I'm not sure at all why the below is here? 11/21/19
-                        #                        if j not in leaders: #j might be in followers or totfollist in this special case where we resolve loops
-                        #                            curfix.append(j)
-                        # I think can just comment out the above
-                        if len(platooninfo[j][-1]) < 1:  # remove a leader if all followers are gone
-                            simcount += -1
-                            if j in leaders:
-                                leaders.remove(j)
-                    # now we see whether or not curveh can be a viable curlead
-                    if len(platooninfo[curveh][
-                               -1]) < 1:  # if it has no followers it cant be curlead; don't update newlead
-                        leaders.remove(curveh)
-                    else:
-                        # curveh is a viable lead vehicle; add its followers and set newlead = curveh
-                        for j in platooninfo[curveh][-1]:
-                            totfollist.insert(0, j)
-                        totfollist = list(set(totfollist))
-                        newlead = curveh  # curveh is viable
-
-                platoons.extend(curfix)  # will get nested platoons because curfix is a list
-                curlead = newlead  # if no viable leaders were found, this will give curlead = None
             def modification342():
                 nonlocal simcount, totfollist, platoons, curn, curlead
+                G, depth = makedepgraph(totfollist,leaders,platooninfo,math.inf)
+                cyclebasis = nx.simple_cycles(G)
+                
                 count = 1000
                 bestCurFix = None
                 while count > 0:  # check first 1000 cycles
@@ -1135,19 +1064,37 @@ def makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
                 else:
                     platoons.extend(bestCurFix)
                     curn = curn + len(bestCurFix)
-                # platoons.extend(bestCurFix)
-                # otherwise curlead will be the last viable vehicle in result
 
-#            original()
-            modification342()
-    #right before we terminate, add the most recent platoon
-#    print(platoons)
+            original()
+#            modification342()
 
     platoonsout.append(platoons)
     return platooninfo, leaders, simcount, curlead, totfollist, platoonsout
 
 
-
+def makedepgraph(totfollist,leaders,platooninfo, Y):
+    G = nx.DiGraph()
+    depth = {j: 0 for j in totfollist}
+    curdepth = set(totfollist)
+    alreadyadded = set(totfollist) 
+    dcount = 0 #depth count 
+    while len(curdepth) > 0 and dcount <= Y:
+        nextdepth = set()
+        for j in curdepth: 
+            for i in platooninfo[j][4]:
+                if i not in leaders: 
+                    G.add_edge(j,i)
+                    try:
+                        if dcount < depth[i]: #can update depth only if its less
+                            depth[i] = dcount
+                    except: #except if depth[i] doesn't exist; can initialize
+                        depth[i] = dcount
+                    if i not in alreadyadded and i not in curdepth:
+                        nextdepth.add(i)
+        alreadyadded = alreadyadded.union(curdepth)
+        curdepth = nextdepth 
+    return G, depth
+    
 # Modification 3.4.1
 
 def makeplatoon341(platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, meas=[], cycle_num=10, n=10, graphtype = 'digraph'):
