@@ -514,8 +514,9 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
             if cirdep:
                 curfix = breakcycles(totfollist, leaders, platooninfo, cycle_num)
             else:
-                curfix = addcycles(totfollist, leaders, platooninfo, cycle_num)
+                curfix = addcycles3(totfollist, leaders, platooninfo, cycle_num)
                 print([totfollist, leaders, curfix])
+#                print(curfix)
 
             #update leaders, platooninfo, totfollist, simcount so we can add all vehicles in curfix
             for i in curfix:
@@ -680,6 +681,122 @@ def addcycles(totfollist, leaders, platooninfo, cycle_num):
         
         curfix, unused = makedepgraph(candidates,leaders,platooninfo,math.inf)
         curdepth = min([depth[i] for i in curfix.nodes()])
+        cursize = len(curfix.nodes())
+        if curdepth <= bestdepth:
+            if cursize < bestsize:
+#        if cursize <=bestsize: 
+#            if curdepth < bestdepth:
+                bestCurFix = curfix
+                bestdepth = curdepth
+                bestsize = cursize
+                
+    return list(bestCurFix.nodes())
+
+def addcycles2(totfollist, leaders, platooninfo, cycle_num):
+    #we add cycles all at once so there will not be circular dependencies in platoon
+#    G, depth = makedepgraph(totfollist,leaders,platooninfo,math.inf)
+#    cyclebasis = nx.simple_cycles(G)
+#    
+#    count = cycle_num
+#    bestdepth = math.inf
+#    bestsize = math.inf
+#    while count > 0:  # check first cycle_num cycles
+#        count -= 1
+#        try:
+#            cycle = next(cyclebasis)
+#        except:
+#            break
+#        #
+    bestdepth = math.inf
+    bestsize = math.inf
+    for i in totfollist: 
+#        candidates = list(cycle)
+        
+#                    curfix.extend(candidates)
+#                    totfollist_copy = list(totfollist)
+#                    while True:
+#                        extraLeaders = []
+#                        for i in candidates:
+#                            extraLeaders.extend(platooninfo[i][4])
+#                        extraLeaders = list(set(extraLeaders) - set(cycle))
+#                        curfix.extend(extraLeaders)
+#                        curfix = list(set(curfix))
+#                        candidates = []
+#                        #
+#                        Done = True
+#                        removed = []
+#                        #
+#                        for i in extraLeaders:
+#                            if i in totfollist_copy:
+#                                candidates.append(i)
+#                                removed.append(i)
+#                                Done = False
+#                        for i in removed:
+#                            totfollist_copy.remove(i)
+#                        if Done:
+#                            break
+        
+        curfix, unused = makedepgraph([i],leaders,platooninfo,math.inf)
+#        curdepth = min([depth[i] for i in curfix.nodes()])
+        curdepth = 0
+        cursize = len(curfix.nodes())
+        if curdepth <= bestdepth:
+            if cursize < bestsize:
+#        if cursize <=bestsize: 
+#            if curdepth < bestdepth:
+                bestCurFix = curfix
+                bestdepth = curdepth
+                bestsize = cursize
+                
+    return list(bestCurFix.nodes())
+
+def addcycles3(totfollist, leaders, platooninfo, cycle_num):
+    #we add cycles all at once so there will not be circular dependencies in platoon
+    G, depth = makedepgraph(totfollist,leaders,platooninfo,math.inf)
+#    cyclebasis = nx.simple_cycles(G)
+#    
+#    count = cycle_num
+#    bestdepth = math.inf
+#    bestsize = math.inf
+#    while count > 0:  # check first cycle_num cycles
+#        count -= 1
+#        try:
+#            cycle = next(cyclebasis)
+#        except:
+#            break
+#        #
+    bestdepth = math.inf
+    bestsize = math.inf
+    for i in G.nodes(): 
+#        candidates = list(cycle)
+        
+#                    curfix.extend(candidates)
+#                    totfollist_copy = list(totfollist)
+#                    while True:
+#                        extraLeaders = []
+#                        for i in candidates:
+#                            extraLeaders.extend(platooninfo[i][4])
+#                        extraLeaders = list(set(extraLeaders) - set(cycle))
+#                        curfix.extend(extraLeaders)
+#                        curfix = list(set(curfix))
+#                        candidates = []
+#                        #
+#                        Done = True
+#                        removed = []
+#                        #
+#                        for i in extraLeaders:
+#                            if i in totfollist_copy:
+#                                candidates.append(i)
+#                                removed.append(i)
+#                                Done = False
+#                        for i in removed:
+#                            totfollist_copy.remove(i)
+#                        if Done:
+#                            break
+        
+        curfix, unused = makedepgraph([i],leaders,platooninfo,math.inf)
+        curdepth = min([depth[i] for i in curfix.nodes()])
+#        curdepth = 0
         cursize = len(curfix.nodes())
         if curdepth <= bestdepth:
             if cursize < bestsize:
