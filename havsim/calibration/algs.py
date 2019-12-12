@@ -9,7 +9,7 @@ from . import helper
 import networkx as nx
 import copy 
 import scipy.stats as ss
-from havsim.calibration.helper import chain_metric, c_metric
+from havsim.calibration.helper import chain_metric, c_metric, cirdep_metric
 import math
 import matplotlib.pyplot as plt
 
@@ -988,9 +988,13 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
             for k in j:
                 if k in followers:
                     j.append(veh)
-                    platoonlist[index].remove(veh)
-                    done = True
-                    break
+                    cirdep_list = cirdep_metric([j], platooninfo, meas, metrictype='veh')
+                    if not cirdep_list:
+                        platoonlist[index].remove(veh)
+                        done = True
+                        break
+                    else:
+                        j.remove(veh)
             if done:
                 break
 
