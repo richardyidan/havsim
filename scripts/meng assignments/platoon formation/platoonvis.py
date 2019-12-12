@@ -26,7 +26,7 @@ def platoonvis(meas,platooninfo,platoonlist):
     return scores, badplatoons, badplatoonslist
 scores, badplatoon,badplatoonlist = platoonvis(meas,platooninfo,platoons)
 #%%
-out = hplt.animatetraj(meas,platooninfo,platoon=[platoons[243], platoons[244]])
+out = hplt.animatetraj(meas,platooninfo,platoon=cycle)
 
 #%%
 cmetriclist = [] #True if useless, False otherwise, counts number of useless vehicles

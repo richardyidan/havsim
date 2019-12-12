@@ -422,7 +422,7 @@ def makeplatooninfo(dataset, simlen = 50):
 
 
 def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, meas=[], 
-                   cycle_num=5e5, n=10, X = 1, Y = 0, cirdep = False,maxn= False, previousPlatoon=[]):
+                   cycle_num=5e5, n=10, X = math.inf, Y = 0, cirdep = False,maxn= False, previousPlatoon=[]):
 #	input:
 #    meas, (see function makeplatooninfo)
 #
@@ -574,7 +574,8 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
             if cirdep:
                 curfix = breakcycles(totfollist, leaders, platooninfo, cycle_num)
             else:
-                curfix = resolveCycleEarly(totfollist, leaders, platooninfo, cycle_num, Y)
+#                curfix = resolveCycleEarly(totfollist, leaders, platooninfo, cycle_num, Y)
+                curfix = addcycles3(totfollist,leaders,platooninfo,cycle_num)
                 print([totfollist, leaders, curfix])
 #                print(curfix)
             addCurfix(curfix)
@@ -590,7 +591,7 @@ def makedepgraph(totfollist,leaders,platooninfo, Y):
     depth = {j: 0 for j in totfollist}
     curdepth = set(totfollist)
     alreadyadded = set(totfollist) 
-    dcount = 0 #depth count 
+    dcount = 1 #depth count 
     while len(curdepth) > 0 and dcount <= Y:
         nextdepth = set()
         for j in curdepth: 
@@ -814,8 +815,8 @@ def addcycles3(totfollist, leaders, platooninfo, cycle_num):
 #                            break
         
         curfix, unused = makedepgraph([i],leaders,platooninfo,math.inf)
-        curdepth = min([depth[i] for i in curfix.nodes()])
-#        curdepth = 0
+#        curdepth = min([depth[i] for i in curfix.nodes()])
+        curdepth = 0
         cursize = len(curfix.nodes())
         if curdepth <= bestdepth:
             if cursize < bestsize:
