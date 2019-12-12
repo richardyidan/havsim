@@ -499,6 +499,7 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
             totfollist.extend(platooninfo[curveh][-1])
             totfollist = list(set(totfollist))
         # add all vehicles in curfix
+
         if curn + len(curfix) > n:
             if maxn:  # keep platoons of size n in this case if you want
                 m = len(curfix)
@@ -847,6 +848,26 @@ def resolveCycleEarly(totfollist, leaders, platooninfo, cycle_num, Y):
                 bestdepth = curdepth
                 bestsize = cursize
         count += 1
+
+    # while True:
+    #     try:
+    #         cycles = nx.find_cycle(G)
+    #         vehlcles = set([])
+    #         for i in cycles:
+    #             vehlcles.add(i[0])
+    #             vehlcles.add(i[1])
+    #         curdepth = min([depth[i] if i in depth.keys() else 0 for i in vehlcles])
+    #         cursize = len(vehlcles)
+    #         if curdepth <= bestdepth:
+    #             if cursize < bestsize:
+    #                 bestCurFix = vehlcles
+    #                 bestdepth = curdepth
+    #                 bestsize = cursize
+    #         G.remove_edges_from(cycles)
+    #     except:
+    #         break
+
+
     return list(bestCurFix.nodes())
 
 def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= None, vehs = None,cycle_num=math.inf, cirdep = False):
