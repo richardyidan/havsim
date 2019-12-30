@@ -875,20 +875,23 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
     def getUseless(platoons, platooninfo, meas):
         cmetriclist = []  # True if useless, False otherwise, counts number of useless vehicles
         useless = []  # for every useless vehicle, tuple of (vehicle, platoon, platoonindex)
+        platind = {}
         for platcount, i in enumerate(platoons):
             for count, j in enumerate(i):
+                platind[j] = platcount
                 T = set(range(platooninfo[j][1], platooninfo[j][2] + 1))
                 cur = helper.c_metric(j, i, T, platooninfo, meas=meas)
 
                 cur2 = helper.c_metric(j, i, T, platooninfo, meas=meas, metrictype='follower')
+                
                 if cur == 0 and cur2 == 0:
                     cmetriclist.append(True)
                     useless.append((j, i, platcount))
                 else:
                     cmetriclist.append(False)
-        return useless
+        return useless, platind
     
-    useless = getUseless(platoonlist, platooninfo, meas) #list of tuple (vehicle, platoon, platoonindex) for each useless vehicle
+    useless, platind = getUseless(platoonlist, platooninfo, meas) #list of tuple (vehicle, platoon, platoonindex) for each useless vehicle
     print("Useless vehlcles before:", len(useless))
     mustbeuseless = []
     for i in useless:
@@ -907,20 +910,48 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
             mustbeuseless.append(i)
             continue
         
-        done = False
-        for j in platoonlist:
-            for k in j:
-                if k in followers:
-                    j.append(veh)
-                    cirdep_list = cirdep_metric([j], platooninfo, meas, metrictype='veh')
-                    if not cirdep_list:
-                        platoonlist[index].remove(veh)
-                        done = True
-                        break
-                    else:
-                        j.remove(veh)
-            if done:
-                break
+        #check for a better platoon to put a vehicle in
+        leadscore = -math.inf
+        folscore = -math.inf
+        leadersind = []
+        for j in leaders: 
+            if platooninfo[j][1] == platooninfo[j][2]: #these vehicles don't have entries in platind
+                continue
+            else: 
+                leadersind.append(platind[j])
+        followersind = [platind[j] for j in followers]
+        T = set(range(platooninfo[veh][1],platooninfo[veh][2]+1)) 
+        if len(leadersind)>0:
+            leadind = max(leadersind)
+            leadscore = helper.c_metric(veh, platoonlist[leadind], T, platooninfo, meas=meas) + helper.c_metric(veh, platoonlist[leadind], T, platooninfo, meas=meas, metrictype = 'follower')
+        if len(followersind)>0:
+            folind = min(followersind)
+            folscore = helper.c_metric(veh, platoonlist[folind], T, platooninfo, meas=meas) + helper.c_metric(veh, platoonlist[folind], T, platooninfo, meas=meas,metrictype = 'follower')
+        if leadscore != -math.inf or folscore != -math.inf: #if there is a viable platoon to put vehicle into 
+            if leadscore > folscore:  #put it into the better one 
+                platoonlist[index].remove(veh)
+                platoonlist[leadind].append(veh)
+                platind[veh] = leadind
+            else: 
+                platoonlist[index].remove(veh)
+                platoonlist[folind].append(veh)
+                platind[veh] = folind
+        
+        #old way 
+#        done = False
+#        for j in platoonlist:
+#            for k in j:
+#                if k in followers:
+#                    j.append(veh)
+#                    cirdep_list = cirdep_metric([j], platooninfo, meas, metrictype='veh')
+#                    if not cirdep_list:
+#                        platoonlist[index].remove(veh)
+#                        done = True
+#                        break
+#                    else:
+#                        j.remove(veh)
+#            if done:
+#                break
         
     count = 0 
     for i in mustbeuseless: #add the useless vehicles by themselves
@@ -929,7 +960,7 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
         count += 1
 
     platoonlist = [j for j in platoonlist if j != []]
-    useless2 = getUseless(platoonlist, platooninfo, meas)
+    useless2, platind = getUseless(platoonlist, platooninfo, meas)
     print("Useless vehlcles after:", len(useless2))
     print("Vehicles which must be useless:", len(mustbeuseless))
 
