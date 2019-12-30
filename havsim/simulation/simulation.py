@@ -6,13 +6,13 @@ houses the main code for running simulations
 TO DO /
     implementing boundary conditions 
     getting networks working (need to handle changing roads, some rule for merging) (relaxation, mobil)
-    want some loss function that won't end up convering to a lower speed like the l2v will - 
-    something that balances between stability and high speed. 
+    adding simple lane changing and multi lane 
     how to do the adjoint calculation
+    reinforcement learning/rewriting calibration code
     
+    want some loss function that won't end up converging to a lower speed like the l2v will - 
+    something that balances between stability and high speed. 
     paper on AV control
-    
-    adding lane changing and multi lane 
     
     add some more models
     
@@ -21,8 +21,7 @@ TO DO /
     different update functions, handling derivatives, handling different loss functions, how lane changing will work 
     etc. 
     
-    reinforcement learning/rewriting calibration code
-
+    
     
 """
 #some tool for creating custom models out of modular parts, which should be part of models subpackage. 

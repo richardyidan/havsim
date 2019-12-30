@@ -5,6 +5,12 @@ Testing and debugging functions.
 I also use this script to benchmark the speed and accuracy of the adjoint method. 
 There are also examples of how to setup the optimization problem and call different algorithms. However these examples are pretty deprecated, refer
 to files like adjointcontent, relaxcontent or algtesting2 for more up to date optimization routines being called 
+
+can verify that in discrete time the gradient isn't necessarily continuous, specifically there are issues with how many 
+timesteps get put into each gradient calculation, simplest example is relaxatino phenomenon 
+around 5 i.e. 5-1e-8 adjoint gets 4 timesteps with sensitivity, 5+1e-8 it gets 5 timesteps 
+with sensitivity, and so you get an extra kick to the total gradient when this happens because 
+of the extra timestep. 
 @author: rlk268
 """
 
