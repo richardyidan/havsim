@@ -421,7 +421,7 @@ def makeplatooninfo(dataset, simlen = 50):
 
 
 
-def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, meas=[], 
+def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, vehicles_added, meas=[], 
                    cycle_num=5e5, n=10, X = math.inf, Y = 0, cirdep = False,maxn= False, previousPlatoon=[]):
 #	input:
 #    meas, (see function makeplatooninfo)
@@ -442,12 +442,13 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
 #
 #    n = 10: n controls how big the maximum platoon size is. n is the number of following vehicles (i.e. simulated vehicles)
     
-    #X = None - every X vehicles, we resolve a circular dependency of depth at most Y. 
+    #X = None - every X vehicles, we attempt to resolve a circular dependency
     
     #Y = 0 - when resolving circular dependencies early, this is the maximum depth of the cycle allowed. 
     #the depth of a cycle is defined as the minimum depth of all vehicles involved in the cycle. 
     #the depth of a vehicle is defined as 0 for vehicles who have a vehicle in leaders as a leader, 
     #1 for vehicles which have vehicles with depth 0 as leaders, etc. 
+    #actually Y doesn't have any effect so you can just go ahead and ignore it. 
     
     #cirdep = False - if False, no circular dependencies will be in the output. 
     #this means that some platoons may potentially be very large. 
@@ -457,6 +458,8 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
     #maxn = False - Only gets used if cirdep is True. If maxn is True, then all platoons
     #will be of size n except for the last platoon. If maxn is False, then when we resolve 
     #loops platoons may not be of size n (they can be bigger or smaller)
+    
+    #previousPlatoon - when forming platoons, we remember the previous platoon to use a tie breaking rule when adding the first vehicle
 #
 #
 #output:
@@ -477,11 +480,14 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
     platoonsout = []
     platoons = [] #output
     curn = 0 #current n value
-    vehicles_added = 0
+#    vehicles_added = 0
+    
+#    if previousPlatoon == None: 
+        
 
     #update leaders, platooninfo, totfollist, simcount so we can add all vehicles in curfix
     def addCurfix(curfix):
-        nonlocal simcount, curn, platoons, totfollist, platoonsout
+        nonlocal simcount, curn, platoons, totfollist, platoonsout, leaders
         for i in curfix:
             curveh = i
             chklead = platooninfo[curveh][4]
@@ -534,27 +540,38 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
         #modification 21
         if vehicles_added >= X:
             vehicles_added = vehicles_added % X
-            curfix = resolveCycleEarly(totfollist, leaders, platooninfo, cycle_num, Y)
+            curfix = addcyclesearly(totfollist, leaders, platooninfo, cycle_num, Y)
+#            print(curfix)
             addCurfix(curfix)
 
-        for i in totfollist:
+        for i in totfollist: #apply greedy algorithm to select next vehicle 
             chklead = platooninfo[i][4] #these are all the leaders needed to simulate vehicle i
             if all(j in leaders for j in chklead): #will be true if curlead contains all vehicles in chklead; in that case vehicle i can be simulated
                 T = set(range(platooninfo[i][1], platooninfo[i][2] + 1))
-                if not platoons:
-                    score = c_metric(i, previousPlatoon, T, platooninfo, meas=meas)
+                if not platoons: #
+                    score = c_metric(i, previousPlatoon, T, platooninfo, meas=meas) + c_metric(i,previousPlatoon,T,platooninfo,meas=meas,metrictype='fol')
                 else:
-                    platoons.append(i) #append vehicle i to list of followers in current platoon
-                    score = c_metric(i, platoons, T, platooninfo, meas=meas)  #change to c_metric
-                    platoons.pop()
-                if bestScore == None:
+                    score = c_metric(i, platoons, T, platooninfo, meas=meas) + c_metric(i,platoons,T,platooninfo,meas=meas,metrictype='fol')  
+                if bestScore == None: 
                     bestScore = score
-                    bestVeh = i
+                    bestVeh = [i]
+                if score == bestScore: 
+                    bestVeh.append(i)
                 if score > bestScore:
                     bestScore = score
-                    bestVeh = i
-
+                    bestVeh = [i]
+                    
+        
         if bestVeh != None: #add the best vehicle; if = None, no vehicles can be added; move to loop resolution
+            if len(bestVeh) > 1: #apply tie breaking rule, this might occur if all scores are 0. 
+                besttime = -1
+                for i in bestVeh: 
+                    curtime = platooninfo[i][2] - platooninfo[i][1]
+                    if curtime > besttime: 
+                        best = i
+                bestVeh = best
+            elif len(bestVeh)==1:
+                bestVeh = bestVeh[0]
             curn += 1  #keep track of platoon size
             platoons.append(bestVeh)
             leaders.insert(0,bestVeh)  # append newly added follower to the leader list as well; we have simulated vehicle i, and can now treat it as a leader
@@ -574,14 +591,12 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, meas=[],
             if cirdep:
                 curfix = breakcycles(totfollist, leaders, platooninfo, cycle_num)
             else:
-#                curfix = resolveCycleEarly(totfollist, leaders, platooninfo, cycle_num, Y)
-                curfix = addcycles3(totfollist,leaders,platooninfo,cycle_num)
-                print([totfollist, leaders, curfix])
-#                print(curfix)
+                curfix = addcycles2(totfollist,leaders,platooninfo,cycle_num)
+#                print([totfollist, leaders, curfix])
             addCurfix(curfix)
 
     platoonsout.append(platoons)
-    return platooninfo, leaders, simcount, curlead, totfollist, platoonsout
+    return platooninfo, leaders, simcount, curlead, totfollist,vehicles_added, platoonsout
 
 
 def makedepgraph(totfollist,leaders,platooninfo, Y):
@@ -613,6 +628,17 @@ def makedepgraph(totfollist,leaders,platooninfo, Y):
     return G, depth
 
 def breakcycles(totfollist, leaders, platooninfo, cycle_num):
+    #need to do research to determine whether or not the large platoons are a problem, 
+    #but if they are then you can use breakcycles to ensure that the platoonsize is always
+    #below some threshold. In that case, you'd also want some sort of strategy for dealing 
+    #with the circular dependencies which will occur (e.g. calibrating both platoons until some convergeance is achieved)
+    
+    #an obvious way to improve this is as follows: 
+    #first, use the addcycles2 to obtain the cycle which would have been added. 
+    #then, find some collection of vehicles inside the cycle which minimizes some metric, 
+    #e.g. which  minimizes the circular dependency score. When the collection of vehicles is added, 
+    #then the rest of the cycle should be able to be added. Something like that. 
+    
     #its called break cycles because we take vehicle cycles and don't add them all at once 
     #so it's like pretending the cycle isn't there. This will make output have circular dependency
     
@@ -657,15 +683,27 @@ def breakcycles(totfollist, leaders, platooninfo, cycle_num):
     curfix = [universe[HSsubsets.index(i)] for i in result] #curfix will be all the vehicles in the result
     return curfix
 
-
-def addcycles(totfollist, leaders, platooninfo, cycle_num):
-    #we add cycles all at once so there will not be circular dependencies in platoon
+#explanatino of addcycles2,3: 
+    #addcyclesearly makes dependency graph, finds cycles, and then sees what needs to be 
+    #added to add the cycles. 
+    #addcycles2 looks over each totfollist, makes its dependency graph, and then 
+    #just adds the smallest dependency grpah. 
+    #addcycles3 makes the dependency graph for all of totfollist, and then for each node of 
+    #that dependency graph, sees what all needs to be added to add the vehicle. 
+    
+    #I am fairly certain that you can just always use 2, as 2 and 3 should output the same answer (?)
+    #and 2 forms less dependency graphs. 
+    #for addition of cycles early, you want to check that the cycle actually exists (as opposed 
+    #to the normal addition of cycles, where we know it will exist), so you can use addcycles 
+def addcyclesearly(totfollist, leaders, platooninfo, cycle_num, Y):
+    #for adding cycles early; in this case we need to check for cycles 
     G, depth = makedepgraph(totfollist,leaders,platooninfo,math.inf)
     cyclebasis = nx.simple_cycles(G)
     
     count = cycle_num
     bestdepth = math.inf
     bestsize = math.inf
+    bestCurFix = nx.DiGraph()
     while count > 0:  # check first cycle_num cycles
         count -= 1
         try:
@@ -675,37 +713,11 @@ def addcycles(totfollist, leaders, platooninfo, cycle_num):
         #
         candidates = list(cycle)
         
-#                    curfix.extend(candidates)
-#                    totfollist_copy = list(totfollist)
-#                    while True:
-#                        extraLeaders = []
-#                        for i in candidates:
-#                            extraLeaders.extend(platooninfo[i][4])
-#                        extraLeaders = list(set(extraLeaders) - set(cycle))
-#                        curfix.extend(extraLeaders)
-#                        curfix = list(set(curfix))
-#                        candidates = []
-#                        #
-#                        Done = True
-#                        removed = []
-#                        #
-#                        for i in extraLeaders:
-#                            if i in totfollist_copy:
-#                                candidates.append(i)
-#                                removed.append(i)
-#                                Done = False
-#                        for i in removed:
-#                            totfollist_copy.remove(i)
-#                        if Done:
-#                            break
-        
         curfix, unused = makedepgraph(candidates,leaders,platooninfo,math.inf)
         curdepth = min([depth[i] for i in curfix.nodes()])
         cursize = len(curfix.nodes())
-        if curdepth <= bestdepth:
+        if curdepth <= bestdepth and curdepth <=Y:
             if cursize < bestsize:
-#        if cursize <=bestsize: 
-#            if curdepth < bestdepth:
                 bestCurFix = curfix
                 bestdepth = curdepth
                 bestsize = cursize
@@ -713,57 +725,15 @@ def addcycles(totfollist, leaders, platooninfo, cycle_num):
     return list(bestCurFix.nodes())
 
 def addcycles2(totfollist, leaders, platooninfo, cycle_num):
-    #we add cycles all at once so there will not be circular dependencies in platoon
-#    G, depth = makedepgraph(totfollist,leaders,platooninfo,math.inf)
-#    cyclebasis = nx.simple_cycles(G)
-#    
-#    count = cycle_num
-#    bestdepth = math.inf
-#    bestsize = math.inf
-#    while count > 0:  # check first cycle_num cycles
-#        count -= 1
-#        try:
-#            cycle = next(cyclebasis)
-#        except:
-#            break
-#        #
+
     bestdepth = math.inf
     bestsize = math.inf
     for i in totfollist: 
-#        candidates = list(cycle)
-        
-#                    curfix.extend(candidates)
-#                    totfollist_copy = list(totfollist)
-#                    while True:
-#                        extraLeaders = []
-#                        for i in candidates:
-#                            extraLeaders.extend(platooninfo[i][4])
-#                        extraLeaders = list(set(extraLeaders) - set(cycle))
-#                        curfix.extend(extraLeaders)
-#                        curfix = list(set(curfix))
-#                        candidates = []
-#                        #
-#                        Done = True
-#                        removed = []
-#                        #
-#                        for i in extraLeaders:
-#                            if i in totfollist_copy:
-#                                candidates.append(i)
-#                                removed.append(i)
-#                                Done = False
-#                        for i in removed:
-#                            totfollist_copy.remove(i)
-#                        if Done:
-#                            break
-        
         curfix, unused = makedepgraph([i],leaders,platooninfo,math.inf)
-#        curdepth = min([depth[i] for i in curfix.nodes()])
         curdepth = 0
         cursize = len(curfix.nodes())
         if curdepth <= bestdepth:
             if cursize < bestsize:
-#        if cursize <=bestsize: 
-#            if curdepth < bestdepth:
                 bestCurFix = curfix
                 bestdepth = curdepth
                 bestsize = cursize
@@ -773,105 +743,44 @@ def addcycles2(totfollist, leaders, platooninfo, cycle_num):
 def addcycles3(totfollist, leaders, platooninfo, cycle_num):
     #we add cycles all at once so there will not be circular dependencies in platoon
     G, depth = makedepgraph(totfollist,leaders,platooninfo,math.inf)
-#    cyclebasis = nx.simple_cycles(G)
-#    
-#    count = cycle_num
-#    bestdepth = math.inf
-#    bestsize = math.inf
-#    while count > 0:  # check first cycle_num cycles
-#        count -= 1
-#        try:
-#            cycle = next(cyclebasis)
-#        except:
-#            break
-#        #
     bestdepth = math.inf
     bestsize = math.inf
     for i in G.nodes(): 
-#        candidates = list(cycle)
-        
-#                    curfix.extend(candidates)
-#                    totfollist_copy = list(totfollist)
-#                    while True:
-#                        extraLeaders = []
-#                        for i in candidates:
-#                            extraLeaders.extend(platooninfo[i][4])
-#                        extraLeaders = list(set(extraLeaders) - set(cycle))
-#                        curfix.extend(extraLeaders)
-#                        curfix = list(set(curfix))
-#                        candidates = []
-#                        #
-#                        Done = True
-#                        removed = []
-#                        #
-#                        for i in extraLeaders:
-#                            if i in totfollist_copy:
-#                                candidates.append(i)
-#                                removed.append(i)
-#                                Done = False
-#                        for i in removed:
-#                            totfollist_copy.remove(i)
-#                        if Done:
-#                            break
-        
         curfix, unused = makedepgraph([i],leaders,platooninfo,math.inf)
-#        curdepth = min([depth[i] for i in curfix.nodes()])
         curdepth = 0
         cursize = len(curfix.nodes())
         if curdepth <= bestdepth:
             if cursize < bestsize:
-#        if cursize <=bestsize: 
-#            if curdepth < bestdepth:
                 bestCurFix = curfix
                 bestdepth = curdepth
                 bestsize = cursize
                 
     return list(bestCurFix.nodes())
 
-def resolveCycleEarly(totfollist, leaders, platooninfo, cycle_num, Y):
-    G, depth = makedepgraph(totfollist, leaders, platooninfo, Y)
-    if len(G.nodes()) == 0:
-        return []
-    bestdepth = math.inf
-    bestsize = math.inf
-    count = 0
-    for i in G.nodes():
-        if count>=cycle_num:
-            break
-        curfix, unused = makedepgraph([i], leaders, platooninfo, math.inf)
-        if len(curfix.nodes()) == 0:
-            continue
-        curdepth = min([depth[i] if i in depth.keys() else 0 for i in curfix.nodes()])
-        cursize = len(curfix.nodes())
-        if curdepth <= bestdepth:
-            if cursize < bestsize:
-                bestCurFix = curfix
-                bestdepth = curdepth
-                bestsize = cursize
-        count += 1
+#def resolveCycleEarly(totfollist, leaders, platooninfo, cycle_num, Y): #deprecated, use addcyclesearly
+#    G, depth = makedepgraph(totfollist, leaders, platooninfo, Y)
+#    if len(G.nodes()) == 0:
+#        return []
+#    bestdepth = math.inf
+#    bestsize = math.inf
+#    count = 0
+#    for i in G.nodes():
+#        if count>=cycle_num:
+#            break
+#        curfix, unused = makedepgraph([i], leaders, platooninfo, math.inf)
+#        if len(curfix.nodes()) == 0:
+#            continue
+#        curdepth = min([depth[i] if i in depth.keys() else 0 for i in curfix.nodes()])
+#        cursize = len(curfix.nodes())
+#        if curdepth <= bestdepth:
+#            if cursize < bestsize:
+#                bestCurFix = curfix
+#                bestdepth = curdepth
+#                bestsize = cursize
+#        count += 1
+#    return list(bestCurFix.nodes())
 
-    # while True:
-    #     try:
-    #         cycles = nx.find_cycle(G)
-    #         vehlcles = set([])
-    #         for i in cycles:
-    #             vehlcles.add(i[0])
-    #             vehlcles.add(i[1])
-    #         curdepth = min([depth[i] if i in depth.keys() else 0 for i in vehlcles])
-    #         cursize = len(vehlcles)
-    #         if curdepth <= bestdepth:
-    #             if cursize < bestsize:
-    #                 bestCurFix = vehlcles
-    #                 bestdepth = curdepth
-    #                 bestsize = cursize
-    #         G.remove_edges_from(cycles)
-    #     except:
-    #         break
-
-
-    return list(bestCurFix.nodes())
-
-def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= None, vehs = None,cycle_num=math.inf, cirdep = False):
+def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= None, vehs = None,cycle_num=5e5, X =  10, Y = 0, cirdep = False, maxn = False):
     
     #this runs makeplatooninfo and makeplatoon on the data, returning the measurements (meas), information on each vehicle (platooninfo), 
     #and the list of platoons to calibrate 
@@ -886,6 +795,10 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
 	# vehs = None - Can be passed as a list of vehicle IDs and the algorithm will calibrate starting from that first vehicle and stopping when it reaches the second vehicle. 
 	# lane and vehs are meant to be used together, i.e. lane = 2 vehs = [582,1146] you can form platoons only focusing on a specific portion of the data. 
 	#I'm not really sure how robust it is, or what will happen if you only give one or the other. 
+    
+    #cycle_num, X, Y, cirdep, maxn - refer to makeplatoon for the options these keywords control 
+    
+    #this also implements a useless vehicle heuristic, which is only designed to work if cirdep = False. if cirdep = True it may or may not work. 
 	
 	#outputs - 
 	# meas - dictionary where keys are vehicles, values are numpy array of associated measurements, in same format as data
@@ -942,26 +855,17 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
                 totfollist.append(j)
         totfollist = list(set(totfollist))
 
-
+    vehicles_added = X
     while simcount > 0:
-        #make a platoonplatoon
-        # platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist, platoons = makeplatoon332(platooninfo, leaders, simcount, curlead, totfollist,
-
-        # modification 22
-
-        longest_trajectory = -1
-        previousPlatoon = None
+        
         if platoonlist:
             previousPlatoon = platoonlist[-1]
         else:
-            for i in platooninfo:
-                trajectory = platooninfo[i][2] - platooninfo[i][1]
-                if trajectory > longest_trajectory:
-                    previousPlatoon = [i]
-
-        platooninfo, leaders, simcount, curlead, totfollist, platoons = makeplatoon(
-            platooninfo, leaders, simcount, curlead, totfollist,
-            meas=meas, cycle_num=cycle_num, n=n, cirdep = cirdep, Y=5, previousPlatoon=previousPlatoon)
+            previousPlatoon = leaders #just give an arbitrary platoon to initialize previousPlatoon
+            
+        platooninfo, leaders, simcount, curlead, totfollist, vehicles_added, platoons = makeplatoon(
+            platooninfo, leaders, simcount, curlead, totfollist, vehicles_added,
+            meas=meas, cycle_num=cycle_num, n=n, cirdep = cirdep, X=X, Y=Y, previousPlatoon=previousPlatoon, maxn = maxn)
         platoonlist.extend(platoons)
         #append it to platoonoutput (output from the function)
         platoonoutput.append(platoons)
@@ -975,11 +879,7 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
             for count, j in enumerate(i):
                 T = set(range(platooninfo[j][1], platooninfo[j][2] + 1))
                 cur = helper.c_metric(j, i, T, platooninfo, meas=meas)
-                #        try:
-                #            cur2 = helper.c_metric(j,i,T,platooninfo,type ='follower')
-                #        except:
-                #            print(j)
-                #            print(i)
+
                 cur2 = helper.c_metric(j, i, T, platooninfo, meas=meas, metrictype='follower')
                 if cur == 0 and cur2 == 0:
                     cmetriclist.append(True)
@@ -987,13 +887,15 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
                 else:
                     cmetriclist.append(False)
         return useless
-    useless = getUseless(platoonlist, platooninfo, meas)
+    
+    useless = getUseless(platoonlist, platooninfo, meas) #list of tuple (vehicle, platoon, platoonindex) for each useless vehicle
     print("Useless vehlcles before:", len(useless))
-
+    mustbeuseless = []
     for i in useless:
         veh = i[0]
         index = i[2]
-
+        
+        #check if the vehicle must be useless 
         simulated = False
         leaders = platooninfo[veh][4]
         followers = platooninfo[veh][7]
@@ -1001,10 +903,10 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
             if platooninfo[j][2] - platooninfo[j][1]!=0:
                 simulated = True
                 break
-        if not simulated and len(platooninfo[veh])==0:
-            platoonlist[index].remove(veh)
-            platoonlist.insert(index, [veh])
+        if not simulated and len(platooninfo[veh][-1])==0: #if must be useless
+            mustbeuseless.append(i)
             continue
+        
         done = False
         for j in platoonlist:
             for k in j:
@@ -1019,10 +921,17 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
                         j.remove(veh)
             if done:
                 break
+        
+    count = 0 
+    for i in mustbeuseless: #add the useless vehicles by themselves
+        platoonlist[i[2]+count].remove(i[0])
+        platoonlist.insert(i[2]+count,[i[0]])
+        count += 1
 
     platoonlist = [j for j in platoonlist if j != []]
     useless2 = getUseless(platoonlist, platooninfo, meas)
     print("Useless vehlcles after:", len(useless2))
+    print("Vehicles which must be useless:", len(mustbeuseless))
 
     if not extra_output:
         return meas, platooninfo, platoonlist

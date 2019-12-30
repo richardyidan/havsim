@@ -23,7 +23,7 @@ except:
 #%%
     
 #existing platoon formation algorithm
-meas, platooninfo, platoons = makeplatoonlist(data, n = 5,cycle_num=1e5, cirdep = False)
+meas, platooninfo, platoons = makeplatoonlist(data, n = 5,cycle_num=1e4, X = 10, cirdep = False)
 #existing platoon formation algorithm in a single lane
 #unused, unused, laneplatoons = makeplatoonlist(data,n=5,lane=2,vehs=[582,1146])
 #platoon formation based on sorting
