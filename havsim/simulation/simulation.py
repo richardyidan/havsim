@@ -24,21 +24,10 @@ TO DO /
     
     
 """
-#some tool for creating custom models out of modular parts, which should be part of models subpackage. 
-#need to think about how to use modelinfo to implement all the parts of models that we need, and how
-#to automatically get the gradient as easily as possible.
-#Also some things seem difficult to differentiate. Like the relaxation amount for example,
-#potentially complicated to differentiate if you are including the time varying thing
-#I think the way you can do this is to have something where you keep track of the regime
-#of the model, and then you can also augment the state space. 
-#Like for example for the relaxation example you would have a 
-#special state when you experience a change, and record the value as a seperate entry in the state. 
-#then when you are doing the gradient calculation everything just sort of falls into place automatically. 
-#no messing around with all the funny business yourself. 
 
 def simulate_step(curstate, auxinfo, roadinfo, updatefun, dt): 
     """
-    does a step of the simulation
+    does a step of the simulation on a single lane circular road 
     
     inputs - 
     curstate - current state of the simulation, dictionary where each value is the current state of each vehicle 
@@ -72,8 +61,6 @@ def simulate_step(curstate, auxinfo, roadinfo, updatefun, dt):
     nextstate - current state in the next timestep
     
     auxinfo - auxinfo may be changed during the timestep
-    
-    loss - loss calculated at the current step 
     
     """
     nextstate = {}
@@ -154,11 +141,6 @@ def simulate_cir(curstate, auxinfo, roadinfo, updatefun = update_cir, timesteps=
             
     return sim,curstate, auxinfo
 
-def simulate_net():
-    """
-    simulate on a network
-    """
-    pass
 
 def eq_circular(p, model, modelupdate, eqlfun, n, length = 2, L = None, v = None, perturb = 1e-2):
     #given circular road with length L with n vehicles which follow model model with parameters p, 
@@ -223,3 +205,128 @@ def simcir_obj(p, initstate, auxinfo, roadinfo, idlist, model, modelupdate, loss
     else: 
         return obj, sim, curstate, auxinfo, roadinfo
 
+def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, vehorder, updatefun, dt): 
+    """
+    does a step of the simulation for the full simulation which includes boundary conditions and LC
+    
+    inputs - 
+    curstate - current state of the simulation, dictionary where each value is the current state of each vehicle 
+    states are a length n list where n is the order of the model. 
+    So for 2nd order model the state of a vehicle is a list of position and speed
+    
+    
+    auxinfo - dictionary where keys are IDs, the values are 
+    0 - current model regime 
+    1 - current leader
+    2 - current lane
+    3 - current road 
+    4 - length
+    5 - parameters
+    6 - model 
+    7 - modelupdate
+    8 - LC parameters
+    9 - LC model 
+    10 - init entry time
+    11 - past model reg info
+    10 - past leader info
+    11 - past lane info 
+    12 - past road info
+    this is information that we will always have
+    
+    roadinfo - dictionary, encodes the road network and also stores boundary conditions 
+    
+    modelinfo - dictionary, stores any additional information which is not part of the state,
+    does not explicitly state the regime of the model, 
+    but is needed for the simulation/gradient calculation (e.g. relax amounts, LC model regimes, action point amounts, realization of noise)
+    0 - LC model regime 
+    
+    
+    updatefun - overall function that updates the states based on actions, there is also a specific updatefun for each vehicle (modelupdate)
+    
+    vehorder - dictionary where keys are vehicles, values are left, current, right followers. 
+    
+    dt - timestep
+    
+    outputs - 
+    nextstate - current state in the next timestep
+    
+    auxinfo - auxinfo may be changed during the timestep
+    
+    """
+    nextstate = {}
+    a = {}
+    lca = {}
+    
+    #get actions in longitudinal movement (from CF model)
+    for i in curstate.keys():
+        a[i] = auxinfo[i][6](auxinfo[i][5],curstate[i],curstate[auxinfo[i][1]], dt = dt)
+        
+    #get actions in latitudinal movement 
+    for i in curstate.keys(): 
+        lca[i] = auxinfo[i][9](auxinfo[i][8], a[i], placeholder)
+    
+    
+    #update current state 
+    nextstate = updatefun(curstate, a, auxinfo, roadinfo, dt)
+    
+    return nextstate, auxinfo
+
+def LCmodel(): 
+    #Based on MOBIL strategy
+    #elements which won't be included 
+    #   - cooperation for discretionary lane changes
+    #   - aggressive state of target vehicle to force lane changes 
+    
+    
+    #LC parameters (by index)
+    #0 - safety criterion 
+    #1 - incentive criteria
+    #2 - politeness
+    lca = {}
+    for i in curstate.keys(): 
+        if modelinfo[i][0] == 0: #discretionary only 
+            plc = auxinfo[i][8]
+            
+            newfolveh = vehorder[i][0] #do this as well for the vehorder[i][2] 
+            #wrap all of this in a new function 
+            if newfolveh != None: #check left side
+                #compute new headway 
+                newleadveh = auxinfo[newfolveh][1]
+                newvehstate = curstate[i][:2]
+                newvehstate.append(curstate[newleadveh][0] -newvehstate[0] - auxinfo[newleadveh][4])
+                #check for case when leader is in a different road
+                #check for when leader is None and boundary condition is used 
+                
+                #compute new acceleration for current vehicle 
+                newacc = auxinfo[i][6](auxinfo[i][5], newvehstate, curstate[newleadveh], dt = dt)
+                
+                #compute new headway/accel for potential new follower
+                newfolstate = curstate[newfolveh][:2]
+                newfolstate.append(newvehstate[0] - newfolstate[0] - auxinfo[i][4])
+                
+                newfolacc = auxinfo[newfolveh][6](auxinfo[newfolveh][5], newfolstate, curstate[i])
+                
+                #compute new headway/accel for current follower
+                nl = auxinfo[i][1]
+                nf = vehorder[i][1]
+                folstate = curstate[nf][:2]
+                folstate.append(curstate[nl][0] - folstate[0] - auxinfo[nl][1])
+                
+                folacc = auxinfo[nf][6](auxinfo[nf][5], folstate, curstate[nl])
+                
+                if newacc > plc[0] and newfolacc > plc[0] and folacc > plc[0]: #safety requirement #use nested if statements instead 
+                    incentive = newacc - a[i] + plc[2]*(newfolacc + folacc - a[nf] - a[newfolveh]) - plc[1] #there is no bias term 
+                    
+            else: 
+                incentive = -math.inf
+                
+            
+
+
+
+
+def simulate_net():
+    """
+    simulate on a network
+    """
+    pass

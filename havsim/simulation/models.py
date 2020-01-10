@@ -81,7 +81,8 @@ def IDM_b3_sh(p, veh, lead, *args,dt=.1):
     
     return [outdx, outddx]
 
-
+def mobil_dis(plc, p, pfold, pfnew, placeholder): #discretionary lane changing following mobil model 
+    pass
 
 def IDM_b3_eql(p, s, v, find = 's', maxs = 1e4):
     #finds equilibrium solution for s or v, given the other
