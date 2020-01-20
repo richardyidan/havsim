@@ -216,7 +216,7 @@ def egaexam(p):
     headway = IDM_b3_eql(p, None, 30+speedoffset, find = 's', maxs = 1e4)
     headway2 = IDM_b3_eql(p2, None, 30+speedoffset, find = 's', maxs = 1e4)
     prev = 0
-    indlist = np.arange(0, 150,15)
+    indlist = np.arange(0, 200,10)
     for i in range(N):
         if i in indlist:
             prev = prev - headway
@@ -233,7 +233,7 @@ def egaexam(p):
     for i in range(N+1):
         avgdx = np.mean(universe[i].dx)
         curobj = np.asarray(universe[i].dx) - avgdx
-        obj += np.sum(np.square(curobj))/N
+        obj += np.sum(np.square(curobj))/N + avgdx^2*simlen/N
         
     return obj 
 
