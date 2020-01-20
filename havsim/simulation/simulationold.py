@@ -197,8 +197,8 @@ def eguni(p,phuman,model,headway,prate,simlen,N,velocitylead,initspeed, dt = .1)
     return universe, obj
 
 def egaexam(p):
-    simlen = 4000 #33000
-    N = 200 #800
+    simlen = 1000 #33000
+    N = 50 #800
     speedoffset = -10
     length = 5
     velocity = [30 for i in range(simlen)]
@@ -213,10 +213,10 @@ def egaexam(p):
     
     p2 = [33.33,1.1,2,.9,1.5]
     
-    headway = IDM_b3_eql(p, None, 30+speedoffset, find = 's', maxs = 1e4)
-    headway2 = IDM_b3_eql(p2, None, 30+speedoffset, find = 's', maxs = 1e4)
+    headway = IDM_b3_eql(p, None, 30+speedoffset, find = 's', maxs = 1e4) + length
+    headway2 = IDM_b3_eql(p2, None, 30+speedoffset, find = 's', maxs = 1e4) + length
     prev = 0
-    indlist = np.arange(0, 200,10)
+    indlist = np.arange(0, N,10)
     for i in range(N):
         if i in indlist:
             prev = prev - headway
@@ -233,7 +233,7 @@ def egaexam(p):
     for i in range(N+1):
         avgdx = np.mean(universe[i].dx)
         curobj = np.asarray(universe[i].dx) - avgdx
-        obj += np.sum(np.square(curobj))/N + avgdx^2*simlen/N
+        obj += np.sum(np.square(curobj))/N - avgdx**2*simlen/N
         
     return obj 
 
@@ -254,10 +254,10 @@ def egaexamuni(p):
     
     p2 = [33.33,1.1,2,.9,1.5]
     
-    headway = IDM_b3_eql(p, None, 30+speedoffset, find = 's', maxs = 1e4)
-    headway2 = IDM_b3_eql(p2, None, 30+speedoffset, find = 's', maxs = 1e4)
+    headway = IDM_b3_eql(p, None, 30+speedoffset, find = 's', maxs = 1e4) + length
+    headway2 = IDM_b3_eql(p2, None, 30+speedoffset, find = 's', maxs = 1e4) + length
     prev = 0
-    indlist = np.arange(0, 150,15)
+    indlist = np.arange(0, N,10)
     for i in range(N):
         if i in indlist:
             prev = prev - headway
@@ -270,13 +270,13 @@ def egaexamuni(p):
         
     simulate(universe,simlen-1)
     
-#    obj = 0
-#    for i in range(N+1):
-#        avgdx = np.mean(universe[i].dx)
-#        curobj = np.asarray(universe[i].dx) - avgdx
-#        obj += np.sum(np.square(curobj))/N
+    obj = 0
+    for i in range(N+1):
+        avgdx = np.mean(universe[i].dx)
+        curobj = np.asarray(universe[i].dx) - avgdx
+        obj += np.sum(np.square(curobj))/N - avgdx**2*simlen/N
         
-    return universe 
+    return obj, universe 
 
 def eulerstep(sim, t, model, N, dim, dt):
     #sim - where the output is stored 

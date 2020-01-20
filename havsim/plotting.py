@@ -2338,18 +2338,30 @@ def hd(lead, fol, arrowinterval=.5):
     return hd
 
 
-def vehplot(universe, interval=1):
+def vehplot(universe, interval=1, option = False):
     N = len(universe)
     plt.subplot(1, 2, 1)
     for i in range(0, N, interval):
-        plt.plot(universe[i].x)
+        if option:
+            if i in np.arange(1, N,10):
+                plt.plot(universe[i].x, 'C1')
+            else: 
+                plt.plot(universe[i].x, 'C0')
+        else: 
+            plt.plot(universe[i].x, 'C0')
     plt.ylabel('space')
     plt.xlabel('time')
     plt.yticks([])
     plt.xticks([])
     plt.subplot(1, 2, 2)
     for i in range(0, N, interval):
-        plt.plot(np.asarray(universe[i].dx) - 2 * i)
+        if option:
+            if i in np.arange(1, N,10):
+                plt.plot(np.asarray(universe[i].dx) - 2 * i, 'C1')
+            else:
+                plt.plot(np.asarray(universe[i].dx) - 2 * i, 'C0')
+        else:
+            plt.plot(np.asarray(universe[i].dx) - 2 * i, 'C0')
     plt.ylabel('speed')
     plt.xlabel('time')
     plt.yticks([])

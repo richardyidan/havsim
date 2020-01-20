@@ -7,6 +7,9 @@ Created on Wed May 22 17:39:02 2019
 from havsim.simulation.simulationold import * 
 from havsim.simulation.modelsold import * 
 from havsim.plotting import vehplot, hd
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.optimize as sc 
 
 #simulation results from large simulation 
 #with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/simeg33.33-1.1-2-.9-1.5IDMb3.pkl','rb') as f:
@@ -158,8 +161,8 @@ p = [33.33,1.1,2,.9,1.5]
 #bounds = [(30,40),(.5,1.5),(.5,2),(.5,1.5),(1,2)] 
 #bfgs = sc.fmin_l_bfgs_b(egaexam,p,None,(),1,bounds,maxfun=300)
 
-bounds = [(30,40),(.5,1.5),(.5,2),(.5,1.5),(1,2)] 
-bfgs = sc.fmin_tnc(egaexam,p,None,(),1,bounds,maxfun=300)
+bounds = [(30,40),(.1,2),(.1,3),(.1,3),(.1,3)] 
+bfgs = sc.fmin_tnc(egaexam,p,None,(),1,bounds,maxfun=300) #simlen = 1000, N = 50, every 10 vehicles = AV
 
 
 #%% #all of these plots need the transfer function fixed to make sense 
@@ -304,6 +307,35 @@ for count,i in enumerate([50,200,400,600,800]):
         displacement.append(displacement[-1]+d)
     ax2.plot(displacement)
 
+
+    #%% show growth of perturbation for universe
+plt.figure()
+#testveh = universe[-1]
+#testdx = testveh.dx
+#dt = testveh.dt
+ax1 = plt.subplot(1,2,1)
+ax2 = plt.subplot(1,2,2)
+ax1.set_ylabel('speed')
+ax1.set_xlabel('time')
+ax1.set_yticklabels([])
+ax2.set_ylabel('delay')
+ax2.set_xlabel('time')
+
+for count,i in enumerate([50,200,400,600,800]):
+    testveh = universe[i]
+    testdx = testveh.dx
+    speedoffset = -10
+    dt = .1
+    #testdx = data[0][400]
+    #speedoffset = -10
+    usespeed = np.asarray(testdx)
+    usespeed = usespeed - 20*count
+    ax1.plot(usespeed)
+    displacement = [0]
+    for i in range(len(testdx)):
+        d = (testdx[i]-30-speedoffset)*dt
+        displacement.append(displacement[-1]+d)
+    ax2.plot(displacement)
 
 #%%
 #plt.figure()
