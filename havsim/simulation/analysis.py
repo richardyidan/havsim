@@ -1,9 +1,12 @@
 
 """
+just some random stuff, it's kind of buggy and not really useful at all. 
+
+
 @author: rlk268@cornell.edu
 """
 
-#all of these transfer functions have issues and don't work properly
+
 
 def xferIDM(eqx,eqv,p,w): 
     #returns the transfer function for the IDM model in car following regime with 

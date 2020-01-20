@@ -5,6 +5,8 @@
 
 import math 
 import numpy as np 
+from havsim.simulation.models import IDM_b3_eql
+from havsim.simulation.modelsold import IDM_b3
 
 class vehicle: 
     #class for vehicles which are described by a second order ODE 
@@ -193,6 +195,88 @@ def eguni(p,phuman,model,headway,prate,simlen,N,velocitylead,initspeed, dt = .1)
 #        obj += sum(reg)
         
     return universe, obj
+
+def egaexam(p):
+    simlen = 4000 #33000
+    N = 200 #800
+    speedoffset = -10
+    length = 5
+    velocity = [30 for i in range(simlen)]
+    velocity[0:200] = [1/10*(.1*(i)-10)**2+20 for i in range(200)] #polynomial disturbance 
+    
+    velocity = np.asarray(velocity) + speedoffset
+    
+    t = np.arange(0,100,.1)
+    
+    v1 = leadvehicle(0,0,length,velocity,.1)
+    universe = [v1]
+    
+    p2 = [33.33,1.1,2,.9,1.5]
+    
+    headway = IDM_b3_eql(p, None, 30+speedoffset, find = 's', maxs = 1e4)
+    headway2 = IDM_b3_eql(p2, None, 30+speedoffset, find = 's', maxs = 1e4)
+    prev = 0
+    indlist = np.arange(0, 150,15)
+    for i in range(N):
+        if i in indlist:
+            prev = prev - headway
+            newveh = vehicle([prev,30+speedoffset],0,length,universe[-1],IDM_b3,p,.1)
+            universe.append(newveh)
+        else:
+            prev = prev - headway2
+            newveh = vehicle([prev,30+speedoffset],0,length,universe[-1],IDM_b3,p2,.1)
+            universe.append(newveh)
+        
+    simulate(universe,simlen-1)
+    
+    obj = 0
+    for i in range(N+1):
+        avgdx = np.mean(universe[i].dx)
+        curobj = np.asarray(universe[i].dx) - avgdx
+        obj += np.sum(np.square(curobj))/N
+        
+    return obj 
+
+def egaexamuni(p):
+    simlen = 4000 #33000
+    N = 200 #800
+    speedoffset = -10
+    length = 5
+    velocity = [30 for i in range(simlen)]
+    velocity[0:200] = [1/10*(.1*(i)-10)**2+20 for i in range(200)] #polynomial disturbance 
+    
+    velocity = np.asarray(velocity) + speedoffset
+    
+    t = np.arange(0,100,.1)
+    
+    v1 = leadvehicle(0,0,length,velocity,.1)
+    universe = [v1]
+    
+    p2 = [33.33,1.1,2,.9,1.5]
+    
+    headway = IDM_b3_eql(p, None, 30+speedoffset, find = 's', maxs = 1e4)
+    headway2 = IDM_b3_eql(p2, None, 30+speedoffset, find = 's', maxs = 1e4)
+    prev = 0
+    indlist = np.arange(0, 150,15)
+    for i in range(N):
+        if i in indlist:
+            prev = prev - headway
+            newveh = vehicle([prev,30+speedoffset],0,length,universe[-1],IDM_b3,p,.1)
+            universe.append(newveh)
+        else:
+            prev = prev - headway2
+            newveh = vehicle([prev,30+speedoffset],0,length,universe[-1],IDM_b3,p2,.1)
+            universe.append(newveh)
+        
+    simulate(universe,simlen-1)
+    
+#    obj = 0
+#    for i in range(N+1):
+#        avgdx = np.mean(universe[i].dx)
+#        curobj = np.asarray(universe[i].dx) - avgdx
+#        obj += np.sum(np.square(curobj))/N
+        
+    return universe 
 
 def eulerstep(sim, t, model, N, dim, dt):
     #sim - where the output is stored 

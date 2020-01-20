@@ -1,23 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Wed May 22 17:39:02 2019
-Need to do more testing, but I have developed the following theory - 
-1. the size of the perturbation is completely irrelevant 
-2. what is important is the modulus of the transfer function
-3. linear analysis is only quantiatively correct when the transfer function is very close to unity 
-4. thus for some arbitrary, realistic perturbation, which has a whole spectrum of fourier modes, 
-being applied to a realistic model, 
-it is almost certain that virtually all the modes will be far from unity and the growth of congestion is not quantitative
-5. also this implies that multispecieis analysis is not correct. 
-
-
--note that there are two different ways to think about the linear analysis: in terms of transfer function or in terms 
-of eigenvalues. 
--energy gets spread around the modes so linear stability analysis is not terribly useful 
--need to examine criteria for stability of multiclass traffic and see what existing work for quantitatively correct
-oscillation growth has been given 
--some funny business going on as well with same magnitude perturbations but different frequencies giving different results. 
--recall that different qualitative (i.e. long run) behavior is only supposed to happen from the size of perturbations. 
 
 @author: rlk268
 """
@@ -38,9 +21,9 @@ from havsim.plotting import vehplot, hd
 #CHOOSE A DISTURBANCE TYPE FROM THE COMMENTS BELOW. DEFAULT EQUILIBRIUM SPEED IS 30 FT/S. CHANGE BY CHANGING SPEEDOFFSET. 
 #CHOOSE SIMLEN AND N TO MAKE BIGGER SIMULATIONS WHICH TAKE LONGER TO RUN 
 #CAN ALSO CHANGE THE MODEL USED AND THE MODEL PARAMETERS. 
-simlen = 33000 #33000
-N = 800 #800
-speedoffset = -15
+simlen = 4000 #33000
+N = 200 #800
+speedoffset = -10
 length = 5
 velocity = [30 for i in range(simlen)]
 velocity[0:200] = [1/10*(.1*(i)-10)**2+20 for i in range(200)] #polynomial disturbance 
@@ -93,14 +76,14 @@ universe = [v1]
 #p = [33.33,1.5,2,1.1,1.5] #33.33, 1.5, 2, 1.1, 1.5 33.33-1.1-2-.9-1.5
 #p=[33.33, 1.2, 2, .9, 1.5]
 p = [33.33,1.1,2,.9,1.5]
-p2 = res2['x']
+#p2 = res2['x']
 #p2[0] = p2[0]*4/3
 headway = eql(IDM_b3,30+speedoffset,p, length)
-headway2 = eql(linearCAV,30+speedoffset,p2,length)
+#headway2 = eql(linearCAV,30+speedoffset,p2,length)
 prev = 0
 perturb = 2
-indlist = np.arange(0, N,10)
-#indlist = []
+#indlist = np.arange(0, N,10)
+indlist = []
 for i in range(N):
     if i in indlist:
         prev = prev - headway2
@@ -168,6 +151,17 @@ hd(universe[2],universe[3])
 #vehplot(universe)
 
 
+#%%
+p = [33.33,1.1,2,.9,1.5]
+#testobj = egaexam(p)
+
+#bounds = [(30,40),(.5,1.5),(.5,2),(.5,1.5),(1,2)] 
+#bfgs = sc.fmin_l_bfgs_b(egaexam,p,None,(),1,bounds,maxfun=300)
+
+bounds = [(30,40),(.5,1.5),(.5,2),(.5,1.5),(1,2)] 
+bfgs = sc.fmin_tnc(egaexam,p,None,(),1,bounds,maxfun=300)
+
+
 #%% #all of these plots need the transfer function fixed to make sense 
 #from simulation import * 
 #
@@ -230,7 +224,11 @@ hd(universe[2],universe[3])
 plt.figure()
 testveh = universe[-1]
 testdx = testveh.dx
-dt = testveh.dt
+#dt = testveh.dt
+#testveh = data[0]
+#testdx = testveh[200]
+speedoffset = -10
+dt = .1
 #testdx = data[0][400]
 #speedoffset = -10
 displacement = [0]
@@ -246,6 +244,65 @@ plt.plot(displacement)
 #    ex += displacement[i]
 #ex = ex*exlen 
 #print('expected displacement is '+str(ex))
+
+#%% load data from experiment
+
+with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/simeg33.33-1.1-2-.9-1.5IDMb3.pkl','rb') as f:
+    data = pickle.load(f)
+    
+    #%% show initial perturbation 
+plt.figure()
+#testveh = universe[-1]
+#testdx = testveh.dx
+#dt = testveh.dt
+
+testveh = data[0]
+testdx = testveh[0]
+speedoffset = -10
+dt = .1
+#testdx = data[0][400]
+#speedoffset = -10
+plt.subplot(1,2,1)
+plt.plot(testdx[:1000])
+plt.ylabel('speed')
+plt.xlabel('time')
+plt.subplot(1,2,2)
+displacement = [0]
+for i in range(len(testdx)):
+    d = (testdx[i]-30-speedoffset)*dt
+    displacement.append(displacement[-1]+d)
+plt.plot(displacement[:1000])
+plt.ylabel('delay')
+plt.xlabel('time')
+
+    #%% show growth of perturbation 
+plt.figure()
+#testveh = universe[-1]
+#testdx = testveh.dx
+#dt = testveh.dt
+ax1 = plt.subplot(1,2,1)
+ax2 = plt.subplot(1,2,2)
+ax1.set_ylabel('speed')
+ax1.set_xlabel('time')
+ax1.set_yticklabels([])
+ax2.set_ylabel('delay')
+ax2.set_xlabel('time')
+
+for count,i in enumerate([50,200,400,600,800]):
+    testveh = data[0]
+    testdx = testveh[i]
+    speedoffset = -10
+    dt = .1
+    #testdx = data[0][400]
+    #speedoffset = -10
+    usespeed = np.asarray(testdx)
+    usespeed = usespeed - 20*count
+    ax1.plot(usespeed)
+    displacement = [0]
+    for i in range(len(testdx)):
+        d = (testdx[i]-30-speedoffset)*dt
+        displacement.append(displacement[-1]+d)
+    ax2.plot(displacement)
 
 
 #%%
@@ -287,3 +344,8 @@ for i in universe:
     data.append(i.dx)
 with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/universenoAV.pkl','wb') as f:
     pickle.dump(data,f)
+    #%%
+with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/simeg33.33-1.1-2-.9-1.5IDMb3.pkl','rb') as f:
+    data = pickle.load(f)
+    
+    

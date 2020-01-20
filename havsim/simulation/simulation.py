@@ -205,7 +205,7 @@ def simcir_obj(p, initstate, auxinfo, roadinfo, idlist, model, modelupdate, loss
     else: 
         return obj, sim, curstate, auxinfo, roadinfo
 
-def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, vehorder, updatefun, dt): 
+def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, dt): 
     """
     does a step of the simulation for the full simulation which includes boundary conditions and LC
     
@@ -223,27 +223,27 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, vehorder, updatefun, 
     4 - length
     5 - parameters
     6 - model 
-    7 - modelupdate
+    7 - model helper 
     8 - LC parameters
     9 - LC model 
-    10 - init entry time
-    11 - past model reg info
-    10 - past leader info
-    11 - past lane info 
-    12 - past road info
-    this is information that we will always have
+    10 - update function
+    11 - followers in adjacent lanes 
+    12 - init entry time
+    13 - past model reg info
+    14 - past leader info
+    15 - past lane info 
+    16 - past road info
+
     
     roadinfo - dictionary, encodes the road network and also stores boundary conditions 
     
     modelinfo - dictionary, stores any additional information which is not part of the state,
     does not explicitly state the regime of the model, 
     but is needed for the simulation/gradient calculation (e.g. relax amounts, LC model regimes, action point amounts, realization of noise)
-    0 - LC model regime 
+    dictionary of dict
     
     
-    updatefun - overall function that updates the states based on actions, there is also a specific updatefun for each vehicle (modelupdate)
-    
-    vehorder - dictionary where keys are vehicles, values are left, current, right followers. 
+    updatefun - overall function that updates the states based on actions, there is also a specific updatefun for each vehicle (modelupdate
     
     dt - timestep
     
@@ -257,19 +257,55 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, vehorder, updatefun, 
     a = {}
     lca = {}
     
+    #note to self: good design pattern looks like- function which handles arguments, function which does actual call
+    #eg for longitudinal, 1 function gets leader, any other extra parts, then it is passed to actual model
     #get actions in longitudinal movement (from CF model)
+    #key is vehicle, value is acceleration in longitudinal movement 
     for i in curstate.keys():
         a[i] = auxinfo[i][6](auxinfo[i][5],curstate[i],curstate[auxinfo[i][1]], dt = dt)
         
-    #get actions in latitudinal movement 
-    for i in curstate.keys(): 
-        lca[i] = auxinfo[i][9](auxinfo[i][8], a[i], placeholder)
-    
+    #get actions in latitudinal movement (from LC model)
+    #key is vehicle, value is 
+    lca = LCmodel()
     
     #update current state 
     nextstate = updatefun(curstate, a, auxinfo, roadinfo, dt)
     
     return nextstate, auxinfo
+
+def update_net(state, action, auxinfo, roadinfo, dt):
+    #given states and actions returns next state 
+    
+    nextstate = {}
+    
+    #update states
+#    for i in state.keys():
+#        nextstate[i] = [state[i][0] + dt*action[i][0], state[i][1] + dt*action[i][1], None ]
+#        if nextstate[i][0] > roadinfo[0]: #wrap around 
+#            nextstate[i][0] = nextstate[i][0] - roadinfo[0]
+    
+    for i in state.keys():
+        nextstate[i] = auxinfo[i][7](state[i],action[i],dt,roadinfo) #update is specific based on vehicle 
+        
+    #update headway, which is part of state      
+    for i in state.keys(): 
+        #calculate headway
+        leadid = auxinfo[i][1]
+        nextstate[i][2] = nextstate[leadid][0] - nextstate[i][0] - auxinfo[leadid][4]
+        
+        #check for wraparound and if we need to update any special states for circular 
+        if nextstate[i][2] < -roadinfo[1]: 
+            nextstate[i][2] = nextstate[i][2] + roadinfo[0]
+        
+    return nextstate
+
+def update2nd(state, action, dt, roadinfo):
+    #standard update function for a second order model
+    nextstate = [state[0] + dt*action[0], state[1] + dt*action[1], None ]
+    if nextstate[0] > roadinfo[0]: #wrap around 
+        nextstate[0] = nextstate[0] - roadinfo[0]
+    
+    return nextstate
 
 def LCmodel(): 
     #Based on MOBIL strategy
@@ -296,6 +332,8 @@ def LCmodel():
                 newvehstate.append(curstate[newleadveh][0] -newvehstate[0] - auxinfo[newleadveh][4])
                 #check for case when leader is in a different road
                 #check for when leader is None and boundary condition is used 
+                #check for when follower is none 
+                #use relax as well; should have relax in the state space
                 
                 #compute new acceleration for current vehicle 
                 newacc = auxinfo[i][6](auxinfo[i][5], newvehstate, curstate[newleadveh], dt = dt)
@@ -321,7 +359,9 @@ def LCmodel():
                 incentive = -math.inf
                 
             
-
+def checksafety():
+    
+    pass
 
 
 
