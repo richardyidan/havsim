@@ -10,36 +10,15 @@ All calibration related functions which set up optimization problems, including 
         should use auxinfo/modelinfo and take up less memory as well ; will need to modify plotting functions to work with 
         this updated format
             -many of the problems in general features/QOL can be solved by using the new simulation code in place of current calibration code
-        	-function for delay and LL model needs to be tested/debugged still, implement LL as DE, implement other models  
-            and update the documentation in model info pdf 
-        -make sure the adjoint system is being calculated correctly with boundary conditions 
-            
+        -We have written code for LL and delay models which has not been tested 
         -should refactor calibration code to be cleaner, including a polished api for users
         -create test script that can be used to check for bugs in the calibration code
 	
 	
     general features/QOL 
-        -choose what loss function you want to use 
-        -support for using relaxation phenomenon on a platoon, where we would like to update the relaxation amount during simulation. also support for models where the lead trajectory is delayed 
-        but your own trajectory is not. If we just ignore the extra terms these add to the adjoint calculation how accurate is the gradient going to be? Is it ok to do that? 
-            -i think we can add a special argument that will make it so the r_constant functions will recompute the relax amount on run, and this should be good enough. 
-            -also for models with delay the relax amount is not being calculated correctly so should add this feature as well. 
-        
-        -don't like how many different versions of this function there are, we would like to combine some of them if possible
-			Specifically, it should be possible to have a single function that can wrap the _obj, _der, and _objder versions so that will cut down on the number of functions we have
-			to explicitly worry about by a factor of 3. Probably want to keep seperate versions for 1 and 2 parameter relax. 
-        -ability to choose timestep for simulation which is not the same as timestep used in data (in delay/newell case, choose a timestep which is not equal to the delay)
-            -note that the time discretization used in this case is in eulerdelay function commented
-        -choosing how to deal with end trajectory - perhaps we don't like the shifted end strategy and would like to use a different one 
-    
-    optimizing speed
-        -could push euler functions into cython 
-		there are repeated computations in (manual) adjoint calculations which can be manually optimized, especially for complicated models 
-        
-    features which would require a seperate function
-        -dealing with models which have stochastic components 
-        -allowing vehicles to change lanes with some specified model of lane changing decisions. (where we will do macro level calibration/validation, but it's using trajectory data)
-    
+        -support for using relaxation phenomenon on a platoon, where we would like to update the relaxation amount during simulation. 
+            -Also need to support relaxation for delay 
+        -need to implement solving for delay models
     
     \\ TO DO 
 
