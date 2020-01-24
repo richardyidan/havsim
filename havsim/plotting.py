@@ -968,9 +968,9 @@ def animatevhd(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, show_me
 
     # animation in the velocity headway plane
     if effective_headway:
-        leadinfo, folinfo, rinfo = helper.makeleadfolinfo_r3([[], my_id], platooninfo, meas, use_merge_constant=True)
+        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([ my_id], platooninfo, meas, relaxtype = 'both')
     else:
-        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([[], my_id], platooninfo, meas)
+        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([ my_id], platooninfo, meas, relaxtype = 'both')
 
     if end == None:
         end = T_nm1
@@ -1032,7 +1032,7 @@ def animatevhd(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, show_me
 
 
 def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, show_meas=True, effective_headway=False,
-                    rp=None, h=.1, datalen=9, start=None, end=None, delay=0):
+                    rp=None, h=.1, datalen=9, usestart=None, useend=None, delay=0):
     #plot multiple vehicles in phase space (speed v headway)
     # my_id - id of the vehicle to plot
     # lentail = 20 - number of observations to show in the past
@@ -1054,21 +1054,25 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
     for id in my_id:
 
         t_nstar, t_n, T_nm1, T_n = platooninfo[id][0:4]
-        if not start:
+        if usestart is None:
             if delay != 0:
                 offset = math.ceil(delay / h)
                 start = t_n + offset
             else:
                 start = t_n
+        else:
+            start = usestart
 
         # animation in the velocity headway plane
         if effective_headway:
-            leadinfo, folinfo, rinfo = helper.makeleadfolinfo_r3([[], id], platooninfo, meas)
+            leadinfo, folinfo, rinfo = helper.makeleadfolinfo([id], platooninfo, meas, relaxtype = 'both')
         else:
-            leadinfo, folinfo, rinfo = helper.makeleadfolinfo([[], id], platooninfo, meas)
+            leadinfo, folinfo, rinfo = helper.makeleadfolinfo([ id], platooninfo, meas, relaxtype = 'none')
 
-        if end == None:
+        if useend is None:
             end = T_nm1
+        else:
+            end = useend
         frames = [t_n, T_nm1]
         relax, unused = r_constant(rinfo[0], frames, T_n, rp, False,
                                    h)  # get the relaxation amounts for the current vehicle; these depend on the parameter curp[-1] only.
