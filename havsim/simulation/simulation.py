@@ -25,6 +25,8 @@ TO DO /
     
 """
 
+from havsim.simulation.models import dboundary
+
 def simulate_step(curstate, auxinfo, roadinfo, updatefun, dt): 
     """
     does a step of the simulation on a single lane circular road 
@@ -205,7 +207,7 @@ def simcir_obj(p, initstate, auxinfo, roadinfo, idlist, model, modelupdate, loss
     else: 
         return obj, sim, curstate, auxinfo, roadinfo
 
-def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, dt): 
+def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, dt): 
     """
     does a step of the simulation for the full simulation which includes boundary conditions and LC
     
@@ -218,7 +220,7 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, dt):
     auxinfo - dictionary where keys are IDs, the values are 
     0 - current model regime 
     1 - current leader
-    2 - current lane
+    2 - LC regime 
     3 - current road 
     4 - length
     5 - parameters
@@ -228,11 +230,12 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, dt):
     9 - LC model 
     10 - update function
     11 - followers in adjacent lanes 
-    12 - init entry time
-    13 - past model reg info
-    14 - past leader info
-    15 - past lane info 
-    16 - past road info
+    12 - leaders in adjacent lanes 
+    13 - init entry time
+    14 - past model reg info
+    15 - past LC regime info 
+    16 - past leader info
+    17 - past road info
 
     
     roadinfo - dictionary, encodes the road network and also stores boundary conditions 
@@ -262,7 +265,12 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, dt):
     #get actions in longitudinal movement (from CF model)
     #key is vehicle, value is acceleration in longitudinal movement 
     for i in curstate.keys():
-        a[i] = auxinfo[i][6](auxinfo[i][5],curstate[i],curstate[auxinfo[i][1]], dt = dt)
+        if auxinfo[i][1] ==None: 
+            dbc = roadinfo[auxinfo[i][3]][4][timeind] #speed at downstream 
+            a[i] = dboundary(dbc, curstate[i],dt)
+        else:
+            #standard call signature for CF model 
+            a[i] = auxinfo[i][6](auxinfo[i][5],curstate[i],curstate[auxinfo[i][1]], dt = dt)
         
     #get actions in latitudinal movement (from LC model)
     #key is vehicle, value is 
@@ -319,6 +327,14 @@ def LCmodel():
     #1 - incentive criteria
     #2 - politeness
     lca = {}
+    
+    
+    
+    
+    
+    
+    
+    ######### first attempt 
     for i in curstate.keys(): 
         if modelinfo[i][0] == 0: #discretionary only 
             plc = auxinfo[i][8]
