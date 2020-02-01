@@ -487,7 +487,7 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
     ind = 2
     artist2veh = []
 
-    indcounter = np.asarray([], dtype=np.int64)  # keeps track of which artists correspond to which vehicle
+#    indcounter = np.asarray([], dtype=np.int64)  # keeps track of which artists correspond to which vehicle
 
     if platoon != []:
         followerchain = helper.platoononly(followerchain, platoon)
@@ -542,6 +542,7 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
             if meas[i][LCind[j], 7] != lane and lane is not None:
                 kwargs = {'linestyle': '--', 'alpha': opacity}  # dashed line .4 opacity (60% see through)
                 plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[0], **kwargs)
+                artist2veh.append(counter)
             else:
 
                 X = x[LCind[j]:LCind[j + 1]]
@@ -554,7 +555,7 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
                     plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[0], picker=5, **kwargs)
                     artist2veh.append(counter)
 
-                indcounter = np.append(indcounter, counter)
+#                indcounter = np.append(indcounter, counter)
 
         counter += 1
 
@@ -599,7 +600,7 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
 
     find_artists = []
     nartists = len(artist2veh)
-
+    
     def on_pick(event):
         nonlocal find_artists
         ax = event.artist.axes
