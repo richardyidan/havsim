@@ -75,6 +75,7 @@ def simulate_step(curstate, auxinfo, roadinfo, updatefun, dt):
     
     return nextstate, auxinfo
 
+
 def update_cir(state, action, auxinfo, roadinfo, dt):
     #given states and actions returns next state 
     
