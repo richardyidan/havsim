@@ -202,7 +202,7 @@ def drl_reward(nextstate, vavg, decay = .95):
         vavg[i] = vavg[i]*decay + nextstate[i][1] #update exponential average of velocity
         cur = -(nextstate[i][1] - vavg[i])**2 + vavg[i]  #penalize oscillations, reward high average
         if nextstate[i][2] < .2: 
-            cur = cur - 2**(-5*(j[2]-.2)) - 1 #if headway is small, we give a penalty
+            cur = cur - 2**(-5*(nextstate[i][2]-.2)) - 1 #if headway is small, we give a penalty
         reward += cur
     return reward, vavg
         

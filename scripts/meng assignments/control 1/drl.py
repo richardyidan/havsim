@@ -59,7 +59,6 @@ class Model(tf.keras.Model):
     # Executes `call()` under the hood.
     logits, value = self.predict_on_batch(obs)
     action = self.dist.predict_on_batch(logits)
-#    action = self.dist.call(logits)
 
     return tf.squeeze(action, axis=-1), tf.squeeze(value, axis=-1)
 
@@ -67,18 +66,41 @@ class ACagent:
     def __init__(self,model):
         self.model = model
         
-    def test(self):
-        obs, done, ep_reward = None, None, None
-        pass
+    def get_action_value(self, curstate, avid, avlead):
+        avstate = tf.convert_to_tensor([[curstate[avid][1], curstate[avlead][1], curstate[avid][2]]]) #state = current speed, leader speed, headway
+        action, value = self.model.action_value(avstate) #forward pass of NN gets action and value function
+        #action from NN gives a scalar, we convert it to the quantized acceleration 
+        acc = tf.cast(action,tf.float32)*.1-1.5 #30 integer actions -> between -1.5 and 1.4 in increments of .1 
+        return action, value, acc 
+        
+        
+    def test(self, env, timesteps): #Note that this is pretty much the same as simulate_baseline in the environment = circ_singleav
+        env.reset()
+        avid = env.avid
+        avlead = env.auxinfo[avid][1]
+        for i in range(timesteps): 
+            unused, unused, acc = self.get_action_value(env.curstate,avid,avlead)
+            nextstate, reward = env.step(acc)
+            #update state, update cumulative reward
+            env.curstate = nextstate
+            env.totloss += reward
+            #save current state to memory (so we can plot everything)
+            for j in nextstate.keys():
+                env.sim[j].append(nextstate[j])
+                
+    def train(self, env, updates=200)
+                
+    def _value_loss(self, ):
     
 def NNhelper(out, curstate, *args, **kwargs):
     #this is hacky but basically we just want the action from NN to end up 
     #in a[i][1] 
     return [curstate[1],out]
 
-def myplot(sim, auxinfo, roadinfo):
+def myplot(sim, auxinfo, roadinfo, platoon= []):
+    #note to self: platoon keyword is messed up becauase plotformat is hacky - when vehicles wrap around they get put in new keys 
     meas, platooninfo = plotformat(sim,auxinfo,roadinfo, starttimeind = 0, endtimeind = math.inf, density = 1) 
-    platoonplot(meas,None,platooninfo,platoon=[], lane=1, colorcode= True, speed_limit = [0,25]) 
+    platoonplot(meas,None,platooninfo,platoon=platoon, lane=1, colorcode= True, speed_limit = [0,25]) 
     plt.ylim(0,roadinfo[0])
 
 class circ_singleav: #example of single AV environment 
@@ -135,21 +157,40 @@ initstate, auxinfo, roadinfo = eq_circular(p, IDM_b3, update2nd_cir, IDM_b3_eql,
 sim, curstate, auxinfo = simulate_cir(initstate, auxinfo,roadinfo, update_cir, timesteps = 25000, dt = .25)
 vlist = {i: curstate[i][1] for i in curstate.keys()}
 avid = min(vlist, key=vlist.get)
-#%%
+
 #create simulation environment 
 testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward,dt = .25)
-
+#%% sanity check
 #test baseline with human AV and with control as a simple check for bugs 
 testenv.simulate_baseline(IDM_b3,p,1500) #human model 
+print('loss for all human scenario is'+str(testenv.totloss))
 myplot(testenv.sim,auxinfo,roadinfo)
 
 testenv.simulate_baseline(FS,[2,.4,.4,3,3,7,15,2], 1500) #control model
+print('loss for one AV with parametrized control is'+str(testenv.totloss))
 myplot(testenv.sim,auxinfo,roadinfo)
         
     
-    #%%
-#model = Model(num_actions = 30)
-#action, value = model.action_value(tf.convert_to_tensor([[30.,20.]])) 
+    #%% initialize agent (we expect the agent to be awful before training)
+model = Model(num_actions = 30)
+agent = ACagent(model)
+#%% 
+agent.test(testenv,200) #200 timesteps
+myplot(testenv.sim,auxinfo,roadinfo) #plot of all vehicles 
+avtraj = np.asarray(testenv.sim[testenv.avid])
+plt.figure() #plots, in order, position, speed, and headway time series. 
+plt.subplot(1,3,1)
+plt.plot(avtraj[:,0])
+plt.subplot(1,3,2)
+plt.plot(avtraj[:,1])
+plt.subplot(1,3,3)
+plt.plot(avtraj[:,2])
+
+#you can see that in the initial random strategy, the speed is basically just doing a random walk around 0, 
+#because the accelerations are just uniform in [-1.5,1.4]
+#so pretty soon the follower vehicle is going to 'collide' and at that point 
+#the reward is just going to be dominated by the collision term 
+
     
     
     
