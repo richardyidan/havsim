@@ -5,6 +5,7 @@
 import numpy as np 
 import tensorflow as tf 
 import tensorflow.keras.layers as kl
+import tensorflow.keras.losses as kls
 import matplotlib.pyplot as plt 
 
 import havsim
@@ -66,12 +67,19 @@ class ACagent:
     def __init__(self,model):
         self.model = model
         
+        self.gamma = .99 #discounting learning_rate = 3e-8
+        self.model.compile(
+                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 7e-3),
+                loss = [self._logits_loss, self._value_loss]) 
+        #I set learning rate small because rewards are pretty big, can try changing 
+        self.logitloss = kls.SparseCategoricalCrossentropy(from_logits=True)
+        
     def get_action_value(self, curstate, avid, avlead):
         avstate = tf.convert_to_tensor([[curstate[avid][1], curstate[avlead][1], curstate[avid][2]]]) #state = current speed, leader speed, headway
         action, value = self.model.action_value(avstate) #forward pass of NN gets action and value function
         #action from NN gives a scalar, we convert it to the quantized acceleration 
         acc = tf.cast(action,tf.float32)*.1-1.5 #30 integer actions -> between -1.5 and 1.4 in increments of .1 
-        return action, value, acc 
+        return action, value, acc, avstate 
         
         
     def test(self, env, timesteps): #Note that this is pretty much the same as simulate_baseline in the environment = circ_singleav
@@ -79,7 +87,7 @@ class ACagent:
         avid = env.avid
         avlead = env.auxinfo[avid][1]
         for i in range(timesteps): 
-            unused, unused, acc = self.get_action_value(env.curstate,avid,avlead)
+            unused, unused, acc, unused = self.get_action_value(env.curstate,avid,avlead)
             nextstate, reward = env.step(acc)
             #update state, update cumulative reward
             env.curstate = nextstate
@@ -88,9 +96,36 @@ class ACagent:
             for j in nextstate.keys():
                 env.sim[j].append(nextstate[j])
                 
-    def train(self, env, updates=200)
+    def train(self, env, updates=200):
+        env.reset()
+        avid = env.avid
+        avlead = env.auxinfo[avid][1]
+        I = 1
+        action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
+        for i in range(updates):
+            #first, get transition and reward
+            nextstate, reward = env.step(acc)
+            
+            #get state value function of transition 
+            nextaction, nextvalue,nextacc, nextavstate = self.get_action_value(nextstate, avid, avlead)
+            TDerror = (reward + nextvalue - value) #temporal difference error 
+            
+            self.model.train_on_batch(avstate, [tf.stack([I*TDerror[0],tf.cast(action,tf.float32)]), I*TDerror[0]])
+            I = I * self.gamma
                 
-    def _value_loss(self, ):
+    def _value_loss(self, target, value):
+        #loss = -\delta * v(s, w) ==> gradient step looks like \delta* \nabla v(s,w)
+        return -target*value 
+    
+    def _logits_loss(self,target, logits):
+        #remember, logits are unnormalized log probabilities, so we need to normalize 
+        #also, logits are a tensor over action space, but we only care about action we choose 
+#        logits = tf.math.exp(logits)
+#        logits = logits / tf.math.reduce_sum(logits) 
+        getaction = tf.cast(target[1],tf.int32)
+        logprob = self.logitloss(getaction, logits) #really the log probability is negative of this. 
+        
+        return target[0]*logprob
     
 def NNhelper(out, curstate, *args, **kwargs):
     #this is hacky but basically we just want the action from NN to end up 
@@ -163,11 +198,11 @@ testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward,dt = .25)
 #%% sanity check
 #test baseline with human AV and with control as a simple check for bugs 
 testenv.simulate_baseline(IDM_b3,p,1500) #human model 
-print('loss for all human scenario is'+str(testenv.totloss))
+print('loss for all human scenario is '+str(testenv.totloss)+' starting from initial with 1500 timesteps')
 myplot(testenv.sim,auxinfo,roadinfo)
 
 testenv.simulate_baseline(FS,[2,.4,.4,3,3,7,15,2], 1500) #control model
-print('loss for one AV with parametrized control is'+str(testenv.totloss))
+print('loss for one AV with parametrized control is '+str(testenv.totloss)+' starting from initial with 1500 timesteps')
 myplot(testenv.sim,auxinfo,roadinfo)
         
     
@@ -185,13 +220,42 @@ plt.subplot(1,3,2)
 plt.plot(avtraj[:,1])
 plt.subplot(1,3,3)
 plt.plot(avtraj[:,2])
+print('total reward before training is '+str(testenv.totloss)+' starting from initial with 200 timesteps')
 
 #you can see that in the initial random strategy, the speed is basically just doing a random walk around 0, 
 #because the accelerations are just uniform in [-1.5,1.4]
 #so pretty soon the follower vehicle is going to 'collide' and at that point 
 #the reward is just going to be dominated by the collision term 
 
-    
+    #%%
+    #MWE of training 
+for i in range(10):
+    for i in range(5):
+        agent.train(testenv)
+    agent.test(testenv,200)
+    print('after 1 episode total reward is '+str(testenv.totloss)+' starting from initial with 200 timesteps')
+
+    #a bit more complicated 
+    #divided stuff up like this because I don't want to give it 
+    #a long episode when the strategy is still in the initial bad state 
+#get some different places to train from 
+#curstatelist = [curstate]
+#for i in range(7):
+#    testenv.initstate = curstatelist[i]
+#    testenv.simulate_baseline(FS,[2,.4,.4,3,3,7,15,2], 200)
+#    curstatelist.append(testenv.curstate)
+#    
+#
+#for i in range(10): #train 10 epochs, each epoch = 5 training sessions on each of the 8 initial states 
+#    for j in curstatelist: 
+#        testenv.initstate = j
+#        for k in range(5):
+#            agent.train(testenv)
+#    
+#    testenv.initstate = curstate
+#    agent.test(testenv, 1500)
+#    print('epoch = '+str(i )+' total reward is '+str(testenv.totloss)+ ' starting from initial with 1500 timesteps')
+
     
     
     
