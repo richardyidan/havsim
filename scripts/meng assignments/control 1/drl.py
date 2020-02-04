@@ -167,6 +167,10 @@ class circ_singleav: #example of single AV environment
         #get reward, update average velocity
         reward, vavg = self.rewardfn(nextstate,self.vavg)
         self.vavg = vavg
+        
+        """
+        TODO implement early stopping if collision
+        """
         return nextstate, reward
     
     def simulate_baseline(self, CFmodel, p, timesteps): #can insert a CF model and parameters (e.g. put in human model or parametrized control model)
@@ -231,7 +235,7 @@ print('total reward before training is '+str(testenv.totloss)+' starting from in
     #MWE of training 
 for i in range(10):
     for i in range(5):
-        agent.train(testenv)
+        agent.train(testenv,200)
     agent.test(testenv,200)
     print('after 1 episode total reward is '+str(testenv.totloss)+' starting from initial with 200 timesteps')
 
