@@ -7,17 +7,17 @@ import numpy as np
 from havsim.calibration.algs import makeplatoonlist
 from havsim.plotting import platoonplot, animatetraj
 
-path_reconngsim = '/Users/yidan/Downloads/reconngsim.pkl'
-path_highd26 = '/Users/yidan/Downloads/highd26.pkl'
+#path_reconngsim = '/Users/yidan/Downloads/reconngsim.pkl'
+#path_highd26 = '/Users/yidan/Downloads/highd26.pkl'
+#
+## ngsim data
+#with open(path_reconngsim, 'rb') as f:
+#    reconngsim = pickle.load(f)[0]
+## highd data
+#with open(path_highd26, 'rb') as f:
+#    highd = pickle.load(f)[0]
 
-# ngsim data
-with open(path_reconngsim, 'rb') as f:
-    reconngsim = pickle.load(f)[0]
-# highd data
-with open(path_highd26, 'rb') as f:
-    highd = pickle.load(f)[0]
-
-meas, platooninfo = makeplatoonlist(reconngsim, 1, False)  # form meas for ngsim data
+meas, platooninfo = makeplatoonlist(data, 1, False)  # form meas for ngsim data
 # note time discretization = .1 seconds for ngsim, .04 seconds for highd
 
 # %% toy example
@@ -29,9 +29,9 @@ for i in platoon:
 toymeas[875][:, 4] = 0
 toymeas[908][:, 5] = 0
 # plot all the vehicles, you can click on lines to see which vehicle IDs the trajectories correspond to
-platoonplot(meas, None, platooninfo, platoon=platoon, colorcode=False, lane=3)
+#platoonplot(meas, None, platooninfo, platoon=platoon, colorcode=False, lane=3)
 # you can view the vehicle trajectories in this animation if you want
-ani = animatetraj(meas, platooninfo, platoon=platoon)
+#ani = animatetraj(meas, platooninfo, platoon=platoon)
 
 # expected output:
 
@@ -71,8 +71,13 @@ Record what the output should be for boundaryspeeds(toymeas,[3,4],[3,4],.1,.1)
 
 
 def boundaryspeeds(meas, entrylanes, exitlanes, timeind, outtimeind, car_ids=None):
+    #car_ids is a list of vehicle IDs, only use those values in meas 
+    
     # filter meas based on car ids, merge the result into a single 2d array
-    data = meas if car_ids is None else np.concatenate([meas[car_id] for car_id in car_ids])
+    if car_ids is None:
+        data = np.concatenate(list(meas.values()))
+    else: 
+        data = np.concatenate([meas[car_id] for car_id in car_ids])
 
     # sort observations based on lane number, then time, then position
     data = data[np.lexsort((data[:, 2], data[:, 1], data[:, -2]))]

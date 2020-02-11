@@ -1040,6 +1040,77 @@ def is_pareto_efficient(costs, return_mask = True): #copy pasted from stack exch
     else:
         return is_efficient
 
+def boundaryspeeds(meas, entrylanes, exitlanes, timeind, outtimeind, car_ids=None):
+    #car_ids is a list of vehicle IDs, only use those values in meas 
+    
+    # filter meas based on car ids, merge the result into a single 2d array
+    if car_ids is None:
+        data = np.concatenate(list(meas.values()))
+    else: 
+        data = np.concatenate([meas[car_id] for car_id in car_ids])
+
+    # sort observations based on lane number, then time, then position
+    data = data[np.lexsort((data[:, 2], data[:, 1], data[:, -2]))]
+
+    # get the index for the entry/exit data row index for each lane and time
+    _, index, count = np.unique(data[:, [-2, 1]], axis=0, return_index=True, return_counts=True)
+    index_rev = index + count - 1
+    entry_data = data[index]  # all observations for entry speeds
+    exit_data = data[index_rev]  # all observations for exit speeds
+
+    # now aggregate the data according to outtimeind / timeind
+    interval = outtimeind / timeind
+    entryspeeds = list()
+    entrytimes = list()
+    exitspeeds = list()
+    exittimes = list()
+
+    for entrylane in entrylanes:
+        # filter entry data according to lane number, then take only 2 columns: time and speed
+        entry_data_for_lane = entry_data[entry_data[:, -2] == entrylane][:, [1, 3]]
+        entryspeed, entrytime = interpolate(entry_data_for_lane, interval)
+        entryspeeds.append(entryspeed)
+        entrytimes.append(entrytime)
+
+    for exitlane in exitlanes:
+        # filter exit data according to lane number, then take only 2 columns: time and speed
+        exit_data_for_lane = exit_data[exit_data[:, -2] == exitlane][:, [1, 3]]
+        exitspeed, exittime = interpolate(exit_data_for_lane, interval)
+        exitspeeds.append(exitspeed)
+        exittimes.append(exittime)
+
+    return entryspeeds, entrytimes, exitspeeds, exittimes
+
+
+def interpolate(data, interval=1.0):
+    # entry/exit data: 2d array with 2 columns: time and speed for a lane
+    # interval: aggregation units.
+    # returns: (aggregated_speed_list, (start_time_of_first_interval, start_time_of_last_interval))
+    if not len(data):
+        return list(), ()
+    speeds = list()
+    cur_ind = 0
+    cur_time = data[0, 0]
+    remained = interval
+    speed = 0.0
+    while cur_ind < len(data) - 1:
+        if remained + cur_time < data[cur_ind + 1, 0]:
+            speed += data[cur_ind, 1] * remained
+            cur_time += remained
+            remained = 0.0
+        else:
+            speed += data[cur_ind, 1] * (data[cur_ind + 1, 0] - cur_time)
+            remained -= (data[cur_ind + 1, 0] - cur_time)
+            cur_time = data[cur_ind + 1, 0]
+            cur_ind += 1
+        if remained == 0.0:
+            speeds.append(speed / interval)
+            remained = interval
+            speed = 0.0
+    speed += remained * data[-1, 1]
+    speeds.append(speed / interval)
+    return speeds, (data[0, 0], data[0, 0] + (len(speeds) - 1) * interval)
+
 #################################################
 #old makeleadfolinfo functions - this ravioli code has now been fixed! 
 #################################################
