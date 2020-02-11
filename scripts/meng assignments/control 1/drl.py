@@ -115,10 +115,11 @@ class ACagent:
         statemem = np.empty((batch_sz,15))
         out1 = np.empty((batch_sz,2))
         out2 = np.empty((batch_sz))
-
+        
+        action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
         for i in range(updates):
             for bstep in range(batch_sz):
-                action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
+                
                 nextstate, reward, done = env.step(acc,bstep,batch_sz)
                 nextaction, nextvalue,nextacc, nextavstate = self.get_action_value(nextstate, avid, avlead)
                 TDerror = (reward + nextvalue - value) #temporal difference error
@@ -132,6 +133,8 @@ class ACagent:
                     I = 1
 
             self.model.train_on_batch(statemem, [out1,out2])
+            
+            action, value, acc, avstate = nextaction, nextvalue,nextacc, nextavstate
 
             '''
             action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
