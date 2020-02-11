@@ -73,83 +73,42 @@ class ACagent:
                 loss = [self._logits_loss, self._value_loss])
         #I set learning rate small because rewards are pretty big, can try changing
         self.logitloss = kls.SparseCategoricalCrossentropy(from_logits=True)
-        self.paststates = []
-        self.statecnt = 0
 
-    def get_action_value(self, curstate, avid, avlead):
-        # avstate = tf.convert_to_tensor([[curstate[avid][1], curstate[avlead][1], curstate[avid][2]]]) #state = current speed, leader speed, headway
-        self.paststates.extend((curstate[avid][1], curstate[avlead][1], curstate[avid][2]))
-        if self.statecnt < 4:
-            self.statecnt += 1
-            avstate = tf.convert_to_tensor([[curstate[avid][1], curstate[avlead][1], curstate[avid][2],curstate[avid][1], curstate[avlead][1], curstate[avid][2],curstate[avid][1], curstate[avlead][1], curstate[avid][2],curstate[avid][1], curstate[avlead][1], curstate[avid][2],curstate[avid][1], curstate[avlead][1], curstate[avid][2]]]) #state = current speed, leader speed, headway + past 4 states
-        else:
-            self.paststates = self.paststates[-15:]
-            avstate = tf.convert_to_tensor([self.paststates])
-        action, value = self.model.action_value(avstate) #forward pass of NN gets action and value function
-        #action from NN gives a scalar, we convert it to the quantized acceleration
-        acc = tf.cast(action,tf.float32)*.1-1.5 #30 integer actions -> between -1.5 and 1.4 in increments of .1
-        return action, value, acc, avstate
+    def get_action_value(self, curstate):
+        return self.model.action_value(curstate)
 
 
     def test(self, env, timesteps): #Note that this is pretty much the same as simulate_baseline in the environment = circ_singleav
         env.reset()
-        avid = env.avid
-        avlead = env.auxinfo[avid][1]
         for i in range(timesteps):
-            _, _, acc, _ = self.get_action_value(env.curstate,avid,avlead)
-            nextstate, reward, done = env.step(acc,i,timesteps)
+            action,value = self.get_action_value(env.curstate)
+            reward, done = env.step(action)
             #update state, update cumulative reward
-            env.curstate = nextstate
             env.totloss += reward
             #save current state to memory (so we can plot everything)
-            for j in nextstate.keys():
-                env.sim[j].append(nextstate[j])
+
             if done:
+                print("break after {} timesteps with reward {}".format(i, env.totloss))
                 break
-    def train(self, env, batch_sz=64, updates=200):
+    def train(self, env, updates=200):
         env.reset()
-        avid = env.avid
-        avlead = env.auxinfo[avid][1]
+        # action,value = self.get_action_value(env.curstate)
         I = 1
-        # action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
-        statemem = np.empty((batch_sz,15))
-        out1 = np.empty((batch_sz,2))
-        out2 = np.empty((batch_sz))
-
         for i in range(updates):
-            for bstep in range(batch_sz):
-                action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
-                nextstate, reward, done = env.step(acc,bstep,batch_sz)
-                nextaction, nextvalue,nextacc, nextavstate = self.get_action_value(nextstate, avid, avlead)
-                TDerror = (reward + nextvalue - value) #temporal difference error
-                I = I * self.gamma
-
-                statemem[bstep] = avstate
-                out1[bstep] = tf.stack([I*TDerror[0],tf.cast(action,tf.float32)])
-                out2[bstep] = I*TDerror[0]
-                if done:
-                    env.reset()
-                    I = 1
-
-            self.model.train_on_batch(statemem, [out1,out2])
-
-            '''
-            action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
+            action,value = self.get_action_value(env.curstate)
             #first, get transition and reward
-            nextstate, reward, done = env.step(acc,i,updates)
+            reward, done = env.step(action)
 
             #get state value function of transition
-            nextaction, nextvalue,nextacc, nextavstate = self.get_action_value(nextstate, avid, avlead)
+            nextaction, nextvalue = self.get_action_value(env.curstate)
             TDerror = (reward + nextvalue - value) #temporal difference error
 
-            self.model.train_on_batch(avstate, [tf.stack([I*TDerror[0],tf.cast(action,tf.float32)]), I*TDerror[0]])
+            self.model.train_on_batch(env.curstate, [tf.stack([I*TDerror[0],tf.cast(action,tf.float32)]), I*TDerror[0]])
             I = I * self.gamma
 
-            if done:
-                # env.reset()
-                # I = 1
-                break
-            '''
+            # if done:
+            #     break
+
     def _value_loss(self, target, value):
         #loss = -\delta * v(s, w) ==> gradient step looks like \delta* \nabla v(s,w)
         return -target*value
@@ -175,6 +134,21 @@ def myplot(sim, auxinfo, roadinfo, platoon= []):
     platoonplot(meas,None,platooninfo,platoon=platoon, lane=1, colorcode= True, speed_limit = [0,25])
     plt.ylim(0,roadinfo[0])
     # plt.show()
+
+class mdp_env:
+    def __init__(self):
+        self.rewardtable = {0:-1, 1:1, 2:3, 3:4}
+        self.curstate = tf.convert_to_tensor([[.123, .456, .789]])
+        self.p = 0.1
+
+    def reset(self):
+        self.totloss = 0
+
+    def rewardfn(self,action):
+        return self.rewardtable[action.numpy()]
+
+    def step(self, action):
+        return self.rewardfn(action), np.random.random() <= self.p
 
 class circ_singleav: #example of single AV environment
     #basically we just wrap the function simulate_step
@@ -230,6 +204,7 @@ class circ_singleav: #example of single AV environment
                 break
 
 
+'''
 #%%
                 #specify simulation
 p = [33.33, 1.2, 2, 1.1, 1.5] #parameters for human drivers
@@ -249,14 +224,15 @@ myplot(testenv.sim,auxinfo,roadinfo)
 testenv.simulate_baseline(FS,[2,.4,.4,3,3,7,15,2], 1500) #control model
 print('loss for one AV with parametrized control is '+str(testenv.totloss)+' starting from initial with 1500 timesteps')
 myplot(testenv.sim,auxinfo,roadinfo)
-
+'''
 
     #%% initialize agent (we expect the agent to be awful before training)
-model = Model(num_actions = 30)
+model = Model(num_actions = 4)
 agent = ACagent(model)
+testenv = mdp_env()
 #%%
 agent.test(testenv,200) #200 timesteps
-myplot(testenv.sim,auxinfo,roadinfo) #plot of all vehicles
+'''myplot(testenv.sim,auxinfo,roadinfo) #plot of all vehicles
 avtraj = np.asarray(testenv.sim[testenv.avid])
 plt.figure() #plots, in order, position, speed, and headway time series.
 plt.subplot(1,3,1)
@@ -264,7 +240,7 @@ plt.plot(avtraj[:,0])
 plt.subplot(1,3,2)
 plt.plot(avtraj[:,1])
 plt.subplot(1,3,3)
-plt.plot(avtraj[:,2])
+plt.plot(avtraj[:,2])'''
 # plt.show()
 print('total reward before training is '+str(testenv.totloss)+' starting from initial with 200 timesteps')
 
@@ -276,7 +252,7 @@ print('total reward before training is '+str(testenv.totloss)+' starting from in
     #%%
     #MWE of training
 for i in range(10):
-    for i in range(5):
+    for j in range(5):
         agent.train(testenv)
     agent.test(testenv,200)
     print('after episode '+str(i + 1)+' total reward is '+str(testenv.totloss)+' starting from initial with 200 timesteps')
