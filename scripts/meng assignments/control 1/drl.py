@@ -115,12 +115,13 @@ class ACagent:
         statemem = np.empty((batch_sz,15))
         out1 = np.empty((batch_sz,2))
         out2 = np.empty((batch_sz))
+        counter = 0
         
         action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
         for i in range(updates):
             for bstep in range(batch_sz):
                 
-                nextstate, reward, done = env.step(acc,bstep,batch_sz)
+                nextstate, reward, done = env.step(acc,counter,1500)
                 nextaction, nextvalue,nextacc, nextavstate = self.get_action_value(nextstate, avid, avlead)
                 TDerror = (reward + nextvalue - value) #temporal difference error
                 I = I * self.gamma
@@ -128,7 +129,9 @@ class ACagent:
                 statemem[bstep] = avstate
                 out1[bstep] = tf.stack([I*TDerror[0],tf.cast(action,tf.float32)])
                 out2[bstep] = I*TDerror[0]
+                counter += 1
                 if done:
+                    counter = 0
                     env.reset()
                     I = 1
 
@@ -162,7 +165,7 @@ class ACagent:
         #also, logits are a tensor over action space, but we only care about action we choose
 #        logits = tf.math.exp(logits)
 #        logits = logits / tf.math.reduce_sum(logits)
-        getaction = tf.cast(target[1],tf.int32)
+        getaction = tf.cast(target[:,1],tf.int32)
         logprob = self.logitloss(getaction, logits) #really the log probability is negative of this.
 
         return target[0]*logprob
@@ -208,6 +211,7 @@ class circ_singleav: #example of single AV environment
         allheadways = [ nextstate[i][2] for i in nextstate.keys() ]
         shouldterminate = np.any(np.array(allheadways) <= 0)
         if shouldterminate:
+            print('terminated after '+str(iter)+' timesteps')
             return nextstate, -15**2 * len(allheadways) * (timesteps - iter - 1), True
 
         #get reward, update average velocity
@@ -244,12 +248,12 @@ avid = min(vlist, key=vlist.get)
 #create simulation environment
 testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward,dt = .25)
 #%% sanity check
-#test baseline with human AV and with control as a simple check for bugs
-testenv.simulate_baseline(IDM_b3,p,1500) #human model
+##test baseline with human AV and with control as a simple check for bugs
+testenv.simulate_baseline(IDM_b3,p,200) #human model
 print('loss for all human scenario is '+str(testenv.totloss)+' starting from initial with 1500 timesteps')
 myplot(testenv.sim,auxinfo,roadinfo)
-
-testenv.simulate_baseline(FS,[2,.4,.4,3,3,7,15,2], 1500) #control model
+#
+testenv.simulate_baseline(FS,[2,.4,.4,3,3,7,15,2], 200) #control model
 print('loss for one AV with parametrized control is '+str(testenv.totloss)+' starting from initial with 1500 timesteps')
 myplot(testenv.sim,auxinfo,roadinfo)
 
@@ -258,7 +262,7 @@ myplot(testenv.sim,auxinfo,roadinfo)
 model = Model(num_actions = 30)
 agent = ACagent(model)
 #%%
-agent.test(testenv,200) #200 timesteps
+agent.test(testenv,800) #200 timesteps
 myplot(testenv.sim,auxinfo,roadinfo) #plot of all vehicles
 avtraj = np.asarray(testenv.sim[testenv.avid])
 plt.figure() #plots, in order, position, speed, and headway time series.
@@ -279,9 +283,9 @@ print('total reward before training is '+str(testenv.totloss)+' starting from in
     #%%
     #MWE of training
 for i in range(10):
-    for i in range(5):
+    for i in range(1):
         agent.train(testenv)
-    agent.test(testenv,200)
+    agent.test(testenv,800)
     print('after episode '+str(i + 1)+' total reward is '+str(testenv.totloss)+' starting from initial with 200 timesteps')
 
     #a bit more complicated
