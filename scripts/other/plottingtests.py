@@ -17,7 +17,7 @@ Other problem is the code to assign leftovers has some issues with logic, seeing
 
 #speeds,X,Y,meanspeeds = meanspeedplot(data,100,20,lane=2,use_avg='harm')
 #main call signature 
-times,x,lane,veh = selectoscillation(data,50,20,lane=2,use_avg='mean') #this function is still buggy I think, something wrong with initialization, sometimes labelling messed up 
+times,x,lane,veh = selectoscillation(data,50,20,lane=3,use_avg='mean') #this function is still buggy I think, something wrong with initialization, sometimes labelling messed up 
     
 #times,x,lane,veh = selectoscillation(data1974,50,160,lane=1,use_avg='mean', region_shape=None)
 
