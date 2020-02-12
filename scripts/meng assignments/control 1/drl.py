@@ -41,8 +41,8 @@ class Model(tf.keras.Model):
   def __init__(self, num_actions):
     super().__init__('mlp_policy')
     # Note: no tf.get_variable(), just simple Keras API!
-    self.hidden1 = kl.Dense(64, activation='relu') #hidden layer for actions (policy)
-    self.hidden2 = kl.Dense(64, activation='relu') #hidden layer for state-value
+    self.hidden1 = kl.Dense(128, activation='relu') #hidden layer for actions (policy)
+    self.hidden2 = kl.Dense(128, activation='relu') #hidden layer for state-value
     self.value = kl.Dense(1, name = 'value')
     # Logits are unnormalized log probabilities.
     self.logits = kl.Dense(num_actions, name = 'policy_logits')
@@ -69,32 +69,57 @@ class ACagent:
 
         self.gamma = .99 #discounting learning_rate = 3e-8
         self.model.compile(
-                optimizer = tf.keras.optimizers.RMSprop(lr = 7e-3),
+                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7),
                 loss = [self._logits_loss, self._value_loss])
         #I set learning rate small because rewards are pretty big, can try changing
         self.logitloss = kls.SparseCategoricalCrossentropy(from_logits=True)
-        self.paststates = []
+        #stuff for building states (len self.mem+1 tuple of past states)
+        self.paststates = [] #holds sequence of states
         self.statecnt = 0
+        self.mem = 10
+        #keep track of how many steps in simulation we have taken 
+        self.counter = 0
+        #keep track of discounting 
+        self.I = 1
+        #goal for how long we want the simulation to be ideally (with no early termination)
+        self.simlen = 1500
 
     def get_action_value(self, curstate, avid, avlead):
-        # avstate = tf.convert_to_tensor([[curstate[avid][1], curstate[avlead][1], curstate[avid][2]]]) #state = current speed, leader speed, headway
+#        avstate = tf.convert_to_tensor([[curstate[avid][1], curstate[avlead][1], curstate[avid][2]]]) #state = current speed, leader speed, headway
+        
+        
         self.paststates.extend((curstate[avid][1], curstate[avlead][1], curstate[avid][2]))
-        if self.statecnt < 4:
+        if self.statecnt < self.mem:
+            avstate = self.paststates[:]
+            [avstate.extend(self.paststates[-3:]) for i in range(self.mem-self.statecnt)]
+            
             self.statecnt += 1
-            avstate = tf.convert_to_tensor([[curstate[avid][1], curstate[avlead][1], curstate[avid][2],curstate[avid][1], curstate[avlead][1], curstate[avid][2],curstate[avid][1], curstate[avlead][1], curstate[avid][2],curstate[avid][1], curstate[avlead][1], curstate[avid][2],curstate[avid][1], curstate[avlead][1], curstate[avid][2]]]) #state = current speed, leader speed, headway + past 4 states
         else:
-            self.paststates = self.paststates[-15:]
-            avstate = tf.convert_to_tensor([self.paststates])
+            avstate = self.paststates[-(self.mem+1)*3:]
+            
+            
+        avstate = tf.convert_to_tensor([avstate])
+        
         action, value = self.model.action_value(avstate) #forward pass of NN gets action and value function
         #action from NN gives a scalar, we convert it to the quantized acceleration
         acc = tf.cast(action,tf.float32)*.1-1.5 #30 integer actions -> between -1.5 and 1.4 in increments of .1
         return action, value, acc, avstate
 
-
-    def test(self, env, timesteps): #Note that this is pretty much the same as simulate_baseline in the environment = circ_singleav
+    def reset(self, env):
+        
         env.reset()
+        self.paststates = []
+        self.statecnt = 0
+        self.counter = 0
+        self.I = 1
+        
+    
+    def test(self, env, timesteps): #Note that this is pretty much the same as simulate_baseline in the environment = circ_singleav
+#        env.reset()
+        self.reset(env)
         avid = env.avid
         avlead = env.auxinfo[avid][1]
+        
         for i in range(timesteps):
             _, _, acc, _ = self.get_action_value(env.curstate,avid,avlead)
             nextstate, reward, done = env.step(acc,i,timesteps)
@@ -106,56 +131,40 @@ class ACagent:
                 env.sim[j].append(nextstate[j])
             if done:
                 break
-    def train(self, env, batch_sz=64, updates=200):
-        env.reset()
+    def train(self, env, batch_sz=64, updates=50):
+#        env.reset()
+        self.reset(env)
         avid = env.avid
         avlead = env.auxinfo[avid][1]
-        I = 1
-        # action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
-        statemem = np.empty((batch_sz,15))
+
+        action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
+        statemem = np.empty((batch_sz,(self.mem+1)*3))
         out1 = np.empty((batch_sz,2))
         out2 = np.empty((batch_sz))
-        counter = 0
         
         action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
         for i in range(updates):
             for bstep in range(batch_sz):
                 
-                nextstate, reward, done = env.step(acc,counter,1500)
+                nextstate, reward, done = env.step(acc,self.counter,self.simlen)
                 nextaction, nextvalue,nextacc, nextavstate = self.get_action_value(nextstate, avid, avlead)
-                TDerror = (reward + nextvalue - value) #temporal difference error
-                I = I * self.gamma
+                TDerror = (reward + self.gamma*nextvalue - value) #temporal difference error
+                
+                self.I = self.I * self.gamma
+                self.counter += 1
 
                 statemem[bstep] = avstate
-                out1[bstep] = tf.stack([I*TDerror[0],tf.cast(action,tf.float32)])
-                out2[bstep] = I*TDerror[0]
-                counter += 1
-                if done:
-                    counter = 0
-                    env.reset()
-                    I = 1
+                out1[bstep] = tf.stack([self.I*TDerror[0],tf.cast(action,tf.float32)])
+                out2[bstep] = self.I*TDerror[0]
+                
+                if done or self.counter >=self.simlen: #reset simulation 
+                    self.reset(env)
+                    action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
 
             self.model.train_on_batch(statemem, [out1,out2])
             
             action, value, acc, avstate = nextaction, nextvalue,nextacc, nextavstate
 
-            '''
-            action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
-            #first, get transition and reward
-            nextstate, reward, done = env.step(acc,i,updates)
-
-            #get state value function of transition
-            nextaction, nextvalue,nextacc, nextavstate = self.get_action_value(nextstate, avid, avlead)
-            TDerror = (reward + nextvalue - value) #temporal difference error
-
-            self.model.train_on_batch(avstate, [tf.stack([I*TDerror[0],tf.cast(action,tf.float32)]), I*TDerror[0]])
-            I = I * self.gamma
-
-            if done:
-                # env.reset()
-                # I = 1
-                break
-            '''
     def _value_loss(self, target, value):
         #loss = -\delta * v(s, w) ==> gradient step looks like \delta* \nabla v(s,w)
         return -target*value
@@ -167,8 +176,11 @@ class ACagent:
 #        logits = logits / tf.math.reduce_sum(logits)
         getaction = tf.cast(target[:,1],tf.int32)
         logprob = self.logitloss(getaction, logits) #really the log probability is negative of this.
+        
+        probs = tf.nn.softmax(logits)
+        entropy_loss = kls.categorical_crossentropy(probs,probs)
 
-        return target[0]*logprob
+        return tf.math.multiply(target[:,0],logprob) - 1e-11*entropy_loss
 
 def NNhelper(out, curstate, *args, **kwargs):
     #this is hacky but basically we just want the action from NN to end up
@@ -211,7 +223,7 @@ class circ_singleav: #example of single AV environment
         allheadways = [ nextstate[i][2] for i in nextstate.keys() ]
         shouldterminate = np.any(np.array(allheadways) <= 0)
         if shouldterminate:
-            print('terminated after '+str(iter)+' timesteps')
+#            print('terminated after '+str(iter)+' timesteps')
             return nextstate, -15**2 * len(allheadways) * (timesteps - iter - 1), True
 
         #get reward, update average velocity
@@ -244,6 +256,7 @@ initstate, auxinfo, roadinfo = eq_circular(p, IDM_b3, update2nd_cir, IDM_b3_eql,
 sim, curstate, auxinfo = simulate_cir(initstate, auxinfo,roadinfo, update_cir, timesteps = 25000, dt = .25)
 vlist = {i: curstate[i][1] for i in curstate.keys()}
 avid = min(vlist, key=vlist.get)
+#avid = 20
 
 #create simulation environment
 testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward,dt = .25)
@@ -263,17 +276,21 @@ model = Model(num_actions = 30)
 agent = ACagent(model)
 #%%
 agent.test(testenv,800) #200 timesteps
+plt.close('all')
 myplot(testenv.sim,auxinfo,roadinfo) #plot of all vehicles
 avtraj = np.asarray(testenv.sim[testenv.avid])
+
 plt.figure() #plots, in order, position, speed, and headway time series.
 plt.subplot(1,3,1)
 plt.plot(avtraj[:,0])
+plt.plot(np.asarray(testenv.sim[testenv.avid-1])[:,0])
+plt.plot(np.asarray(testenv.sim[testenv.avid+1])[:,0])
 plt.subplot(1,3,2)
 plt.plot(avtraj[:,1])
 plt.subplot(1,3,3)
 plt.plot(avtraj[:,2])
 # plt.show()
-print('total reward before training is '+str(testenv.totloss)+' starting from initial with 200 timesteps')
+print('before training total reward is '+str(testenv.totloss)+' over '+str(len(testenv.sim[testenv.avid]))+' timesteps')
 
 #you can see that in the initial random strategy, the speed is basically just doing a random walk around 0,
 #because the accelerations are just uniform in [-1.5,1.4]
@@ -282,11 +299,11 @@ print('total reward before training is '+str(testenv.totloss)+' starting from in
 
     #%%
     #MWE of training
-for i in range(10):
-    for i in range(1):
+for i in range(30):
+    for j in range(1):
         agent.train(testenv)
     agent.test(testenv,800)
-    print('after episode '+str(i + 1)+' total reward is '+str(testenv.totloss)+' starting from initial with 200 timesteps')
+    print('after epoch '+str(i + 1)+' total reward is '+str(testenv.totloss)+' over '+str(len(testenv.sim[testenv.avid]))+' timesteps')
 
     #a bit more complicated
     #divided stuff up like this because I don't want to give it
