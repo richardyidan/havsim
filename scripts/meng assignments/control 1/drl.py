@@ -69,14 +69,15 @@ class ACagent:
 
         self.gamma = .99 #discounting learning_rate = 3e-8
         self.model.compile(
-                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7),
+                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
+                #optimizer = tf.keras.optimizers.SGD(learning_rate=1e-7,)
                 loss = [self._logits_loss, self._value_loss])
         #I set learning rate small because rewards are pretty big, can try changing
         self.logitloss = kls.SparseCategoricalCrossentropy(from_logits=True)
         #stuff for building states (len self.mem+1 tuple of past states)
         self.paststates = [] #holds sequence of states
         self.statecnt = 0
-        self.mem = 10
+        self.mem = 4
         #keep track of how many steps in simulation we have taken 
         self.counter = 0
         #keep track of discounting 
@@ -148,6 +149,7 @@ class ACagent:
                 
                 nextstate, reward, done = env.step(acc,self.counter,self.simlen)
                 nextaction, nextvalue,nextacc, nextavstate = self.get_action_value(nextstate, avid, avlead)
+                #note TDerror is calculated wrong if done is True 
                 TDerror = (reward + self.gamma*nextvalue - value) #temporal difference error
                 
                 self.I = self.I * self.gamma
@@ -180,7 +182,7 @@ class ACagent:
         probs = tf.nn.softmax(logits)
         entropy_loss = kls.categorical_crossentropy(probs,probs)
 
-        return tf.math.multiply(target[:,0],logprob) - 1e-11*entropy_loss
+        return tf.math.multiply(target[:,0],logprob) - 1e-9*entropy_loss
 
 def NNhelper(out, curstate, *args, **kwargs):
     #this is hacky but basically we just want the action from NN to end up
@@ -319,9 +321,9 @@ for i in range(30):
 #for i in range(10): #train 10 epochs, each epoch = 5 training sessions on each of the 8 initial states
 #    for j in curstatelist:
 #        testenv.initstate = j
-#        for k in range(5):
+#        for k in range(1):
 #            agent.train(testenv)
 #
 #    testenv.initstate = curstate
-#    agent.test(testenv, 1500)
-#    print('epoch = '+str(i )+' total reward is '+str(testenv.totloss)+ ' starting from initial with 1500 timesteps')
+#    agent.test(testenv, 800)
+#    print('after epoch '+str(i + 1)+' total reward is '+str(testenv.totloss)+' over '+str(len(testenv.sim[testenv.avid]))+' timesteps')
