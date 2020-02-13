@@ -87,7 +87,7 @@ class ACagent:
 
     def get_action_value(self, curstate, avid, avlead):
 #        avstate = tf.convert_to_tensor([[curstate[avid][1], curstate[avlead][1], curstate[avid][2]]]) #state = current speed, leader speed, headway
-        
+        #may want to add following vehicle headway to state 
         
         self.paststates.extend((curstate[avid][1], curstate[avlead][1], curstate[avid][2]))
         if self.statecnt < self.mem:
@@ -149,8 +149,11 @@ class ACagent:
                 
                 nextstate, reward, done = env.step(acc,self.counter,self.simlen)
                 nextaction, nextvalue,nextacc, nextavstate = self.get_action_value(nextstate, avid, avlead)
-                #note TDerror is calculated wrong if done is True 
-                TDerror = (reward + self.gamma*nextvalue - value) #temporal difference error
+                
+                if done: 
+                    TDerror = reward - value
+                else:
+                    TDerror = (reward + self.gamma*nextvalue - value) #temporal difference error
                 
                 self.I = self.I * self.gamma
                 self.counter += 1
