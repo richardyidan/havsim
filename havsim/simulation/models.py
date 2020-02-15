@@ -195,6 +195,18 @@ def l2v_obj(sim,auxinfo):
         obj  = obj + curobj
         obj = obj - len(vlist)*avgv
     return obj
+
+def drl_reward(nextstate, vavg, decay = .95, penalty = 1):
+    reward = 0
+    for i in nextstate.keys():
+        vavg[i] = vavg[i]*decay + (1 - decay)*nextstate[i][1] #update exponential average of velocity
+        cur = -(nextstate[i][1] - vavg[i])**2 + vavg[i]  #penalize oscillations, reward high average
+        if nextstate[i][2] < .2: 
+#            cur = cur - penalty*(2**(-5*(nextstate[i][2]-.2)) - 1) #if headway is small, we give a penalty
+            cur = cur - penalty*(nextstate[i][2]-.2)**2 #here is a smaller penalty
+        reward += cur
+    return reward, vavg
+        
             
 def avgv_obj(sim,auxinfo):
     obj = 0

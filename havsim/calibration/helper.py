@@ -6,7 +6,8 @@ helper functions for calibration module; these functions don't implement any cor
 """
 import numpy as np 
 import heapq
-import math 
+import math
+from collections import defaultdict
 
 def checksequential(data, dataind = 1, pickfirst = False):	
 #	checks that given data are all sequential in time (i.e. each row of data advances one frameID)
@@ -190,11 +191,13 @@ def makeleadinfo(platoon, platooninfo, sim, *args):
     
     return leadinfo
 
-def makefolinfo(platoon, platooninfo, sim, *args, allfollowers = True):
+def makefolinfo(platoon, platooninfo, sim, *args, allfollowers = True, endtime = 'Tn'):
     #same as leadinfo but it gives followers instead of leaders. 
     #followers computed ONLY OVER SIMULATED TIMES + BOUNDARY CONDITION TIMES (t_n - T_nm1 + T_nm1 - T_n)
     #allfollowers = True -> gives all followers, even if they aren't in platoon
     #allfollowers = False -> only gives followers in the platoon (needed for adjoint calculation, adjoint variables depend on followers, not leaders.)
+    #endtime = 'Tn' calculates followers between t_n, T_n, otherwise calculated between t_n, T_nm1, 
+    #so give endtime = 'Tnm1' and it will not compute followers over boundary condition times 
     
     #EXAMPLE
     ##    platoons = [[],5,7] means we want to calibrate vehicles 5 and 7 in a platoon
@@ -206,8 +209,10 @@ def makefolinfo(platoon, platooninfo, sim, *args, allfollowers = True):
     for i in platoon:
         curfolinfo = []
         t_nstar, t_n, T_nm1, T_n= platooninfo[i][0:4]
-        
-        follist = sim[i][t_n-t_nstar:T_n-t_nstar+1,5] #list of followers
+        if endtime == 'Tn':
+            follist = sim[i][t_n-t_nstar:T_n-t_nstar+1,5] #list of followers
+        else: 
+            follist = sim[i][t_n-t_nstar:T_nm1-t_nstar+1,5]
         curfol = follist[0]
         unfinished = False
         
@@ -783,26 +788,43 @@ def fin_dif_wrapper(p,args, *eargs, eps = 1e-8, **kwargs):
         out[i] = objfun(curp,*args)
     return (out-obj)/eps
 
-def chain_metric(platoon, platooninfo, k = .9, type = 'lead', meas = []):
+def chain_metric(platoon, platooninfo, meas, k=.9, metrictype='lead'):
+    #metric that defines how good a platoon is 
+    #refer to platoon formation pdf for exact definition 
     res = 0
     for i in platoon:
         T = set(range(platooninfo[i][1], platooninfo[i][2]+1))
-        res += c_metric(i, platoon, T, platooninfo, k, type, meas=meas)
+        res += c_metric(i, platoon, T, platooninfo, meas=meas, k=k, metrictype=metrictype)
     return res
 
 
-def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas = []):
+def c_metric(veh, platoon, T, platooninfo, meas, k=.9, metrictype='lead', depth=0):
+    #defines how good a single vehicle in a specific time is. 
+    #refer to platoon formation pdf for exact definition 
+    
     # leadinfo, folinfo= makeleadinfo(platoon, platooninfo, meas),  makefolinfo(platoon, platooninfo, meas)
     # if veh not in platoon:
     #     return 0
     # targetsList = leadinfo[platoon.index(veh)] if type == 'lead' else folinfo[platoon.index(veh)]
     veh = int(veh)
-    if type == 'lead':
+    if metrictype == 'lead':
         leadinfo = makeleadinfo([veh], platooninfo, meas)
         targetsList = leadinfo[0]
     else:
         folinfo = makefolinfo([veh], platooninfo, meas)
-        targetsList = folinfo[0]
+        # targetsList = folinfo[0]
+        temp = folinfo[0]
+        targetsList = []
+        for i in temp:
+            Tnstart = platooninfo[i[0]][1]
+            Tnm1 = platooninfo[i[0]][2]
+            start = max(Tnstart, i[1])
+            end = min(Tnm1, i[2])
+            if start<end:
+                targetsList.append([i[0], start, end])
+
+
+
 
     def getL(veh, platoon, T):
         L = set([])
@@ -815,6 +837,8 @@ def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas 
                 continue
             temp.update(range(i[1], i[2]+1))
         L = T.intersection(temp)
+        # if len(L)>0:
+        #     print(veh, len(L), depth)
         return L
 
     def getLead(veh, platoon, T):
@@ -825,6 +849,7 @@ def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas 
         for i in targetsList:
             if i[0] in platoon and (i[1] in T or i[2] in T):
                 leads.append(i[0])
+        leads = list(set(leads))
         return leads
 
     def getTimes(veh, lead, T):
@@ -832,19 +857,35 @@ def c_metric(veh, platoon, T, platooninfo, k = .9, type = 'lead', depth=0, meas 
         temp = set([])
         for i in targetsList:
             if i[0] == lead:
-                temp = T.intersection(set(range(i[1], i[2]+1)))
+                temp.update(range(i[1], i[2]+1))
+        temp = T.intersection(temp)
         return temp
 
     res = len(getL(veh, platoon, T))
     leads = getLead(veh, platoon, T)
+
     for i in leads:
-        res += k*c_metric(i, platoon, getTimes(veh, i, T), platooninfo, k=k, type=type, depth=depth+1, meas=meas)
+        res += k * c_metric(i, platoon, getTimes(veh, i, T), platooninfo, meas=meas, k=k, metrictype=metrictype, depth=depth + 1)
     return res
 
-def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh', meas=[]):
-    if type == 'veh':
+def cirdep_metric(platoonlist, platooninfo, meas, k=.9, metrictype='veh'):
+    #platoonlist - list of platoons 
+    
+    #type = veh checks for circular dependencies. For every vehicle which is 
+    #causing a circular dependency it outputs: 
+    # tuple of [vehicle, list of lead vehicles, list of lead vehicles platoon indices], vehicle platoon index
+    #where vehicle is the vehicle with the circular dependency, which it has becuase of lead vehicles. 
+    
+    #type = num quantifies how bad a circular dependency is by computing 
+    #the change to chain metric when adding the lead vehicle to the platoon 
+    #with the circular dependency. Output is a list of floats, same length as platoonlist. 
+    if metrictype == 'veh':
         cirList = []
         after = set([])
+        veh2platoon = {} #converts vehicle to platoon index
+        for i in range(len(platoonlist)):
+            for j in platoonlist[i]: 
+                veh2platoon[j] = i
         for i in range(len(platoonlist)):
             after.update(platoonlist[i])
         for i in range(len(platoonlist)):
@@ -853,34 +894,50 @@ def cirdep_metric(platoonlist, platooninfo, k = .9, type = 'veh', meas=[]):
             for j in range(len(platoonlist[i])):
                 leaders = [k[0] for k in leadinfo[j]]
                 leaders = set(leaders)
-                if len(leaders.intersection(after))>0:
-                    cirList.append((platoonlist[i][j], i))
+                circleadveh = leaders.intersection(after)
+                if len(circleadveh)>0:
+                    cirList.append(([platoonlist[i][j], list(circleadveh), [veh2platoon[k] for k in circleadveh]], i))
         return cirList
-    elif type == 'num':
+    elif metrictype == 'num':
         res = 0
         cirList = []
         after = set([])
+        leader_violate_map = defaultdict(list)
         for i in range(len(platoonlist)): #get set of all vehicles
             after.update(platoonlist[i])
         for i in range(len(platoonlist)): #i is current platoon
             after -= set(platoonlist[i]) #remove vehicles from current platoon 
             leadinfo= makeleadinfo(platoonlist[i], platooninfo, meas)
+            temp = []
+
             for j in range(len(platoonlist[i])):
                 leaders = [k[0] for k in leadinfo[j]]
                 leaders = set(leaders)
                 leaders_after = leaders.intersection(after) #leaders_after are any leaders of i which are not yet calibrated
                 if len(leaders_after) > 0:
-                    cirList.append((list(leaders_after), i))
+                    # temp.append((list(leaders_after), i))
+
+                    violated_leaders = [v for v in leaders_after if i not in leader_violate_map[v]]
+                    if violated_leaders: # Remove duplicated invoking of chain matric
+                        temp.append((violated_leaders, i))
+                    for l in leaders_after:
+                        leader_violate_map[l].append(i)
+
                 else:
-                    cirList.append(None)
+                    temp.append(None)
+            cirList.append(temp)
         res = []
         for i in cirList:
             if i == None: 
                 res.append(0)
-            else: 
-                for j in i[0]:
-                    T = set(range(platooninfo[j][1], platooninfo[j][2]+1))
-                    res.append(c_metric(j, platoonlist[i[1]], T, platooninfo, k=k, type='follower',meas = meas))
+            else:
+                temp = 0
+                for j in i:
+                    if j:
+                        for l in j[0]:
+                            T = set(range(platooninfo[l][1], platooninfo[l][3]+1))
+                            temp += c_metric(l, platoonlist[j[1]], T, platooninfo, meas=meas, k=k, metrictype='follower')
+            res.append(temp)
         return res
 
 def plotformat(sim, auxinfo, roadinfo, endtimeind = 3000, density = 2, indlist = [], specialind = 21):
@@ -982,6 +1039,77 @@ def is_pareto_efficient(costs, return_mask = True): #copy pasted from stack exch
         return is_efficient_mask
     else:
         return is_efficient
+
+def boundaryspeeds(meas, entrylanes, exitlanes, timeind, outtimeind, car_ids=None):
+    #car_ids is a list of vehicle IDs, only use those values in meas 
+    
+    # filter meas based on car ids, merge the result into a single 2d array
+    if car_ids is None:
+        data = np.concatenate(list(meas.values()))
+    else: 
+        data = np.concatenate([meas[car_id] for car_id in car_ids])
+
+    # sort observations based on lane number, then time, then position
+    data = data[np.lexsort((data[:, 2], data[:, 1], data[:, -2]))]
+
+    # get the index for the entry/exit data row index for each lane and time
+    _, index, count = np.unique(data[:, [-2, 1]], axis=0, return_index=True, return_counts=True)
+    index_rev = index + count - 1
+    entry_data = data[index]  # all observations for entry speeds
+    exit_data = data[index_rev]  # all observations for exit speeds
+
+    # now aggregate the data according to outtimeind / timeind
+    interval = outtimeind / timeind
+    entryspeeds = list()
+    entrytimes = list()
+    exitspeeds = list()
+    exittimes = list()
+
+    for entrylane in entrylanes:
+        # filter entry data according to lane number, then take only 2 columns: time and speed
+        entry_data_for_lane = entry_data[entry_data[:, -2] == entrylane][:, [1, 3]]
+        entryspeed, entrytime = interpolate(entry_data_for_lane, interval)
+        entryspeeds.append(entryspeed)
+        entrytimes.append(entrytime)
+
+    for exitlane in exitlanes:
+        # filter exit data according to lane number, then take only 2 columns: time and speed
+        exit_data_for_lane = exit_data[exit_data[:, -2] == exitlane][:, [1, 3]]
+        exitspeed, exittime = interpolate(exit_data_for_lane, interval)
+        exitspeeds.append(exitspeed)
+        exittimes.append(exittime)
+
+    return entryspeeds, entrytimes, exitspeeds, exittimes
+
+
+def interpolate(data, interval=1.0):
+    # entry/exit data: 2d array with 2 columns: time and speed for a lane
+    # interval: aggregation units.
+    # returns: (aggregated_speed_list, (start_time_of_first_interval, start_time_of_last_interval))
+    if not len(data):
+        return list(), ()
+    speeds = list()
+    cur_ind = 0
+    cur_time = data[0, 0]
+    remained = interval
+    speed = 0.0
+    while cur_ind < len(data) - 1:
+        if remained + cur_time < data[cur_ind + 1, 0]:
+            speed += data[cur_ind, 1] * remained
+            cur_time += remained
+            remained = 0.0
+        else:
+            speed += data[cur_ind, 1] * (data[cur_ind + 1, 0] - cur_time)
+            remained -= (data[cur_ind + 1, 0] - cur_time)
+            cur_time = data[cur_ind + 1, 0]
+            cur_ind += 1
+        if remained == 0.0:
+            speeds.append(speed / interval)
+            remained = interval
+            speed = 0.0
+    speed += remained * data[-1, 1]
+    speeds.append(speed / interval)
+    return speeds, (data[0, 0], data[0, 0] + (len(speeds) - 1) * interval)
 
 #################################################
 #old makeleadfolinfo functions - this ravioli code has now been fixed! 

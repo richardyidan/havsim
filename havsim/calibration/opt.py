@@ -11,7 +11,6 @@ All calibration related functions which set up optimization problems, including 
         this updated format
             -many of the problems in general features/QOL can be solved by using the new simulation code in place of current calibration code
         -We have written code for LL and delay models which has not been tested 
-            
         -should refactor calibration code to be cleaner, including a polished api for users
         -create test script that can be used to check for bugs in the calibration code
 	

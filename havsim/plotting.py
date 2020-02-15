@@ -369,6 +369,89 @@ def plotColorLines(X, Y, SPEED, speed_limit):
     line = axs.add_collection(lc)
     return line
 
+def plotformat(sim, auxinfo, roadinfo, starttimeind = 0, endtimeind = 3000, density = 2, indlist = [], specialind = 21):
+    #get output from simulation into a format we can plot using plotting functions
+    
+    #starttimeind = first time to be plotted 
+    #endtimeind = last time to be plotted 
+    
+    #density = k plots every kth vehicle, indlist = [keys] plots keys only. 
+    #specialind does not do anything
+    #it handles the circular road by creating the wrap around as new vehicles. 
+    
+    L = roadinfo[0]
+    platooninfo = {} #need platooninfo 0 - 4 : observation times
+    meas = {} #need columns 1, 2,3, 7
+    idcount = 0
+    speciallist = []
+    
+    if indlist == []:
+        uselist = list(sim.keys())[::density]
+    else:
+        uselist = indlist
+    for i in uselist:
+        cur = sim[i]
+        
+#        if i == specialind:
+#            speciallist.append(idcount)
+        
+        #initialize output for current vehicle
+        curtime = 0
+        prevx = -1
+        tlist = []
+        xlist = []
+        vlist = []
+        platooninfo[idcount] = [curtime, curtime, None, None]
+        for counter, j in enumerate(cur): #for each vehicle
+            if counter < starttimeind:
+                continue 
+            
+            if j[0] < prevx: #if distance decreases its because we wrapped around - store measurements in new vehicle 
+                
+                endtime = counter #get end time and update platooninfo
+                platooninfo[idcount][2:] = [endtime-1,endtime-1]
+                #update meas
+                meas[idcount] = np.zeros((endtime-curtime,8))
+                meas[idcount][:,1] = tlist
+                meas[idcount][:,2] = xlist
+                meas[idcount][:,3] = vlist
+                #lane just set always to 1
+                meas[idcount][:,7] = 1
+                
+                #reset iteration
+                idcount += 1
+                curtime = endtime
+                prevx = j[0]
+                tlist = [curtime]
+                xlist = [j[0]]
+                vlist = [j[1]]
+                platooninfo[idcount] = [curtime, curtime, None, None]
+                continue
+                
+            tlist.append(counter)
+            xlist.append(j[0])
+            vlist.append(j[1])
+            prevx = j[0]
+            
+            if counter >= endtimeind:
+                break
+            
+        #also need to finish current once for loop ends 
+        endtime = counter #get end time and update platooninfo
+        platooninfo[idcount][2:] = [endtime,endtime]
+        #update meas
+        meas[idcount] = np.zeros((endtime-curtime+1,8))
+        meas[idcount][:,1] = tlist
+        meas[idcount][:,2] = xlist
+        meas[idcount][:,3] = vlist
+        #lane just set always to 1
+        meas[idcount][:,7] = 1
+        
+        idcount += 1
+            
+
+    return meas, platooninfo
+
 
 def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C1'],
                 fulltraj=True, lane=None, opacity=.4, colorcode=True, speed_limit=[]):  # plot platoon in space-time
@@ -404,7 +487,7 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
     ind = 2
     artist2veh = []
 
-    indcounter = np.asarray([], dtype=np.int64)  # keeps track of which artists correspond to which vehicle
+#    indcounter = np.asarray([], dtype=np.int64)  # keeps track of which artists correspond to which vehicle
 
     if platoon != []:
         followerchain = helper.platoononly(followerchain, platoon)
@@ -459,6 +542,7 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
             if meas[i][LCind[j], 7] != lane and lane is not None:
                 kwargs = {'linestyle': '--', 'alpha': opacity}  # dashed line .4 opacity (60% see through)
                 plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[0], **kwargs)
+                artist2veh.append(counter)
             else:
 
                 X = x[LCind[j]:LCind[j + 1]]
@@ -471,7 +555,7 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
                     plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[0], picker=5, **kwargs)
                     artist2veh.append(counter)
 
-                indcounter = np.append(indcounter, counter)
+#                indcounter = np.append(indcounter, counter)
 
         counter += 1
 
@@ -516,7 +600,7 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
 
     find_artists = []
     nartists = len(artist2veh)
-
+    
     def on_pick(event):
         nonlocal find_artists
         ax = event.artist.axes
@@ -968,9 +1052,9 @@ def animatevhd(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, show_me
 
     # animation in the velocity headway plane
     if effective_headway:
-        leadinfo, folinfo, rinfo = helper.makeleadfolinfo_r3([[], my_id], platooninfo, meas, use_merge_constant=True)
+        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([ my_id], platooninfo, meas, relaxtype = 'both')
     else:
-        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([[], my_id], platooninfo, meas)
+        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([ my_id], platooninfo, meas, relaxtype = 'both')
 
     if end == None:
         end = T_nm1
@@ -1032,7 +1116,7 @@ def animatevhd(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, show_me
 
 
 def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, show_meas=True, effective_headway=False,
-                    rp=None, h=.1, datalen=9, start=None, end=None, delay=0):
+                    rp=None, h=.1, datalen=9, usestart=None, useend=None, delay=0):
     #plot multiple vehicles in phase space (speed v headway)
     # my_id - id of the vehicle to plot
     # lentail = 20 - number of observations to show in the past
@@ -1054,21 +1138,25 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
     for id in my_id:
 
         t_nstar, t_n, T_nm1, T_n = platooninfo[id][0:4]
-        if not start:
+        if usestart is None:
             if delay != 0:
                 offset = math.ceil(delay / h)
                 start = t_n + offset
             else:
                 start = t_n
+        else:
+            start = usestart
 
         # animation in the velocity headway plane
         if effective_headway:
-            leadinfo, folinfo, rinfo = helper.makeleadfolinfo_r3([[], id], platooninfo, meas)
+            leadinfo, folinfo, rinfo = helper.makeleadfolinfo([id], platooninfo, meas, relaxtype = 'both')
         else:
-            leadinfo, folinfo, rinfo = helper.makeleadfolinfo([[], id], platooninfo, meas)
+            leadinfo, folinfo, rinfo = helper.makeleadfolinfo([ id], platooninfo, meas, relaxtype = 'none')
 
-        if end == None:
+        if useend is None:
             end = T_nm1
+        else:
+            end = useend
         frames = [t_n, T_nm1]
         relax, unused = r_constant(rinfo[0], frames, T_n, rp, False,
                                    h)  # get the relaxation amounts for the current vehicle; these depend on the parameter curp[-1] only.
@@ -1251,7 +1339,7 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
     return im_ani
 
 
-def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsim=True, datalen=9):
+def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsim=True, datalen=9, speed_limit = [] ):
     #plots vehicles platoon using data meas. 
     
     # platoon = [] - if given as a platoon, only plots those vehicles in the platoon (e.g. [[],1,2,3] )
@@ -1275,7 +1363,7 @@ def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsi
 
     # scatter_pts = ax.scatter([], [], c='k')
     # im = ax.imshow([(100,100)], origin='lower')
-    scatter_pts = ax.scatter([], [], c=[], cmap=cm.get_cmap('RdYlBu'), marker=">")
+    scatter_pts = ax.scatter([], [], c=[], cmap=palettable.colorbrewer.diverging.RdYlGn_4.mpl_colormap, marker=">") #cm.get_cmap('RdYlBu')
 
     # fig.colorbar(im,cmap=cm.get_cmap('RdYlBu'))
     # for i in usetime:
@@ -1286,7 +1374,19 @@ def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsi
 
     # im_ani = animation.ArtistAnimation(fig,ims,interval=3)
     annotionList = []
-    norm = plt.Normalize(0, 80)
+    if speed_limit == []:
+        maxspeed = 0
+        minspeed = math.inf
+        for i in followerchain.keys():
+            curmax = max(meas[i][:,3])
+            curmin = min(meas[i][:,3])
+            if curmin < minspeed:
+                minspeed = curmin
+            if curmax > maxspeed:
+                maxspeed = curmax
+        norm = plt.Normalize(minspeed,maxspeed)
+    else:
+        norm = plt.Normalize(speed_limit[0], speed_limit[1])
     # divider = make_axes_locatable(ax)
     # cax = divider.append_axes("right", size="25%", pad=0.2)
 
@@ -1335,10 +1435,10 @@ def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsi
     # fig.colorbar(scatter_pts, cmap=cm.get_cmap('RdYlBu'), norm=norm)
     # fig.colorbar(scatter_pts, cmap=cm.get_cmap('RdYlBu'))
 
-    im_ani = animation.FuncAnimation(fig, aniFunc, init_func=init, frames=len(usetime), interval=3)
+    out = animation.FuncAnimation(fig, aniFunc, init_func=init, frames=len(usetime), interval=3)
 
-    plt.show()
-    return im_ani
+#    plt.show()
+    return out
 
 
 def wtplot(meas, ID):
