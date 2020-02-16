@@ -271,8 +271,6 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     
     return nextstate, auxinfo
 
-def update_net(state, action, LCaction, auxinfo, roadinfo, dt):
-    return 
 
 def std_CF(veh, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, relax): 
     #supposed to be model helper for standard CF model
@@ -281,7 +279,7 @@ def std_CF(veh, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, relax):
         curstate[veh][2] += modelinfo[veh][0] #add relaxation if needed
     
     if vehaux[1] == None: #no leader
-        dbc = roadinfo[vehaux[3]][4][timeind]
+        dbc = roadinfo[vehaux[3]][4][vehaux[2]][timeind]
         out = dboundary(dbc, curstate[veh], dt)
     else: 
         out = vehaux[7](vehaux[5], curstate[veh], curstate[vehaux[1]], dt) #standard CF call 
@@ -293,9 +291,20 @@ def std_CF(veh, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, relax):
 def get_headway(curstate, auxinfo, roadinfo, fol, lead):
     hd = curstate[lead][0] - curstate[fol][0] - auxinfo[lead][4]
     if auxinfo[fol][3] != auxinfo[lead][3]: #only works for vehicles 1 road apart
-        hd += roadinfo[auxinfo[fol][3]]
+        
+        hd += headway_helper(roadinfo,auxinfo[fol][3],auxinfo[fol][2], auxinfo[lead][3])
         
     return hd
+
+def headway_helper(roadinfo, folroad, follane, leadroad):
+    nextroad, nextlane = roadinfo[folroad][1][follane]
+    out = roadinfo[folroad][2]
+    while nextroad != leadroad: 
+        out += roadinfo[folroad][2]
+        folroad, follane = nextroad, nextlane
+        nextroad, nextlane = roadinfo[folroad][1][follane]
+        
+    return out
 
 def LCmodel(a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax = False): 
     #Based on MOBIL strategy
@@ -333,7 +342,7 @@ def LCmodel(a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax = F
                 newfola = 0
             else:
                 folaux = auxinfo[fol]
-                curfolhd = curstate[fol][2] #current follower headway 
+                folhd = curstate[fol][2] #current follower headway 
                 #get current follower acceleration 
                 if folaux[0][1] and not userelax: 
                     fola = folaux[7](fol, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, False)
@@ -357,7 +366,9 @@ def LCmodel(a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax = F
                 else: 
                     cura = a[i]
                 
-        if lfol != '':
+        if lfol != '': #new to calculate new vehicle acceleration, new left follower acceleration 
+            
+            #this code is wrapped in mobil_change now 
 #            if lfol == None: 
 #                lfola = 0
 #                newlfola = 0
@@ -395,13 +406,15 @@ def LCmodel(a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax = F
 #                        newla = curaux[7](i,curstate,auxinfo,roadinfo,modelinfo,timeind,dt,True)
 #                    
 #            lincentive = newla - cura + p[2]*(newlfola - lfola + newfola - fola) #no bias term 
-            lincentive, newla, lfola, newlfola, llead, lfolhd = mobil_change(i,lfol, curstate, auxinfo, roadinfo, 
+            
+            lincentive, newla, lfola, newlfola = mobil_change(i,lfol, curstate, auxinfo, roadinfo, 
                                                                             modelinfo, timeind, dt, userelax, a, cura, newfola, fola, p)
+
         else: 
             lincentive = -math.inf
         
         if rfol != '': 
-            rincentive, newra, rfola, newrfola, rlead, rfolhd = mobil_change(i, rfol, curstate, auxinfo, roadinfo, modelinfo,
+            rincentive, newra, rfola, newrfola = mobil_change(i, rfol, curstate, auxinfo, roadinfo, modelinfo,
                                                                              timeind, dt, userelax, a, cura, newfola, fola, p)
         else: 
             rincentive = -math.inf
@@ -423,8 +436,15 @@ def LCmodel(a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax = F
                 lca[i] = side
             else: 
                 #do tactical/cooperation step if desired
+                pass
                 
-        return lca
+        #reset changes to curstate
+        curstate[i][2] = curhd
+        curstate[fol][2] = folhd
+        curaux[1] = lead
+        folaux[1] = i
+                
+    return lca
             
                 
             
@@ -467,13 +487,94 @@ def mobil_change(i,lfol, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, us
                 newla = curaux[7](i,curstate,auxinfo,roadinfo,modelinfo,timeind,dt,False)
             else: 
                 newla = curaux[7](i,curstate,auxinfo,roadinfo,modelinfo,timeind,dt,True)
+        
+        curstate[lfol][2] = lfolhd
+        lfolaux[1] = llead
             
     lincentive = newla - cura + p[2]*(newlfola - lfola + newfola - fola) #no bias term 
-    return lincentive, newla, lfola, newlfola, llead, lfolhd
+    
+            
+    return lincentive, newla, lfola, newlfola
 
 
-def update_sn():
+def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
+    #update lanes, leaders, followers for all lane change actions 
+    #vehicles may change at same time into same gap because we don't check this case
+    for i in lca.keys(): 
+        #define change side, opposite side
+        curaux = auxinfo[i]
+        road = curaux[3]
+        lane = curaux[2]
+        if lca[i] == 'l': 
+            lcside = 0
+            opside = 2
+            lcsidelane = lane-1
+            opsidelane = lane+1
+        else: 
+            lcside = 2
+            opside = 0
+            lcsidelane = lane+1
+            opsidelane = lane-1
+        
+        #update opposite side leader
+        opfol = curaux[11][opside]
+        if opfol == '':
+            pass
+        else:
+            if opfol == None:
+                oplead = roadinfo[road][6][opsidelane]
+            else: 
+                oplead = auxinfo[opfol][1]
+            if oplead is not None: 
+                auxinfo[oplead][11][lcside] = curaux[11][1] #opposite side LC side follower is current follower
+        
+        #update current leader
+        if curaux[1] == None: 
+            pass
+        else: 
+            auxinfo[curaux[1]][11][1] = curaux[11][1]
+            if curaux[11][lcside] == auxinfo[curaux[1]][11][lcside]:
+                auxinfo[curaux[1]][11][lcside] = i
+        
+        #update LC side leader
+        lcfol = curaux[11][lcside]
+        if lcfol == None: 
+            lclead = roadinfo[road][6][lcsidelane]
+        else: 
+            lclead = auxinfo[lcfol][1]
+        if lclead is not None: 
+            auxinfo[lclead][11][opside] = curaux[11][1]
+            auxinfo[lclead][11][1] = i
+            
+        #update vehicle
+        curaux[1] = lclead
+        curaux[11][opside] = curaux[11][1]
+        curaux[11][1] = lcfol
+        
+        #update new LC side 
+        #check if new LC side even exists
+        if lca[i]=='l' and lcsidelane ==0:
+            pass
+        elif opsidelane == roadinfo[road][0]:
+            pass
+        else: 
+            newlcside = lcsidelane -1 if lca[i] == 'l' else lcsidelane + 1
+            if lclead == None: 
+                if lcfol == None: 
+                    newlcveh = roadinfo[road][6][newlcside]
+                newlcveh = lcfol
+            else: 
+                newlcveh = lclead
+            
+        
+        
+                
+        
+        
+    
     pass
+    
+    
 
 def simulate_sn():
     """
