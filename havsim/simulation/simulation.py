@@ -8,6 +8,7 @@ houses the main code for running simulations
 
 from havsim.simulation.models import dboundary
 import numpy as np 
+import math 
 
 ###############code for single lane circular road#################
 
@@ -263,7 +264,7 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
         a[i] = auxinfo[i][7](i, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, auxinfo[i][0][1]) #wrapper function for model call 
         
     #get actions in latitudinal movement (from LC model)
-    lca = LCmodel()
+    lca = LCmodel(a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt)
     
     #update current state 
     nextstate = updatefun(curstate, a, auxinfo, roadinfo, dt)
@@ -308,10 +309,14 @@ def LCmodel(a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax = F
     #1 - incentive criteria
     #2 - politeness
     #3 - probability to check discretionary
+    #4 - bias on left side 
+    #5 - bias on right side
     lca = {}
     
     for i in curstate.keys(): 
         curaux = auxinfo[i]
+        p = curaux[8]
+        
         if np.random.rand()>curaux[8][3]: #check discretionary with this probability
             continue
         
@@ -320,110 +325,155 @@ def LCmodel(a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax = F
         if lfol == '' and rfol == '': 
             continue
         else:  #calculate change for follower, calculate current vehicle acc
+            
             fol = curaux[11][1]
+            curhd = curstate[i][2]
             if fol == None:
                 fola = 0
                 newfola = 0
             else:
+                folaux = auxinfo[fol]
                 curfolhd = curstate[fol][2] #current follower headway 
                 #get current follower acceleration 
-                if auxinfo[fol][0][1] and not userelax: 
-                    fola = auxinfo[fol][7](fol, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, False)
+                if folaux[0][1] and not userelax: 
+                    fola = folaux[7](fol, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, False)
                 else: 
                     fola = a[fol]
                 #get new follower acceleration
-                if curaux[1] == None: 
-                    auxinfo[fol][1] = None
-                    newfola = auxinfo[fol][7](fol,curstate,auxinfo,roadinfo,modelinfo,timeind,dt,False)
+                lead = curaux[1]
+                if lead == None: 
+                    folaux[1] = None
+                    newfola = folaux[7](fol,curstate,auxinfo,roadinfo,modelinfo,timeind,dt,False)
                 else:
-                    newfolhd = get_headway(curstate, auxinfo, roadinfo, fol, curaux[1])
+                    newfolhd = get_headway(curstate, auxinfo, roadinfo, fol, lead)
                     curstate[fol][2] = newfolhd
-                    auxinfo[fol][1] = curaux[1]
-                    newfola = auxinfo[fol][7](fol,curstate,auxinfo,roadinfo,modelinfo,timeind,dt,False)
+                    folaux[1] = lead
+                    newfola = folaux[7](fol,curstate,auxinfo,roadinfo,modelinfo,timeind,dt,False)
                 
                 #get vehicle acceleration if needed
-                if curaux[0][1] and not userelax: 
-                    cura = auxinfo[i][7](i, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, False)
+                
+                if curaux[0][1] and not userelax and curaux[1] is not None: 
+                    cura = curaux[7](i, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, False)
                 else: 
                     cura = a[i]
                 
-        if lfol != '': 
-                
-            
-        if lfol !='': #'' = can not change 
-            #if left follower/vehicle are in relax state, need to compute right acceleration to use
-                
-            if auxinfo[lfol][0][1] and not userelax:
-                lfola = auxinfo[lfol][7](lfol, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, False)
-            llead = auxinfo[lfol][1]
-            #current headways
-            curhd = curstate[i][2]
-            lfolhd = curstate[lfol][2]
-            #get new headways
-            newhd = get_headway(curstate, auxinfo, roadinfo, i, llead) 
-            newlfolhd = get_headway(curstate, auxinfo, roadinfo, lfol, i)
-            #get new acceleration for i
-            curstate[i][2] = newhd
-            newa = auxinfo[i][7](i, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, False)
-            #get new acceleration for lfol
-            curstate[lfol][2] = newfolhd
-            newlfola = auxinfo[lfol][7](lfol, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, False)
+        if lfol != '':
+#            if lfol == None: 
+#                lfola = 0
+#                newlfola = 0
+#            else: 
+#                lfolaux = auxinfo[lfol]
+#                #left follower current acceleration 
+#                if lfolaux[0][1] and not userelax:
+#                    lfola = lfolaux[7](lfol, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, False)
+#                else: 
+#                    lfola = a[lfol]
+#                #left side leader
+#                llead = lfolaux[1]
+#                
+#                #get new follower acceleration and vehicle acceleration
+#                lfolaux[1] = i
+#                newlfolhd = get_headway(curstate,auxinfo,roadinfo,lfol,i)
+#                curstate[lfol][2] = newlfolhd
+#                
+#                if lfolaux[0][1] and not userelax:
+#                    newlfola = lfolaux[7](lfol, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, False)
+#                else: 
+#                    newlfola = lfolaux[7](lfol, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, True)
+#                if llead == None: 
+#                    curaux[1] = None
+#                    curaux[2] = lfolaux[2]
+#                    newla = curaux[7](i, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, False) #lead is none means we don't check relax
+#                
+#                else: 
+#                    curaux[1] = llead
+#                    newlhd = get_headway(curstate, auxinfo, roadinfo, i, llead)
+#                    curstate[i][2] = newlhd
+#                    if curaux[0][1] and not userelax: 
+#                        newla = curaux[7](i,curstate,auxinfo,roadinfo,modelinfo,timeind,dt,False)
+#                    else: 
+#                        newla = curaux[7](i,curstate,auxinfo,roadinfo,modelinfo,timeind,dt,True)
+#                    
+#            lincentive = newla - cura + p[2]*(newlfola - lfola + newfola - fola) #no bias term 
+            lincentive, newla, lfola, newlfola, llead, lfolhd = mobil_change(i,lfol, curstate, auxinfo, roadinfo, 
+                                                                            modelinfo, timeind, dt, userelax, a, cura, newfola, fola, p)
+        else: 
+            lincentive = -math.inf
         
-        rfol = curaux[11][2]
         if rfol != '': 
-            rlead = auxinfo[rfol][1]
-            
-    
-    
-    
-    
-    
-    ######### first attempt 
-    for i in curstate.keys(): 
-        if modelinfo[i][0] == 0: #discretionary only 
-            plc = auxinfo[i][8]
-            
-            newfolveh = vehorder[i][0] #do this as well for the vehorder[i][2] 
-            #wrap all of this in a new function 
-            if newfolveh != None: #check left side
-                #compute new headway 
-                newleadveh = auxinfo[newfolveh][1]
-                newvehstate = curstate[i][:2]
-                newvehstate.append(curstate[newleadveh][0] -newvehstate[0] - auxinfo[newleadveh][4])
-                #check for case when leader is in a different road
-                #check for when leader is None and boundary condition is used 
-                #check for when follower is none 
-                #use relax as well; should have relax in the state space
-                
-                #compute new acceleration for current vehicle 
-                newacc = auxinfo[i][6](auxinfo[i][5], newvehstate, curstate[newleadveh], dt = dt)
-                
-                #compute new headway/accel for potential new follower
-                newfolstate = curstate[newfolveh][:2]
-                newfolstate.append(newvehstate[0] - newfolstate[0] - auxinfo[i][4])
-                
-                newfolacc = auxinfo[newfolveh][6](auxinfo[newfolveh][5], newfolstate, curstate[i])
-                
-                #compute new headway/accel for current follower
-                nl = auxinfo[i][1]
-                nf = vehorder[i][1]
-                folstate = curstate[nf][:2]
-                folstate.append(curstate[nl][0] - folstate[0] - auxinfo[nl][1])
-                
-                folacc = auxinfo[nf][6](auxinfo[nf][5], folstate, curstate[nl])
-                
-                if newacc > plc[0] and newfolacc > plc[0] and folacc > plc[0]: #safety requirement #use nested if statements instead 
-                    incentive = newacc - a[i] + plc[2]*(newfolacc + folacc - a[nf] - a[newfolveh]) - plc[1] #there is no bias term 
-                    
+            rincentive, newra, rfola, newrfola, rlead, rfolhd = mobil_change(i, rfol, curstate, auxinfo, roadinfo, modelinfo,
+                                                                             timeind, dt, userelax, a, cura, newfola, fola, p)
+        else: 
+            rincentive = -math.inf
+        
+        
+        if rincentive > lincentive: 
+            side = 'r'
+            incentive = rincentive
+            selfsafe = newra
+            folsafe = newrfola
+        else:
+            side = 'l'
+            incentive = lincentive
+            selfsafe = newla
+            folsafe = newlfola
+        
+        if incentive > p[1]: #incentive criteria
+            if selfsafe > p[0] and folsafe > p[0]:
+                lca[i] = side
             else: 
-                incentive = -math.inf
+                #do tactical/cooperation step if desired
+                
+        return lca
+            
                 
             
-def checksafety():
-    
+                
+def mobil_change(i,lfol, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax, a, cura, newfola, fola, p):
+    curaux = auxinfo[i]
+    if lfol == None: 
+        lfola = 0
+        newlfola = 0
+    else: 
+        lfolaux = auxinfo[lfol]
+        #left follower current acceleration 
+        if lfolaux[0][1] and not userelax:
+            lfola = lfolaux[7](lfol, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, False)
+        else: 
+            lfola = a[lfol]
+        #left side leader
+        llead = lfolaux[1]
+        
+        #get new follower acceleration and vehicle acceleration
+        lfolaux[1] = i
+        lfolhd = curstate[lfol][2]
+        newlfolhd = get_headway(curstate,auxinfo,roadinfo,lfol,i)
+        curstate[lfol][2] = newlfolhd
+        
+        if lfolaux[0][1] and not userelax:
+            newlfola = lfolaux[7](lfol, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, False)
+        else: 
+            newlfola = lfolaux[7](lfol, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, True)
+        if llead == None: 
+            curaux[1] = None
+            curaux[2] = lfolaux[2]
+            newla = curaux[7](i, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, False) #lead is none means we don't check relax
+        
+        else: 
+            curaux[1] = llead
+            newlhd = get_headway(curstate, auxinfo, roadinfo, i, llead)
+            curstate[i][2] = newlhd
+            if curaux[0][1] and not userelax: 
+                newla = curaux[7](i,curstate,auxinfo,roadinfo,modelinfo,timeind,dt,False)
+            else: 
+                newla = curaux[7](i,curstate,auxinfo,roadinfo,modelinfo,timeind,dt,True)
+            
+    lincentive = newla - cura + p[2]*(newlfola - lfola + newfola - fola) #no bias term 
+    return lincentive, newla, lfola, newlfola, llead, lfolhd
+
+
+def update_sn():
     pass
-
-
 
 def simulate_sn():
     """
