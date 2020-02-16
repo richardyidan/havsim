@@ -2,30 +2,14 @@
 """
 @author: rlk268@cornell.edu
 houses the main code for running simulations 
-
-TO DO /
-    implementing boundary conditions 
-    getting networks working (need to handle changing roads, some rule for merging) (relaxation, mobil)
-    adding simple lane changing and multi lane 
-    how to do the adjoint calculation
-    reinforcement learning/rewriting calibration code
-    
-    want some loss function that won't end up converging to a lower speed like the l2v will - 
-    something that balances between stability and high speed. 
-    paper on AV control
-    
-    add some more models
-    
-    at some point will probably (?) need to refactor this code again so it's in a polished state-
-    need to think about exactly what we need out of states, actions, how to handle things like different models,
-    different update functions, handling derivatives, handling different loss functions, how lane changing will work 
-    etc. 
-    
     
     
 """
 
 from havsim.simulation.models import dboundary
+import numpy as np 
+
+###############code for single lane circular road#################
 
 def simulate_step(curstate, auxinfo, roadinfo, updatefun, dt): 
     """
@@ -80,6 +64,7 @@ def simulate_step(curstate, auxinfo, roadinfo, updatefun, dt):
 
 def update_cir(state, action, auxinfo, roadinfo, dt):
     #given states and actions returns next state 
+    #meant for circular road to be used with simulate_step
     
     nextstate = {}
     
@@ -106,6 +91,7 @@ def update_cir(state, action, auxinfo, roadinfo, dt):
 
 def update2nd_cir(state, action, dt, roadinfo):
     #standard update function for a second order model
+    #meant to be used with update_cir
     nextstate = [state[0] + dt*action[0], state[1] + dt*action[1], None ]
     if nextstate[0] > roadinfo[0]: #wrap around 
         nextstate[0] = nextstate[0] - roadinfo[0]
@@ -195,6 +181,7 @@ def simcir_obj(p, initstate, auxinfo, roadinfo, idlist, model, modelupdate, loss
     #p - parameters for AV 
     #idlist - vehicle IDs which will be controlled 
     #model - parametrization for AV 
+    #simple simulation on circular road mainly based on simulate_step
     for i in idlist: 
         auxinfo[i][5] = p
         auxinfo[i][6] = model
@@ -207,6 +194,10 @@ def simcir_obj(p, initstate, auxinfo, roadinfo, idlist, model, modelupdate, loss
         return obj
     else: 
         return obj, sim, curstate, auxinfo, roadinfo
+    
+########################end code for single lane circular road#################
+        
+##################code for simple network with discretionary changes only, no merges/diverges, no routes###########
 
 def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, dt): 
     """
@@ -221,7 +212,7 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     auxinfo - dictionary where keys are IDs, the values are 
     0 - current model regime 
     1 - current leader
-    2 - LC regime 
+    2 - current lane
     3 - current road 
     4 - length
     5 - parameters
@@ -230,13 +221,13 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     8 - LC parameters
     9 - LC model 
     10 - update function
-    11 - followers in adjacent lanes 
-    12 - leaders in adjacent lanes 
+    11 - followers  (left, current, right)
     13 - init entry time
     14 - past model reg info
     15 - past LC regime info 
     16 - past leader info
     17 - past road info
+    18 - LC regime
 
     
     roadinfo - dictionary, encodes the road network and also stores boundary conditions 
@@ -259,22 +250,19 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     """
     nextstate = {}
     a = {}
-    lca = {}
     
-    #note to self: good design pattern looks like- function which handles arguments, function which does actual call
-    #eg for longitudinal, 1 function gets leader, any other extra parts, then it is passed to actual model
-    #get actions in longitudinal movement (from CF model)
-    #key is vehicle, value is acceleration in longitudinal movement 
+    #get actions in latitudinal movement 
     for i in curstate.keys():
-        if auxinfo[i][1] ==None: 
-            dbc = roadinfo[auxinfo[i][3]][4][timeind] #speed at downstream 
-            a[i] = dboundary(dbc, curstate[i],dt)
-        else:
-            #standard call signature for CF model 
-            a[i] = auxinfo[i][6](auxinfo[i][5],curstate[i],curstate[auxinfo[i][1]], dt = dt)
+#        if auxinfo[i][1] ==None: 
+#            dbc = roadinfo[auxinfo[i][3]][4][timeind] #speed at downstream 
+#            a[i] = dboundary(dbc, curstate[i],dt)
+#        else:
+#            #standard call signature for CF model 
+#            a[i] = auxinfo[i][6](auxinfo[i][5],curstate[i],curstate[auxinfo[i][1]], dt = dt)
+        
+        a[i] = auxinfo[i][7](i, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, auxinfo[i][0][1]) #wrapper function for model call 
         
     #get actions in latitudinal movement (from LC model)
-    #key is vehicle, value is 
     lca = LCmodel()
     
     #update current state 
@@ -282,41 +270,35 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     
     return nextstate, auxinfo
 
-def update_net(state, action, auxinfo, roadinfo, dt):
-    #given states and actions returns next state 
-    
-    nextstate = {}
-    
-    #update states
-#    for i in state.keys():
-#        nextstate[i] = [state[i][0] + dt*action[i][0], state[i][1] + dt*action[i][1], None ]
-#        if nextstate[i][0] > roadinfo[0]: #wrap around 
-#            nextstate[i][0] = nextstate[i][0] - roadinfo[0]
-    
-    for i in state.keys():
-        nextstate[i] = auxinfo[i][7](state[i],action[i],dt,roadinfo) #update is specific based on vehicle 
-        
-    #update headway, which is part of state      
-    for i in state.keys(): 
-        #calculate headway
-        leadid = auxinfo[i][1]
-        nextstate[i][2] = nextstate[leadid][0] - nextstate[i][0] - auxinfo[leadid][4]
-        
-        #check for wraparound and if we need to update any special states for circular 
-        if nextstate[i][2] < -roadinfo[1]: 
-            nextstate[i][2] = nextstate[i][2] + roadinfo[0]
-        
-    return nextstate
+def update_net(state, action, LCaction, auxinfo, roadinfo, dt):
+    return 
 
-def update2nd(state, action, dt, roadinfo):
-    #standard update function for a second order model
-    nextstate = [state[0] + dt*action[0], state[1] + dt*action[1], None ]
-    if nextstate[0] > roadinfo[0]: #wrap around 
-        nextstate[0] = nextstate[0] - roadinfo[0]
+def std_CF(veh, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, relax): 
+    #supposed to be model helper for standard CF model
+    vehaux = auxinfo[veh]
+    if relax:
+        curstate[veh][2] += modelinfo[veh][0] #add relaxation if needed
     
-    return nextstate
+    if vehaux[1] == None: #no leader
+        dbc = roadinfo[vehaux[3]][4][timeind]
+        out = dboundary(dbc, curstate[veh], dt)
+    else: 
+        out = vehaux[7](vehaux[5], curstate[veh], curstate[vehaux[1]], dt) #standard CF call 
+        
+    if relax: #remove relaxation 
+        curstate[veh][2] += -modelinfo[veh][0]
+    return out 
+    
+def get_headway(curstate, auxinfo, roadinfo, fol, lead):
+    if fol == None or lead == None:
+        return None
+    hd = curstate[lead][0] - curstate[fol][0] - auxinfo[lead][4]
+    if auxinfo[fol][3] != auxinfo[lead][3]: #only works for vehicles 1 road apart
+        hd += roadinfo[auxinfo[fol][3]]
+        
+    return hd
 
-def LCmodel(): 
+def LCmodel(curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax = False): 
     #Based on MOBIL strategy
     #elements which won't be included 
     #   - cooperation for discretionary lane changes
@@ -327,9 +309,39 @@ def LCmodel():
     #0 - safety criterion 
     #1 - incentive criteria
     #2 - politeness
+    #3 - probability to check discretionary
     lca = {}
     
-    
+    for i in curstate.keys(): 
+        curaux = auxinfo[i]
+        if np.random.rand()>curaux[8][3]: #check discretionary with this probability
+            continue
+        #check left side 
+        lfol = curaux[11][0]
+        if lfol !='': #'' = can not change 
+            #if left follower/vehicle are in relax state, need to compute right acceleration to use
+            if curaux[0][1] and not userelax: 
+                cura = auxinfo[i][7](i, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, False)
+            if auxinfo[lfol][0][1] and not userelax:
+                fola = auxinfo[lfol][7](lfol, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, False)
+            llead = auxinfo[lfol][1]
+            #current headways
+            curhd = curstate[i][2]
+            lfolhd = curstate[lfol][2]
+            #get new headways
+            newhd = get_headway(curstate, auxinfo, roadinfo, i, llead) 
+            newfolhd = get_headway(curstate, auxinfo, roadinfo, lfol, i)
+            #get new acceleration for i
+            curstate[i][2] = newhd
+            newa = auxinfo[i][7](i, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, False)
+            #get new acceleration for lfol
+            curstate[lfol][2] = newfolhd
+            newlfola = auxinfo[lfol][7](lfol, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, False)
+        
+        rfol = curaux[11][2]
+        if rfol != '': 
+            rlead = auxinfo[rfol][1]
+            
     
     
     
@@ -382,8 +394,11 @@ def checksafety():
 
 
 
-def simulate_net():
+def simulate_sn():
     """
-    simulate on a network
+    simulate on a simple network (sn = simple network)
     """
     pass
+
+
+########################end code for simple network#################
