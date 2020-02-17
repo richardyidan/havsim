@@ -205,7 +205,7 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     does a step of the simulation for the full simulation which includes boundary conditions and LC
     -discretionary only changing, no routes 
     -no mergers on network means on/off ramps cannot be simulated, only diverges/merges
-    -no mandatory means bottlenecks are not going to lead to correct behavior
+    -no mandatory changing means bottlenecks are not going to lead to correct behavior
     -no relaxation
     -no tactical or cooperative behavior
     
@@ -233,7 +233,8 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     15 - past LC regime info 
     16 - past leader info
     17 - past road info
-    18 - LC regime
+    18 - past lane info
+    19 - LC regime
 
     
     roadinfo - dictionary, encodes the road network and also stores boundary conditions 
@@ -243,7 +244,8 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     3 - upstream boundary - list of lists, inner lists are sequences of speeds (or none), outer lists correspond to lanes
     4 - downstream boundary - same format as upstream boundary, but for downstream 
     5 - inflow buffer - list of floats, represents how close we are to adding next vehicle
-    6 - last vehicle - list of keys corresponding to last vehicle in lane 
+    6 - first vehicle - list of keys corresponding to first vehicle in lane 
+    7 - last vehicle - list of keys correpsonding to last vehicle in lane 
     
     modelinfo - dictionary, stores any additional information which is not part of the state,
     does not explicitly state the regime of the model, 
@@ -302,13 +304,14 @@ def std_CF(veh, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, relax):
     
 def get_headway(curstate, auxinfo, roadinfo, fol, lead):
     hd = curstate[lead][0] - curstate[fol][0] - auxinfo[lead][4]
-    if auxinfo[fol][3] != auxinfo[lead][3]: #only works for vehicles 1 road apart
+    if auxinfo[fol][3] != auxinfo[lead][3]:
         
         hd += headway_helper(roadinfo,auxinfo[fol][3],auxinfo[fol][2], auxinfo[lead][3])
         
     return hd
 
 def headway_helper(roadinfo, folroad, follane, leadroad):
+    #this will have problems if follower is actually ahead of leader
     nextroad, nextlane = roadinfo[folroad][1][follane]
     out = roadinfo[folroad][2]
     while nextroad != leadroad: 
@@ -570,13 +573,29 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
         curaux[11][opside] = fol
         curaux[11][1] = lcfol
         
+        #update memory for current vehicle
+        curaux[16][-1].append(timeind)
+        curaux[16].append([lclead, timeind+1])
+        curaux[18][-1].append(timeind)
+        curaux[18].append([lcsidelane, timeind+1])
+        
+        #update memory for followers 
+        if fol is not None: 
+            auxinfo[fol][16][-1].append(timeind)
+            auxinfo[fol][16].append([auxinfo[fol][1], timeind+1])
+        if lcfol is not None: 
+            auxinfo[lcfol][16][-1].append(timeind)
+            auxinfo[lcfol][16].append([i, timeind+1])
+        
+        
+        
         
         #update new LC side 
-        #check if new LC side even exists
-        if lca[i]=='l' and lcsidelane ==0:
-            pass
+        #check if new LC side even exists - update the followers accordingly 
+        if lcsidelane ==0:
+            curaux[11][0] = ''
         elif opsidelane == roadinfo[road][0]:
-            pass
+            curaux[11][2] = ''
         else: 
             newlcside = lcsidelane -1 if lca[i] == 'l' else lcsidelane + 1 #lane index for new side 
             
@@ -606,12 +625,70 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
         if roadinfo[road][6][lcsidelane] == lclead: 
             roadinfo[road][6][lcsidelane] == i
             
+            
         #this would be the part where you need to check for vehicles requesting to move in same gap
         #by checking newlclead, newlcfol membership in lca, and by lead/fol membership in lca
         
         #also at this point you would also want to reset cooperative and tactical states 
+        
+    #update all vehicles positions/speeds
+    for i in curstate.keys(): 
+        update2nd(i, curstate, auxinfo, roadinfo, a, dt)
     
+    #update all vehicles followers    
+    for i in curstate.keys():
+        curaux = auxinfo[i]
+        lfol, rfol = curaux[11][0], curaux[11][2]
+        if lfol == '':
+            pass
+        elif curstate[i][0] < curstate[lfol][0] and curaux[3] == auxinfo[lfol][3]: 
+            curaux[11][0] = auxinfo[lfol][11][1]
+        if rfol == '':
+            pass
+        elif curstate[i][0] < curstate[rfol][0] and curaux[3] == auxinfo[rfol][3]: 
+            curaux[11][2] = auxinfo[rfol][11][1]
+            
+    #check if roads change
+    for i in curstate.keys():
+        if curstate[i][0] > roadinfo[auxinfo[i][3]][2]: #roads change 
+            curaux = auxinfo[i]
+            newroad = roadinfo[curaux[3]][1][curaux[2]]
+            if newroad == None: #vehicle reaches end - remove from simulation
+                del curstate[i]
+                continue
+            newroad, newlane = newroad[0], newroad[1]
+            #update memory 
+            curaux[17].append(timeind)
+            curaux[17].append([newroad, timeind+1])
+            curaux[18].append(timeind)
+            curaux[18].append([newlane, timeind+1])
+            #update followers for vehicle 
+            if newlane == 0: #new left side is null
+                curaux[11][0] = ''
+            elif curaux[11][0] is not '': #new change on left side
+                pass 
+            if newlane == roadinfo[road][0]:
+                curaux[11][2] = ''
+            elif curaux[11][2] is not '': #new change on right side
+                pass
+            #update states
+            curstate[0] += -roadinfo[curaux[3]][2]
+            curaux[2], curaux[3] = newlane, newroad
+            #update road's first vehicle 
+            roadinfo[newroad][6][newlane] = i #note: could be problem if multiple vehicles can move onto road in same timestep 
+            
+            
     pass
+
+def update2nd(i, curstate,  auxinfo, roadinfo, a, dt):
+    curstate[i][0] += dt*a[0]
+    curstate[i][1] += dt*a[1]
+    
+    lead = auxinfo[i][1]
+    if lead is not None: 
+        curstate[i][2] = get_headway(curstate, auxinfo, roadinfo, i, lead)
+    
+    return curstate
     
 def leadfol_find(curstate, auxinfo, roadinfo, veh, guess):
     #guess is a vehicle which might either be the new lcside leader or follower of veh. 
