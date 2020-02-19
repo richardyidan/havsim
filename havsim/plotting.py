@@ -26,6 +26,7 @@ import palettable
 from .calibration import helper
 from .calibration.opt import r_constant
 from .calibration.helper import sequential, indtotimes
+from havsim.calibration.algs import makeplatoonlist, sortveh3
 
 
 def optimalvelocity(s, p):
@@ -971,9 +972,9 @@ def plotvhd(meas, sim, platooninfo, my_id, show_sim=True, show_meas=True, effect
     # in the plot (which occur because of lane changing)
     # note that in ``paperplots.py'' we have written some scripts that do this for the paper plots, in the first 3 sections of code
     if effective_headway:
-        leadinfo, folinfo, rinfo = helper.makeleadfolinfo_r3([[], my_id], platooninfo, meas)
+        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([ my_id], platooninfo, meas)
     else:
-        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([[], my_id], platooninfo, meas)
+        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([ my_id], platooninfo, meas, relaxtype = 'none')
 
     t_nstar, t_n, T_nm1, T_n = platooninfo[my_id][0:4]
 
@@ -2327,7 +2328,7 @@ def prelisthelper(prevehlist, curvehlist, newvehlist, postvehlist, lane, meas, p
         curleadlist = platooninfo[i][4]
         prevehlist.extend(curleadlist)
         for j in curleadlist:
-            prevehlist.extend(platooninfo[j][-1][1])
+            prevehlist.extend(platooninfo[j][-1])
 
     #    print('all candidates are '+str(prevehlist))
     prevehlist = prehelper(prevehlist, curvehlist, lane, meas, platooninfo)
@@ -2346,7 +2347,7 @@ def postlisthelper(postvehlist, curvehlist, newvehlist, prevehlist, lane, meas, 
             prevehlist, temp, temp = prelisthelper(prevehlist, curvehlist, [i], postvehlist, lane, meas, platooninfo,
                                                    check=False)
         curvehlist.append(i)
-        curfollist = platooninfo[i][-1][1]
+        curfollist = platooninfo[i][-1]
         postvehlist.extend(curfollist)
         for j in curfollist:
             postvehlist.extend(platooninfo[j][4])

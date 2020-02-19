@@ -272,3 +272,10 @@ def eql(model, v, p, length, tol=1e-4):
 def noloss(*args):
     pass
 
+def dboundary(speed, veh, dt):
+    acc = (speed - veh[1])/dt
+    if acc > 2:
+        acc = 2
+    elif acc < -5:
+        acc = -5
+    return [veh[1],acc]
