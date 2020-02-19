@@ -296,7 +296,7 @@ def makeleadfolinfo(platoons, platooninfo, sim, *args, relaxtype = 'both', merge
 def makerinfo(platoons, platooninfo, sim, leadinfo, relaxtype = 'both',mergertype = 'avg', merge_from_lane = 7, merge_lane = 6):
     
     if relaxtype =='none':
-        return []
+        return [[] for i in platoons]
     
     rinfo = []
     for i in platoons: 
