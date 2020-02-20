@@ -41,7 +41,7 @@ testplatoon =[[904.0, 907.0, 914.0, 926.0, 927.0, 939.0],[967.0, 906.0, 928.0, 9
 #current frontend api for calibration
 plist = [[10*3.3,.086/3.3, 1.545, 2, .175, 5 ],[20*3.3,.086/3.3/2, 1.545, .5, .175, 60 ], [10*3.3,.086/3.3/2, .5, .5, .175, 60 ]]
 bounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)]
-out, unused, rmse = calibrate_tnc2(plist, bounds, meas, platooninfo, testplatoon, makeleadfolinfo, platoonobjfn_objder, None, OVM, OVMadjsys, OVMadj, True, 6, order = 1)
+#out, unused, rmse = calibrate_tnc2(plist, bounds, meas, platooninfo, testplatoon, makeleadfolinfo, platoonobjfn_objder, None, OVM, OVMadjsys, OVMadj, True, 6, order = 1)
 
 with open('testcalout.pkl','rb') as f:
     out, rmse = pickle.load(f)
@@ -127,5 +127,9 @@ selectvehID(data,times,x,3,veh,test2,test3)
 
 #would be nice to have a more general interactive plotting for looking at simulation results
 #%%
-optplot(out,meas,sim,platooninfo,testplatoon,OVM,OVMadjsys,OVMadj,makeleadfolinfo,platoonobjfn_obj,(True,6),lane=4)
+optplot(out,meas,sim,platooninfo,testplatoon,OVM,OVMadjsys,OVMadj,makeleadfolinfo,platoonobjfn_obj,(True,6), lane = 4)
 #this used to work but now it's throwing errors about round method - please fix that 
+#there are some other problems too just with the selection/evaluation being buggy 
+#in general I would say that a better design is to pass in the simulated data and any metrics, and we just give a way 
+#to visually inspect the output and the corresponding metrics, as opposed to trying to have a monolithic function 
+#that is trying to do too much 
