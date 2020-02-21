@@ -167,6 +167,27 @@ def PIS(p, veh, lead, *args, dt = .1):
     #partial integrator with saturation control model.
     pass
 
+def zhangkim(p, s, leadv):
+    #refer to car following theory for multiphase vehicular traffic flow by zhang and kim, model c
+    #delay is p[0], then in order, parameters are S0, S1, v_f, h_1
+    #recall reg = 0 is reserved for shifted end
+    #s is the delayed headway, i.e. lead(t - tau) - lead_len - x(t - tau) 
+    #leadv is the delayed velocity 
+    
+    if s >= p[2]:
+        out = p[3]
+    
+    elif s < p[1]:
+        out = s/p[4]
+    
+    else: 
+        if leadv[1] >= p[3]:
+            out = p[3]
+        else: 
+            out = s/p[4]
+    
+    return out
+
 
     
 def sv_obj(sim, auxinfo):
