@@ -214,19 +214,28 @@ def makefolinfo(platoon, platooninfo, sim, *args, allfollowers = True, endtime =
         else: 
             follist = sim[i][t_n-t_nstar:T_nm1-t_nstar+1,5]
         curfol = follist[0]
+        if curfol != 0: #you need to get the time of the follower to make sure it is actually being simulated in that time 
+            #(this is for the case when allfollower = False)
+            foltn = platooninfo[curfol][1]
+        else: 
+            foltn = math.inf
         unfinished = False
         
         if allfollowers and curfol != 0: 
             curfolinfo.append([curfol,t_n])
             unfinished = True
         else:
-            if curfol in platoon: #if the current follower is in platoons we initialize
+            if curfol in platoon and t_n >= foltn: #if the current follower is in platoons we initialize
                 curfolinfo.append([curfol,t_n])
                 unfinished = True
             
         for j in range(len(follist)): #check what we just made to see if we need to put stuff in folinfo
             if follist[j] != curfol: #if there is a new follower
                 curfol = follist[j]
+                if curfol != 0:
+                    foltn = platooninfo[curfol][1]
+                else: 
+                    foltn = math.inf
                 if unfinished: #if currrent follower entry is not finished
                     curfolinfo[-1].append(t_n+j-1) #we finish the interval
                     unfinished = False
@@ -235,7 +244,7 @@ def makefolinfo(platoon, platooninfo, sim, *args, allfollowers = True, endtime =
                     curfolinfo.append([curfol,t_n+j])
                     unfinished = True
                 else:
-                    if curfol in platoon: #if new follower is in platoons
+                    if curfol in platoon and t_n+j >= foltn: #if new follower is in platoons
                         curfolinfo.append([curfol,t_n+j]) #start the next interval
                         unfinished = True
         if unfinished: #if currrent follower entry is not finished
@@ -590,6 +599,20 @@ def greedy_set_cover(subsets, parent_set):
             heapq.heappush(heap, unused.pop())
     return results
     
+def calculate_rmse(meas,sim,platooninfo,veh, extra = 0, h = .1):
+    #computes rmse for veh given measurements sim and simulation sim 
+    #in format of the standard data (meas format)
+    #RMSE is computed over t_n through T_nm1 inclusive. 
+    #extra is extra timesteps past T_nm1 - e.g. for second order model 
+    #last timestep predicts acceleration, this can give position for next two timesteps after T_nm1
+    #default at 0. 
+    #up to the user to figure out how the boundary works and what value of extra makes sense 
+    t_nstar, t_n, T_nm1, T_n = platooninfo[veh][0:4]
+    loss = sim[veh][t_n - t_nstar:T_nm1+1+extra-t_nstar,2] - meas[veh][t_n - t_nstar:T_nm1+1+extra-t_nstar,2]
+    loss = sum(np.square(loss))/len(loss)
+    return loss**.5
+    
+
 def SEobj_pervehicle(meas,sim,platooninfo,curplatoon, dim=2, h=.1):
     #takes as input meas, sim, platooninfo, curplatoon, 
     #outputs a list of the objective function for each vehicle. 
