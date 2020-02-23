@@ -364,7 +364,7 @@ def plotColorLines(X, Y, SPEED, speed_limit):
     # 	norm = plt.Normalize(c.min(), c.max())
     norm = plt.Normalize(speed_limit[0], speed_limit[1])
     lc = LineCollection(segments, cmap=palettable.colorbrewer.diverging.RdYlGn_4.mpl_colormap, norm=norm)
-    # lc = LineCollection(segments, cmap=cm.get_cmap('RdYlBu'), norm=norm)
+#    lc = LineCollection(segments, cmap=cm.get_cmap('RdYlBu'), norm=norm)
     lc.set_array(c)
     lc.set_linewidth(1)
     line = axs.add_collection(lc)
@@ -492,7 +492,11 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
 
     if platoon != []:
         followerchain = helper.platoononly(followerchain, platoon)
-    followerlist = followerchain.keys()  # list of vehicle ID
+    followerlist = list(followerchain.keys())  # list of vehicle ID
+    if lane is not None: 
+        for i in followerlist.copy(): 
+            if lane not in np.unique(meas[i][:,7]):
+                followerlist.remove(i)
     if newfig:
         fig = plt.figure()
 
@@ -970,7 +974,6 @@ def plotvhd(meas, sim, platooninfo, my_id, show_sim=True, show_meas=True, effect
     # plot in the velocity headway plane.
     # would like to make this so that you can pass in rinfo and it will automatically not connect the lines between before/after the lane changes so you don't get the annoying horizontal lines
     # in the plot (which occur because of lane changing)
-    # note that in ``paperplots.py'' we have written some scripts that do this for the paper plots, in the first 3 sections of code
     if effective_headway:
         leadinfo, folinfo, rinfo = helper.makeleadfolinfo([ my_id], platooninfo, meas)
     else:
@@ -1494,6 +1497,9 @@ def meanspeedplot(data, timeint, spacebins, lane=1, use_avg='mean'):
     # lane = 1 - choose which lane of the data to plot. (does 1 lane at a time)
 
     # choose which lane. (note a possible feature would be the ability to choose multiple lanes at once)
+    if type(data) == dict: 
+        data = np.concatenate(list(data.values()))
+    
     data = data[data[:, 7] == lane]
 
     # can make this iterate once instead of 4 times
