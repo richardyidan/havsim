@@ -245,7 +245,6 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     4 - downstream boundary - same format as upstream boundary, but for downstream 
     5 - inflow buffer - list of floats, represents how close we are to adding next vehicle
     6 - first vehicle - list of keys corresponding to first vehicle in lane 
-    7 - last vehicle - list of keys correpsonding to last vehicle in lane 
     
     modelinfo - dictionary, stores any additional information which is not part of the state,
     does not explicitly state the regime of the model, 
@@ -304,14 +303,24 @@ def std_CF(veh, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, relax):
     
 def get_headway(curstate, auxinfo, roadinfo, fol, lead):
     hd = curstate[lead][0] - curstate[fol][0] - auxinfo[lead][4]
+    
     if auxinfo[fol][3] != auxinfo[lead][3]:
+#        hd += headway_helper(roadinfo,auxinfo[fol][3],auxinfo[fol][2], auxinfo[lead][3]) #old solution 
+        hd += roadinfo[(auxinfo[fol][3], auxinfo[lead][3])] #better to just store in roadinfo 
         
-        hd += headway_helper(roadinfo,auxinfo[fol][3],auxinfo[fol][2], auxinfo[lead][3])
+    #maybe this way is actually faster idk (keep self connections in roadinfo as well)
+#    hd += roadinfo[(auxinfo[fol][3], auxinfo[lead][3])]
         
     return hd
 
+def get_dist(curstate, auxinfo, roadinfo, fol, lead):
+    dist = curstate[lead][0] - curstate[fol][0]
+    if auxinfo[fol][3] != auxinfo[lead][3]:
+        dist += roadinfo[(auxinfo[fol][3], auxinfo[lead][3])]
+
 def headway_helper(roadinfo, folroad, follane, leadroad):
     #this will have problems if follower is actually ahead of leader
+    #deprecated 
     nextroad, nextlane = roadinfo[folroad][1][follane]
     out = roadinfo[folroad][2]
     while nextroad != leadroad: 
@@ -327,6 +336,7 @@ def LCmodel(a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax = F
     #   - cooperation for discretionary lane changes
     #   - aggressive state of target vehicle to force lane changes 
     
+    #I think in general a better design is to calculate required quantities and pass to model 
     
     #LC parameters (by index)
     #0 - safety criterion 
@@ -594,7 +604,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
         #check if new LC side even exists - update the followers accordingly 
         if lcsidelane ==0:
             curaux[11][0] = ''
-        elif opsidelane == roadinfo[road][0]:
+        elif lcsidelane == roadinfo[road][0]:
             curaux[11][2] = ''
         else: 
             newlcside = lcsidelane -1 if lca[i] == 'l' else lcsidelane + 1 #lane index for new side 
@@ -619,7 +629,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             curaux[11][lcside]= newlcfol
             
         
-        #update last in roads 
+        #update first in roads  
         if roadinfo[road][6][lane] == i: 
             roadinfo[road][6][lane] = curaux[1]
         if roadinfo[road][6][lcsidelane] == lclead: 
@@ -631,16 +641,22 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
         
         #also at this point you would also want to reset cooperative and tactical states 
         
-    #update all vehicles positions/speeds
+        #relaxation would also be calculated at this step
+        
+    #update all vehicles states 
     for i in curstate.keys(): 
         update2nd(i, curstate, auxinfo, roadinfo, a, dt)
+        
     
-    #update all vehicles followers    
+    
+    #update all vehicles left and right followers    
     for i in curstate.keys():
         curaux = auxinfo[i]
         lfol, rfol = curaux[11][0], curaux[11][2]
         if lfol == '':
             pass
+        #you could calculate headway here, but this is faster and works except in very weird edge case 
+        #with on/off ramps though this method does not work
         elif curstate[i][0] < curstate[lfol][0] and curaux[3] == auxinfo[lfol][3]: 
             curaux[11][0] = auxinfo[lfol][11][1]
         if rfol == '':
@@ -654,6 +670,10 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             curaux = auxinfo[i]
             newroad = roadinfo[curaux[3]][1][curaux[2]]
             if newroad == None: #vehicle reaches end - remove from simulation
+                #update follower's lead
+                fol = auxinfo[i][1]
+                if fol is not None: 
+                    auxinfo[fol][1] = None
                 del curstate[i]
                 continue
             newroad, newlane = newroad[0], newroad[1]
@@ -662,20 +682,32 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             curaux[17].append([newroad, timeind+1])
             curaux[18].append(timeind)
             curaux[18].append([newlane, timeind+1])
-            #update followers for vehicle 
-            if newlane == 0: #new left side is null
-                curaux[11][0] = ''
-            elif curaux[11][0] is not '': #new change on left side
-                pass 
-            if newlane == roadinfo[road][0]:
-                curaux[11][2] = ''
-            elif curaux[11][2] is not '': #new change on right side
-                pass
             #update states
             curstate[0] += -roadinfo[curaux[3]][2]
             curaux[2], curaux[3] = newlane, newroad
             #update road's first vehicle 
-            roadinfo[newroad][6][newlane] = i #note: could be problem if multiple vehicles can move onto road in same timestep 
+            curfirst = roadinfo[newroad][6][newlane]
+            if auxinfo[curfirst][3] != curaux[3] or curstate[curfirst][0] > curstate[i][0]: 
+                roadinfo[newroad][6][newlane] = i 
+                
+            #update followers for vehicle 
+            if newlane == 0: #new left side is null
+                curaux[11][0] = ''
+            elif curaux[11][0] is '': #new change on left side
+                newlead = roadinfo[newroad][newlane][6]
+                if newlead is not None: 
+                    newleaddist = get_dist(curstate, auxinfo, roadinfo, i, newlead)
+                    if newleaddist > 0: 
+                        curaux[11][0] = auxinfo[newlead][11][1]
+                    else: 
+                        curaux[11][0] = newlead
+                else: 
+                    #need code to find the vehicle 
+                    pass
+            if newlane == roadinfo[road][0]: #same thing for other side 
+                curaux[11][2] = ''
+            elif curaux[11][2] is '': #new change on right side
+                pass
             
             
     pass
@@ -698,22 +730,30 @@ def leadfol_find(curstate, auxinfo, roadinfo, veh, guess):
     if guess == None: 
         return None, None
     else: 
-        hd = get_headway(curstate, auxinfo, roadinfo, guess, veh)
+        hd = get_dist(curstate, auxinfo, roadinfo, guess, veh)
         if hd < 0: 
-            nextguess = guess
-            nexthd = hd
-            while nextguess is not None and nexthd < 0: 
+            nextguess = auxinfo[guess][1]
+            if nextguess == None: 
+                return nextguess, guess
+            nexthd = get_dist(curstate, auxinfo, roadinfo, nextguess, veh)
+            while nexthd < 0: 
                 guess = nextguess
                 nextguess = auxinfo[guess][1]
-                nexthd = get_headway(curstate, auxinfo,roadinfo,nextguess,veh)
+                if nextguess == None: 
+                    return nextguess, guess
+                nexthd = get_dist(curstate, auxinfo,roadinfo,nextguess,veh)
             return nextguess, guess
         else:
-            nextguess = guess
-            nexthd = hd
-            while nextguess is not None and nexthd > 0: 
+            nextguess = auxinfo[guess][11][1]
+            if nextguess == None: 
+                return guess, nextguess
+            nexthd = get_dist(curstate, auxinfo, roadinfo, nextguess, veh)
+            while nexthd > 0: 
                 guess = nextguess
                 nextguess = auxinfo[guess][11][1]
-                nexthd = get_headway(curstate, auxinfo, roadinfo, nextguess, veh)
+                if nextguess == None: 
+                    return guess, nextguess
+                nexthd = get_dist(curstate, auxinfo, roadinfo, nextguess, veh)
         
             return guess, nextguess
 
