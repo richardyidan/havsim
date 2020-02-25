@@ -80,10 +80,15 @@ class ACagent:
 
     def get_action_value(self, curstate, avid, avlead):
         # avstate = tf.convert_to_tensor([[curstate[avid][1], curstate[avlead][1], curstate[avid][2]]]) #state = current speed, leader speed, headway
-        self.paststates.extend((curstate[avid][1], curstate[avlead][1], curstate[avid][2]))
+        extend_seq = (np.interp(curstate[avid][1], (0, 25.32), (0, 1)),
+                      np.interp(curstate[avlead][1], (0, 25.32), (0, 1)),
+                      np.interp(curstate[avid][2], (1.84, 43.13), (0, 1))
+                      )
+        
+        self.paststates.extend(extend_seq)
         if self.statecnt < (self.statesize / 3) - 1:
             self.statecnt += 1
-            avstate = tf.convert_to_tensor([[curstate[avid][1], curstate[avlead][1], curstate[avid][2]] * int(self.statesize / 3)]) #state = current speed, leader speed, headway + past 4 states
+            avstate = tf.convert_to_tensor([list(extend_seq) * int(self.statesize / 3)]) #state = current speed, leader speed, headway + past 4 states
         else:
             self.paststates = self.paststates[-self.statesize:]
             avstate = tf.convert_to_tensor([self.paststates])
