@@ -119,30 +119,39 @@ class ACagent:
 
         env.totloss = np.sum(losses) / nruns
         
-    def train(self, env, updates=50):
+    def train(self, env, updates=250):
         self.reset(env)
         
         # action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
+        statemem = np.empty((self.batch_sz,env.curstate.shape[0]))
+        out1 = np.empty((self.batch_sz,2))
+        out2 = np.empty((self.batch_sz))
         
         action,value = self.get_action_value(env.curstate[None, :])
         for i in range(updates):
-            nextstate, reward, done, _ = env.step(np.array(action))
-#                env.curstate, reward, done, _ 
-            nextaction, nextvalue = self.get_action_value(nextstate[None,:])
-            
-            if done: 
-                TDerror = reward - value
-            else:
-                TDerror = (reward + self.gamma*nextvalue - value) #temporal difference error
-            
-            self.I = self.I * self.gamma
-            self.counter += 1
+            for bstep in range(self.batch_sz):
+                nextstate, reward, done, _ = env.step(np.array(action))
+    #                env.curstate, reward, done, _ 
+                nextaction, nextvalue = self.get_action_value(nextstate[None,:])
+                
+                if done: 
+                    TDerror = reward - value
+                else:
+                    TDerror = (reward + self.gamma*nextvalue - value) #temporal difference error
+                
+                self.I = self.I * self.gamma
+                self.counter += 1
 
-            if done or self.counter >=self.simlen: #reset simulation 
-                self.reset(env)
-                action,value = self.get_action_value(env.curstate[None, :])
+                statemem[bstep] = env.curstate[None,:]
+                out1[bstep] = tf.stack([self.I*TDerror[0],tf.cast(action,tf.float32)])
+                out2[bstep] = self.I*TDerror[0]
+    
+                if done or self.counter >=self.simlen: #reset simulation 
+                    self.reset(env)
+                    action,value = self.get_action_value(env.curstate[None, :])
 
-            self.model.train_on_batch(env.curstate[None,:], [tf.stack([self.I*TDerror[0],tf.cast(action,tf.float32)]), self.I*TDerror[0]])
+            self.model.train_on_batch(statemem, [out1,out2])
+#            self.model.train_on_batch(env.curstate[None,:], [tf.stack([self.I*TDerror[0],tf.cast(action,tf.float32)]), self.I*TDerror[0]])
             
             action, value = nextaction, nextvalue
 
@@ -155,7 +164,7 @@ class ACagent:
         #also, logits are a tensor over action space, but we only care about action we choose
 #        logits = tf.math.exp(logits)
 #        logits = logits / tf.math.reduce_sum(logits)
-        getaction = tf.cast(target[1],tf.int32)
+        getaction = tf.cast(target[:,1],tf.int32)
         logprob = self.logitloss(getaction, logits) #really the log probability is negative of this.
         
         probs = tf.nn.softmax(logits)
