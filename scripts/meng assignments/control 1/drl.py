@@ -64,7 +64,7 @@ class Model(tf.keras.Model):
     return tf.squeeze(action, axis=-1), tf.squeeze(value, axis=-1)
 
 class ACagent:
-    def __init__(self,model):
+    def __init__(self,model, batch_sz=64, statesize=15):
         self.model = model
 
         self.gamma = .99 #discounting learning_rate = 3e-8
@@ -75,15 +75,17 @@ class ACagent:
         self.logitloss = kls.SparseCategoricalCrossentropy(from_logits=True)
         self.paststates = []
         self.statecnt = 0
+        self.batch_sz = batch_sz
+        self.statesize = statesize
 
     def get_action_value(self, curstate, avid, avlead):
         # avstate = tf.convert_to_tensor([[curstate[avid][1], curstate[avlead][1], curstate[avid][2]]]) #state = current speed, leader speed, headway
         self.paststates.extend((curstate[avid][1], curstate[avlead][1], curstate[avid][2]))
-        if self.statecnt < 4:
+        if self.statecnt < (self.statesize / 3) - 1:
             self.statecnt += 1
             avstate = tf.convert_to_tensor([[curstate[avid][1], curstate[avlead][1], curstate[avid][2],curstate[avid][1], curstate[avlead][1], curstate[avid][2],curstate[avid][1], curstate[avlead][1], curstate[avid][2],curstate[avid][1], curstate[avlead][1], curstate[avid][2],curstate[avid][1], curstate[avlead][1], curstate[avid][2]]]) #state = current speed, leader speed, headway + past 4 states
         else:
-            self.paststates = self.paststates[-15:]
+            self.paststates = self.paststates[-self.statesize:]
             avstate = tf.convert_to_tensor([self.paststates])
         action, value = self.model.action_value(avstate) #forward pass of NN gets action and value function
         #action from NN gives a scalar, we convert it to the quantized acceleration
@@ -91,35 +93,47 @@ class ACagent:
         return action, value, acc, avstate
 
 
-    def test(self, env, timesteps): #Note that this is pretty much the same as simulate_baseline in the environment = circ_singleav
+    def test(self, env, timesteps, nruns = 4): #Note that this is pretty much the same as simulate_baseline in the environment = circ_singleav
         env.reset()
         avid = env.avid
         avlead = env.auxinfo[avid][1]
-        for i in range(timesteps):
-            _, _, acc, _ = self.get_action_value(env.curstate,avid,avlead)
-            nextstate, reward, done = env.step(acc,i,timesteps)
-            #update state, update cumulative reward
-            env.curstate = nextstate
-            env.totloss += reward
-            #save current state to memory (so we can plot everything)
-            for j in nextstate.keys():
-                env.sim[j].append(nextstate[j])
-            if done:
-                break
-    def train(self, env, batch_sz=64, updates=200):
+        run = 0
+        losses = []
+        while (run < nruns):
+            for i in range(timesteps):
+                _, _, acc, _ = self.get_action_value(env.curstate,avid,avlead)
+                nextstate, reward, done = env.step(acc,i,timesteps)
+                #update state, update cumulative reward
+                env.curstate = nextstate
+                env.totloss += reward
+                #save current state to memory (so we can plot everything)
+                if (run == 0):
+                    for j in nextstate.keys():
+                        env.sim[j].append(nextstate[j])
+                if done:
+                    losses.append(env.totloss)
+                    env.reset()
+                    avid = env.avid
+                    avlead = env.auxinfo[avid][1]
+                    break
+            run += 1
+
+        env.totloss = np.sum(losses) / nruns
+        
+    def train(self, env, updates=200):
         env.reset()
         avid = env.avid
         avlead = env.auxinfo[avid][1]
         I = 1
         # action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
-        statemem = np.empty((batch_sz,15))
-        out1 = np.empty((batch_sz,2))
-        out2 = np.empty((batch_sz))
+        statemem = np.empty((self.batch_sz,15))
+        out1 = np.empty((self.batch_sz,2))
+        out2 = np.empty((self.batch_sz))
         counter = 0
         
         action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
         for i in range(updates):
-            for bstep in range(batch_sz):
+            for bstep in range(self.batch_sz):
                 
                 nextstate, reward, done = env.step(acc,counter,1500)
                 nextaction, nextvalue,nextacc, nextavstate = self.get_action_value(nextstate, avid, avlead)
