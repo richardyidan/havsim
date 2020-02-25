@@ -38,12 +38,11 @@ class Model(tf.keras.Model):
   #which respectively: -does a forward pass through network, i.e. gives output given input
   #-does a forward pass and computes loss, given input and target value
   #-does a forward pass, computes loss and gradient of loss, and does an update of weights
-
   def __init__(self, num_actions):
     super().__init__('mlp_policy')
     # Note: no tf.get_variable(), just simple Keras API!
-    self.hidden1 = kl.Dense(64, activation='relu') #hidden layer for actions (policy)
-    self.hidden2 = kl.Dense(64, activation='relu') #hidden layer for state-value
+    self.hidden1 = kl.Dense(128, activation='relu') #hidden layer for actions (policy)
+    self.hidden2 = kl.Dense(128, activation='relu') #hidden layer for state-value
     self.value = kl.Dense(1, name = 'value')
     # Logits are unnormalized log probabilities.
     self.logits = kl.Dense(num_actions, name = 'policy_logits')
@@ -65,52 +64,88 @@ class Model(tf.keras.Model):
     return tf.squeeze(action, axis=-1), tf.squeeze(value, axis=-1)
 
 class ACagent:
-    def __init__(self,model):
+    def __init__(self,model, batch_sz=64):
         self.model = model
 
         self.gamma = .99 #discounting learning_rate = 3e-8
         self.model.compile(
-                optimizer = tf.keras.optimizers.RMSprop(lr = 7e-3),
+                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
+                #optimizer = tf.keras.optimizers.SGD(learning_rate=1e-7,)
                 loss = [self._logits_loss, self._value_loss])
         #I set learning rate small because rewards are pretty big, can try changing
         self.logitloss = kls.SparseCategoricalCrossentropy(from_logits=True)
+        #stuff for building states (len self.mem+1 tuple of past states)
+        self.paststates = [] #holds sequence of states
+        self.statecnt = 0
+        self.batch_sz = batch_sz
+
+        self.mem = 4
+        #keep track of how many steps in simulation we have taken 
+        self.counter = 0
+        #keep track of discounting 
+        self.I = 1
+        #goal for how long we want the simulation to be ideally (with no early termination)
+        self.simlen = 1500
 
     def get_action_value(self, curstate):
         return self.model.action_value(curstate)
 
-
-    def test(self, env, timesteps): #Note that this is pretty much the same as simulate_baseline in the environment = circ_singleav
+    def reset(self, env):
         env.reset()
-        for i in range(timesteps):
-            action,value = self.get_action_value(env.curstate[None, :])
-            env.curstate, reward, done, _ = env.step(np.array(action))
-            #update state, update cumulative reward
-            env.totloss += reward
-            #save current state to memory (so we can plot everything)
-
-            if done:
-                print("break after {} timesteps with reward {}".format(i, env.totloss))
-                break
-    def train(self, env, updates=200):
-        env.reset()
-        # action,value = self.get_action_value(env.curstate)
-        I = 1
-        for i in range(updates):
-            action,value = self.get_action_value(env.curstate[None, :])
-            #first, get transition and reward
-            env.curstate, reward, done, _ = env.step(np.array(action))
-            if done:
-                reward = -1e6
-            #get state value function of transition
-            nextaction, nextvalue = self.get_action_value(env.curstate[None, :])
-            TDerror = (reward + nextvalue - value) #temporal difference error
-
-            self.model.train_on_batch(env.curstate[None, :], [tf.stack([I*TDerror[0],tf.cast(action,tf.float32)]), I*TDerror[0]])
-            I = I * self.gamma
-
-            if done:
-                env.reset()
+        self.paststates = []
+        self.statecnt = 0
+        self.counter = 0
+        self.I = 1
+        
     
+    def test(self, env, timesteps, nruns = 4): #Note that this is pretty much the same as simulate_baseline in the environment = circ_singleav
+        self.reset(env)
+
+        run = 0
+        losses = []
+        while (run < nruns):
+            for i in range(timesteps):
+                action,value = self.get_action_value(env.curstate[None, :])
+                env.curstate, reward, done, _ = env.step(np.array(action))
+                #update state, update cumulative reward
+                env.totloss += reward
+
+                if done:
+                    losses.append(env.totloss)
+                    self.reset(env)
+                    
+                    break
+            run += 1
+
+        env.totloss = np.sum(losses) / nruns
+        
+    def train(self, env, updates=50):
+        self.reset(env)
+        
+        # action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
+        
+        action,value = self.get_action_value(env.curstate[None, :])
+        for i in range(updates):
+            nextstate, reward, done, _ = env.step(np.array(action))
+#                env.curstate, reward, done, _ 
+            nextaction, nextvalue = self.get_action_value(nextstate[None,:])
+            
+            if done: 
+                TDerror = reward - value
+            else:
+                TDerror = (reward + self.gamma*nextvalue - value) #temporal difference error
+            
+            self.I = self.I * self.gamma
+            self.counter += 1
+
+            if done or self.counter >=self.simlen: #reset simulation 
+                self.reset(env)
+                action,value = self.get_action_value(env.curstate[None, :])
+
+            self.model.train_on_batch(env.curstate[None,:], [tf.stack([self.I*TDerror[0],tf.cast(action,tf.float32)]), self.I*TDerror[0]])
+            
+            action, value = nextaction, nextvalue
+
     def _value_loss(self, target, value):
         #loss = -\delta * v(s, w) ==> gradient step looks like \delta* \nabla v(s,w)
         return -target*value
@@ -122,8 +157,11 @@ class ACagent:
 #        logits = logits / tf.math.reduce_sum(logits)
         getaction = tf.cast(target[1],tf.int32)
         logprob = self.logitloss(getaction, logits) #really the log probability is negative of this.
+        
+        probs = tf.nn.softmax(logits)
+        entropy_loss = kls.categorical_crossentropy(probs,probs)
 
-        return target[0]*logprob
+        return tf.math.multiply(target[:,0],logprob) - 1e-9*entropy_loss   
 
 def NNhelper(out, curstate, *args, **kwargs):
     #this is hacky but basically we just want the action from NN to end up
