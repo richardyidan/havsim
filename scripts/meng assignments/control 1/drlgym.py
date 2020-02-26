@@ -20,27 +20,12 @@ import gym
 #%%
 class ProbabilityDistribution(tf.keras.Model):
     def call(self, logits, **kwargs):
-    #NN for actions outputs numbers over each action, we interpret these as the unnormalized
-    #log probabilities for each action, and categorical from tf samples the action from probabilities
-    #squeeze is just making the output to be 1d
         return tf.squeeze(tf.random.categorical(logits, 1), axis=-1)
 
 
 class Model(tf.keras.Model):
-    #here is basically my understanding of how keras api works in tf 2.1
-#    https://www.tensorflow.org/api_docs/python/tf/keras/Model#class_model_2
-  #basically you are supposed to define the network architecture in __init__
-#and the forward pass is defined in call()
-  #main high level api is compile, evaluate, and fit;
-  #respectively these do -specify optimizer and training procedure
-  #-evaluate metrics on the testing dataset, -trains weights
-  #then the main lower-level api is predict_on_batch, test_on_batch, and train_on_batch
-  #which respectively: -does a forward pass through network, i.e. gives output given input
-  #-does a forward pass and computes loss, given input and target value
-  #-does a forward pass, computes loss and gradient of loss, and does an update of weights
   def __init__(self, num_actions):
     super().__init__('mlp_policy')
-    # Note: no tf.get_variable(), just simple Keras API!
     self.hidden1 = kl.Dense(128, activation='relu') #hidden layer for actions (policy)
     self.hidden2 = kl.Dense(128, activation='relu') #hidden layer for state-value
     self.value = kl.Dense(1, name = 'value')
@@ -49,18 +34,14 @@ class Model(tf.keras.Model):
     self.dist = ProbabilityDistribution()
 
   def call(self, inputs, **kwargs):
-    # Inputs is a numpy array, convert to a tensor.
     x = tf.convert_to_tensor(inputs)
-    # Separate hidden layers from the same input tensor.
     hidden_logs = self.hidden1(x)
     hidden_vals = self.hidden2(x)
     return self.logits(hidden_logs), self.value(hidden_vals)
 
   def action_value(self, obs):
-    # Executes `call()` under the hood.
     logits, value = self.predict_on_batch(obs)
     action = self.dist.predict_on_batch(logits)
-
     return tf.squeeze(action, axis=-1), tf.squeeze(value, axis=-1)
 
 class ACagent:
@@ -69,7 +50,7 @@ class ACagent:
 
         self.gamma = .99 #discounting learning_rate = 3e-8
         self.model.compile(
-                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
+                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 7e-3), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
                 #optimizer = tf.keras.optimizers.SGD(learning_rate=1e-7,)
                 loss = [self._logits_loss, self._value_loss])
         #I set learning rate small because rewards are pretty big, can try changing
@@ -106,7 +87,7 @@ class ACagent:
         while (run < nruns):
             for i in range(timesteps):
                 action,value = self.get_action_value(env.curstate[None, :])
-                env.curstate, reward, done, _ = env.step(np.array(action))
+                env.curstate, reward, done = env.step(np.array(action))
                 #update state, update cumulative reward
                 env.totloss += reward
 
@@ -124,36 +105,64 @@ class ACagent:
         
         # action,value,acc, avstate = self.get_action_value(env.curstate,avid,avlead)
         statemem = np.empty((self.batch_sz,env.curstate.shape[0]))
-        out1 = np.empty((self.batch_sz,2))
-        out2 = np.empty((self.batch_sz))
+        
+        rewards = np.empty((self.batch_sz))
+        values = np.empty((self.batch_sz))
+        actions = np.empty(self.batch_sz)
+        dones = np.empty((self.batch_sz))
+        
+        ep_rewards = []
         
         action,value = self.get_action_value(env.curstate[None, :])
         for i in range(updates):
             for bstep in range(self.batch_sz):
-                nextstate, reward, done, _ = env.step(np.array(action))
+                statemem[bstep] = env.curstate
+                nextstate, reward, done = env.step(np.array(action))
     #                env.curstate, reward, done, _ 
                 nextaction, nextvalue = self.get_action_value(nextstate[None,:])
+                env.totloss += reward
                 
-                if done: 
-                    TDerror = reward - value
-                else:
-                    TDerror = (reward + self.gamma*nextvalue - value) #temporal difference error
                 
-                self.I = self.I * self.gamma
+                
+#                if done: 
+#                    TDerror = reward - value
+#                else:
+#                    TDerror = (reward + self.gamma*nextvalue - value) #temporal difference error
+                
                 self.counter += 1
 
-                statemem[bstep] = env.curstate[None,:]
-                out1[bstep] = tf.stack([self.I*TDerror[0],tf.cast(action,tf.float32)])
-                out2[bstep] = self.I*TDerror[0]
+                rewards[bstep] = reward
+                values[bstep] = value
+                dones[bstep] = done
+                actions[bstep] = action
+                
+                
+#                out1[bstep] = tf.stack([TDerror[0],tf.cast(action,tf.float32)])
+#                out2[bstep] = TDerror[0]
     
                 if done or self.counter >=self.simlen: #reset simulation 
+                    ep_rewards.append(env.totloss)
                     self.reset(env)
                     action,value = self.get_action_value(env.curstate[None, :])
-
-            self.model.train_on_batch(statemem, [out1,out2])
+                action, value = nextaction, nextvalue
+                
+            TDerrors = self._TDerrors(rewards, values, dones, nextvalue)
+            TDacc = tf.stack([TDerrors, tf.cast(actions, tf.float32)], axis = 1)
+            
+            self.model.train_on_batch(statemem, [TDacc,TDerrors])
 #            self.model.train_on_batch(env.curstate[None,:], [tf.stack([self.I*TDerror[0],tf.cast(action,tf.float32)]), self.I*TDerror[0]])
             
-            action, value = nextaction, nextvalue
+            
+            
+        return ep_rewards
+            
+    def _TDerrors(self, rewards, values, dones, nextvalue):
+        returns = np.append(np.zeros_like(rewards), nextvalue, axis = -1)
+        
+        for t in reversed(range(rewards.shape[0])):
+            returns[t] = rewards[t] + self.gamma*returns[t+1]*(1 - dones[t])
+        returns = returns[:-1]
+        return returns - values
 
     def _value_loss(self, target, value):
         #loss = -\delta * v(s, w) ==> gradient step looks like \delta* \nabla v(s,w)
@@ -164,13 +173,14 @@ class ACagent:
         #also, logits are a tensor over action space, but we only care about action we choose
 #        logits = tf.math.exp(logits)
 #        logits = logits / tf.math.reduce_sum(logits)
-        getaction = tf.cast(target[:,1],tf.int32)
-        logprob = self.logitloss(getaction, logits) #really the log probability is negative of this.
+        TDerrors, actions = tf.split(target, 2, axis = -1) 
+#        actions = tf.expand_dims(tf.cast(target[:,1],tf.int32),1)
+        logprob = self.logitloss(actions, logits, sample_weight = TDerrors) #really the log probability is negative of this.
         
         probs = tf.nn.softmax(logits)
         entropy_loss = kls.categorical_crossentropy(probs,probs)
 
-        return tf.math.multiply(target[:,0],logprob) - 1e-9*entropy_loss   
+        return logprob - 1e-4*entropy_loss   
 
 def NNhelper(out, curstate, *args, **kwargs):
     #this is hacky but basically we just want the action from NN to end up
@@ -185,29 +195,28 @@ def myplot(sim, auxinfo, roadinfo, platoon= []):
     # plt.show()
 
 class cartpole_env:
-    def __init__(self):
-        self.initstate = gym.make('CartPole-v0')
-        self.curstate = self.initstate.reset()
+    def __init__(self, env):
+        self.env = env
     
     def reset(self):
-        self.curstate = self.initstate.reset()
+        self.curstate = self.env.reset()
         self.totloss = 0
         
     def step(self, action):
-        return self.initstate.step(action)
+        nextstate, reward, done, _ = self.env.step(action)
+        self.curstate = nextstate
+        return nextstate, reward, done
 
 #%% initialize agent (we expect the agent to be awful before training)
 env = gym.make('CartPole-v0')
 model = Model(num_actions=env.action_space.n)
 agent = ACagent(model)
-testenv = cartpole_env()
+testenv = cartpole_env(env)
 #%%
 agent.test(testenv,200) #200 timesteps
 print('total reward before training is '+str(testenv.totloss)+' starting from initial with 200 timesteps')
 #%%
     #MWE of training
-for i in range(10):
-    for j in range(5):
-        agent.train(testenv)
-    agent.test(testenv,200)
-    print('after episode '+str(i + 1)+' total reward is '+str(testenv.totloss)+' starting from initial with 200 timesteps')
+rewards = agent.train(testenv)
+agent.test(testenv,200)
+print('total reward is '+str(testenv.totloss))
