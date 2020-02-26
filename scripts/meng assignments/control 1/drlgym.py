@@ -167,6 +167,15 @@ class ACagent:
     def _value_loss(self, target, value):
         #loss = -\delta * v(s, w) ==> gradient step looks like \delta* \nabla v(s,w)
         return -target*value
+    
+#    def _value_loss(self, target, value): 
+#        return .5*target**2
+        
+#    def _value_loss(self, target, value):
+#        return .5 * kls.mean_squared_error(target, value)
+    
+#    def _value_loss(self, target, value): 
+#        return .5*tf.math.square(target - value)
 
     def _logits_loss(self,target, logits):
         #remember, logits are unnormalized log probabilities, so we need to normalize
@@ -218,5 +227,8 @@ print('total reward before training is '+str(testenv.totloss)+' starting from in
 #%%
     #MWE of training
 rewards = agent.train(testenv)
+plt.plot(rewards)
+plt.ylabel('rewards')
+plt.xlabel('episode')
 agent.test(testenv,200)
 print('total reward is '+str(testenv.totloss))
