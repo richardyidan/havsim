@@ -40,12 +40,13 @@ maxvelocity = 0
 maxheadway = 0
 #define how the state should look
 statemem = 5
-#xtrain, ytrain,  = np.zeros((0,statemem*3)), np.zeros((0,1))
-#xtest, ytest = np.zeros((0,statemem*3)), np.zeros((0,1))
+
 xtrain, ytrain, xtest, ytest = [], [], [], []
 for count, i in enumerate(meas.keys()):
-    if count > 200: # only use 200 vehicles
+    if count > 400:
         break
+    if len(platooninfo[i][4]) != 1:
+        continue
     t_nstar, t_n, T_nm1, T_n = platooninfo[i][:4]
     leadinfo, unused, unused = havsim.calibration.helper.makeleadfolinfo([i], platooninfo, meas)
     if T_nm1 - t_n ==0:
@@ -53,8 +54,6 @@ for count, i in enumerate(meas.keys()):
     lead = np.zeros((T_nm1 - t_n+1,3)) #columns are position, speed, length
     for j in leadinfo[0]:
         curleadid = j[0]
-        if curleadid == 0.0:
-            print("hi")
         leadt_nstar = platooninfo[curleadid][0]
         lead[j[1]-t_n:j[2]+1-t_n,:] = meas[curleadid][j[1]-leadt_nstar:j[2]+1-leadt_nstar,[2,3,6]]
 
@@ -66,7 +65,7 @@ for count, i in enumerate(meas.keys()):
         temp = max(headway)
         if temp > maxheadway:
             maxheadway = temp
-        temp = max(curmeas[:,1])
+        temp = max(lead[:,1])
         if temp > maxvelocity:
             maxvelocity = temp
 
@@ -84,7 +83,12 @@ for count, i in enumerate(meas.keys()):
         curx = list(leadv)
         curx.extend(list(vehv))
         curx.extend(list(hd))
-        cury = [curmeas[j,2]]
+
+        #new output for model
+        cury = [((-1/2) * [curmeas[j,2]][0] * (0.1 ** 2)) - (vehv[-1] * 0.1)]
+
+
+
         if train_or_test[count]:
             xtrain.append(curx)
             ytrain.append(cury)
@@ -94,10 +98,10 @@ for count, i in enumerate(meas.keys()):
 
 #reshape data into correct dimensions, normalize
 xtrain, ytrain, xtest, ytest = np.asarray(xtrain,np.float32), np.asarray(ytrain, np.float32), np.asarray(xtest,np.float32), np.asarray(ytest,np.float32)
-maxacc = max(ytrain[:,0])
-minacc = min(ytrain[:,0])
-ytrain = (ytrain + minacc)/(maxacc-minacc)
-ytest = (ytest + minacc)/(maxacc-minacc)
+maxoutput = max(ytrain[:,0])
+minoutput = min(ytrain[:,0])
+ytrain = (ytrain + minoutput)/(maxoutput-minoutput)
+ytest = (ytest + minoutput)/(maxoutput-minoutput)
 xtrain[:,:statemem*2] = xtrain[:,:statemem*2]/maxvelocity
 xtrain[:,statemem*2:statemem*3] = xtrain[:,statemem*2:statemem*3]/maxheadway
 xtest[:,:statemem*2] = xtest[:,:statemem*2]/maxvelocity
@@ -169,7 +173,7 @@ def test1(dataset, minacc, maxacc):
     return (tf.math.reduce_mean(mse)**.5)*(maxacc-minacc)-minacc, predicted_output
 
 
-def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxacc, minacc, maxvelocity, maxheadway):
+def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutput, minaoutput, maxvelocity, maxheadway):
     #how many samples we should look back
     statemem = 5
 
@@ -219,23 +223,26 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxacc,
         xtest[0][statemem*2:statemem*3] = xtest[0][statemem*2:statemem*3]/maxheadway
         #vector to put into NN
         xtest = np.asarray(xtest, np.float32)
-        cury = [curmeas[j,2]]
+        cury = cury = [((-1/2) * [curmeas[j,2]][0] * (0.1 ** 2)) - (vehv[-1] * 0.1)]
         ytest.append(cury)
-        ytest = (ytest + minacc)/(maxacc-minacc)
+        ytest = (ytest + minoutput)/(maxoutput-minoutput)
         ytest = tf.convert_to_tensor(ytest,tf.float32)
         test_ds = tf.data.Dataset.from_tensor_slices(
                 (xtest,ytest)).shuffle(100000).batch(32)
 
 
-        output, predicted_acc = test1(test_ds,minacc,maxacc)
-        unormalized_val = (predicted_acc[0].numpy()[0][0]) * (maxacc - minacc) - minacc
-        simulated_speed = vehv[-1] + (unormalized_val)*0.1
-        simulated_trajectory = curr_trajectory + (simulated_speed)*0.1
+        output, predicted_acc = test1(test_ds,minoutput,maxoutput)
+        unormalized_val = (predicted_acc[0].numpy()[0][0]) * (maxoutput - minoutput) - minoutput
+        simulated_headway = hd[-1] + (leadv[-1] * .1) + (unormalized_val)
+        simulated_trajectory = 0
         if j + 1 < len(curmeas):
-            curmeas[j+1,1] = simulated_speed
-            headway[j+1] = lead[j,0] - simulated_trajectory - lead[j,2]
+            simulated_trajectory = lead[j+1,0] - lead[j+1,2] - simulated_headway
+            headway[j+1] = simulated_headway
+        else:
+            simulated_trajectory = lead[j,0] - lead[j,2] - simulated_headway
         simulated_trajectory_lst.append(simulated_trajectory)
         curr_trajectory = simulated_trajectory
+
 
 
 
@@ -250,25 +257,28 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxacc,
 
 
 #%% training and testing
-m = test(test_ds,minacc,maxacc)
-m2 = test(train_ds, minacc,maxacc)
+m = test(test_ds,minoutput,maxoutput)
+m2 = test(train_ds, minoutput,maxoutput)
 print('before training rmse on test dataset is '+str(tf.cast(m,tf.float32))+' rmse on train dataset is '+str(m2))
 
 for epoch in range(6):
     for x, yhat in train_ds:
         train_step(x,yhat,loss_fn, optimizer)
-    m = test(test_ds,minacc,maxacc)
-    m2 = test(train_ds, minacc,maxacc)
+    m = test(test_ds,minoutput,maxoutput)
+    m2 = test(train_ds, minoutput,maxoutput)
     print('epoch '+str(epoch)+' rmse on test dataset is '+str(m)+' rmse on train dataset is '+str(m2))
 
+# RMSE calculationg when predicting acceleration
 total_error = 0
 total_count = 0
 for count, i in enumerate(meas.keys()):
-    if count > 200: # only use 200 vehicles
+    if count > 450:
         break
     if i == 0:
         continue
-    pred_traj, acc_traj, rmse = predict_trajectory(model,i ,meas, platooninfo, maxacc, minacc, maxvelocity, maxheadway)
+    if len(platooninfo[i][4]) != 1:
+        continue
+    pred_traj, acc_traj, rmse = predict_trajectory(model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway)
     print(pred_traj)
     print(acc_traj)
     print(rmse)
