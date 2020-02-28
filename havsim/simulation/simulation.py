@@ -215,26 +215,32 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     So for 2nd order model the state of a vehicle is a list of position and speed
     
     
-    auxinfo - dictionary where keys are IDs, the values are 
+    auxinfo - dictionary where keys are IDs (floats), the values are a list with these indices
     0 - current model regime 
-    1 - current leader
-    2 - current lane
-    3 - current road 
-    4 - length
-    5 - parameters
-    6 - model 
-    7 - model helper 
-    8 - LC parameters
-    9 - LC model 
-    10 - update function
-    11 - followers  (left, current, right)
-    13 - init entry time
-    14 - past model reg info
+    1 - current leader (key)
+    2 - current lane (int)
+    3 - current road  (key)
+    4 - length (float)
+    5 - parameters (list of floats)
+    6 - model (function)
+    7 - model helper (function)
+    8 - LC parameters (list of floats)
+    9 - LC model (function)
+    10 - update function (function)
+    11 - followers  (left, current, right) (list of keys)
+    13 - init entry time (int)
+    14 - past model reg info - past info are tuples of (value, first time, last time) (sparse format)
     15 - past LC regime info 
     16 - past leader info
     17 - past road info
     18 - past lane info
-    19 - LC regime
+    19 - LC regime 
+    20 - left/right leaders - list of set of keys which have the vehicle as a right follower (in 0 index) and 
+    left follower (in 2 index). 1 index is empty to be consistent with followers (11 index)
+    auxinfo also has some special keys - 
+    if key is a string, it is corresponding to an anchor point where no vehicle exists. These special anchors 
+    are at the beginning of tracks (a track would be interpreted as a list of (key, lane) tuples that represent
+    the roads you follow if you go in a straight line along the road network). 
 
     
     roadinfo - dictionary, encodes the road network and also stores boundary conditions 
@@ -244,7 +250,14 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     3 - upstream boundary - list of lists, inner lists are sequences of speeds (or none), outer lists correspond to lanes
     4 - downstream boundary - same format as upstream boundary, but for downstream 
     5 - inflow buffer - list of floats, represents how close we are to adding next vehicle
-    6 - first vehicle - list of keys corresponding to first vehicle in lane 
+    6 - first vehicle - list of keys corresponding to first vehicle in each lane. may correspond to anchor (string key)
+    7 - what lanes are connected from (array of (key, lane) tuples) corresponding to lanes 
+    roadinfo also contains special keys which are tuples of (road1, road2) which correspond to the distance between 
+    these roads - these are for properly computing the headway when vehicles are on different 
+    roads. 
+    Each lane in a road is interpreted as being the same length. 
+    
+    
     
     modelinfo - dictionary, stores any additional information which is not part of the state,
     does not explicitly state the regime of the model, 
@@ -257,23 +270,17 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     dt - timestep
     
     outputs - 
-    nextstate - current state in the next timestep
-    
+    updates all the data structures in place 
+    curstate - current state in the next timestep
     auxinfo - auxinfo may be changed during the timestep
-    
+    roadinfo
+    modelinfo 
     """
-    nextstate = {}
+#    nextstate = {}
     a = {}
     
     #get actions in latitudinal movement 
     for i in curstate.keys():
-#        if auxinfo[i][1] ==None: 
-#            dbc = roadinfo[auxinfo[i][3]][4][timeind] #speed at downstream 
-#            a[i] = dboundary(dbc, curstate[i],dt)
-#        else:
-#            #standard call signature for CF model 
-#            a[i] = auxinfo[i][6](auxinfo[i][5],curstate[i],curstate[auxinfo[i][1]], dt = dt)
-        
         a[i] = auxinfo[i][7](i, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, auxinfo[i][0][1]) #wrapper function for model call 
         
     #get actions in latitudinal movement (from LC model)
@@ -290,15 +297,22 @@ def std_CF(veh, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, relax):
     vehaux = auxinfo[veh]
     if relax:
         curstate[veh][2] += modelinfo[veh][0] #add relaxation if needed
-    
-    if vehaux[1] == None: #no leader
-        dbc = roadinfo[vehaux[3]][4][vehaux[2]][timeind]
-        out = dboundary(dbc, curstate[veh], dt)
-    else: 
-        out = vehaux[7](vehaux[5], curstate[veh], curstate[vehaux[1]], dt) #standard CF call 
         
-    if relax: #remove relaxation 
-        curstate[veh][2] += -modelinfo[veh][0]
+        #actual call looks like this 
+        if vehaux[1] == None: #no leader -> action chosen based on boundary conditions 
+            dbc = roadinfo[vehaux[3]][4][vehaux[2]][timeind]
+            out = dboundary(dbc, curstate[veh], dt)
+        else:  #standard CF call 
+            out = vehaux[7](vehaux[5], curstate[veh], curstate[vehaux[1]], dt) 
+            
+        curstate[veh][2] += -modelinfo[veh][0] #undo relaxation 
+        
+    else: 
+        if vehaux[1] == None: #no leader -> action chosen based on boundary conditions 
+            dbc = roadinfo[vehaux[3]][4][vehaux[2]][timeind]
+            out = dboundary(dbc, curstate[veh], dt)
+        else:  #standard CF call 
+            out = vehaux[7](vehaux[5], curstate[veh], curstate[vehaux[1]], dt) 
     return out 
     
 def get_headway(curstate, auxinfo, roadinfo, fol, lead):
@@ -307,10 +321,6 @@ def get_headway(curstate, auxinfo, roadinfo, fol, lead):
     if auxinfo[fol][3] != auxinfo[lead][3]:
 #        hd += headway_helper(roadinfo,auxinfo[fol][3],auxinfo[fol][2], auxinfo[lead][3]) #old solution 
         hd += roadinfo[(auxinfo[fol][3], auxinfo[lead][3])] #better to just store in roadinfo 
-        
-    #maybe this way is actually faster idk (keep self connections in roadinfo as well)
-#    hd += roadinfo[(auxinfo[fol][3], auxinfo[lead][3])]
-        
     return hd
 
 def get_dist(curstate, auxinfo, roadinfo, fol, lead):
@@ -319,8 +329,8 @@ def get_dist(curstate, auxinfo, roadinfo, fol, lead):
         dist += roadinfo[(auxinfo[fol][3], auxinfo[lead][3])]
 
 def headway_helper(roadinfo, folroad, follane, leadroad):
+    #deprecated######
     #this will have problems if follower is actually ahead of leader
-    #deprecated 
     nextroad, nextlane = roadinfo[folroad][1][follane]
     out = roadinfo[folroad][2]
     while nextroad != leadroad: 
