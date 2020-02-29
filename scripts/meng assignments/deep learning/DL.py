@@ -24,7 +24,58 @@ with open(path_reconngsim, 'rb') as f:
 #with open(path_highd26, 'rb') as f:
 #    data = pickle.load(f)[0]
 
-meas, platooninfo, = makeplatoonlist(data,1,False)
+meas, platooninfo, platoonlist= makeplatoonlist(data,1)
+
+#create lead car format
+for curr_platoon in platoonlist:
+    print("this is curr_platton")
+    print(curr_platoon)
+    final_dict = {}
+    for i in curr_platoon:
+        #not including some of the vec from the platoon in simulation?
+        if len(platooninfo[i][4]) != 1:
+            continue
+        t_nstar, t_n, T_nm1, T_n = platooninfo[i][:4]
+        leadinfo, unused, unused = havsim.calibration.helper.makeleadfolinfo([i], platooninfo, meas)
+        if T_nm1 - t_n ==0:
+            continue
+        lead = np.zeros((T_nm1 - t_n+1,3)) #columns are position, speed, length
+        lead_lst = []
+        for j in leadinfo[0]:
+            curleadid = j[0]
+            lead_lst.append(curleadid)
+        final_dict[i] = lead_lst
+    print(final_dict)
+    edges = []
+    # for each node in graph
+    for node in final_dict:
+        # for each neighbour node of a single node
+        for neighbour in final_dict[node]:
+            # if edge exists then append
+            edges.append([node, neighbour])
+    print(edges)
+    new_tuple_list = []
+    for index1 in range(len(edges)):
+        for index2 in range(len(edges)):
+            if index1 != index2:
+                tup1 = edges[index1]
+                tup2 = edges[index2]
+                if tup2 != (None) and tup1 != (None):
+                    if tup1[-1] == tup2[0]:
+                        curr_lst = (tup1)
+                        curr_lst += (tup2[1:])
+                        edges[index1] = (curr_lst)
+                        edges[index2] = None
+                    elif tup1[0] == tup2[-1]:
+                        curr_lst = (tup2)
+                        curr_lst += (tup1[1:])
+                        edges[index1] = (curr_lst)
+                        edges[index2] = (None)
+
+
+    edges[:] = [x for x in edges if x != None]
+    lead_car_format = (edges)
+
 
 #%% first step is to prepare training/test data
 #
@@ -256,6 +307,7 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutp
 
 
 
+
 #%% training and testing
 m = test(test_ds,minoutput,maxoutput)
 m2 = test(train_ds, minoutput,maxoutput)
@@ -269,22 +321,22 @@ for epoch in range(6):
     print('epoch '+str(epoch)+' rmse on test dataset is '+str(m)+' rmse on train dataset is '+str(m2))
 
 # RMSE calculationg when predicting acceleration
-total_error = 0
-total_count = 0
-for count, i in enumerate(meas.keys()):
-    if count > 450:
-        break
-    if i == 0:
-        continue
-    if len(platooninfo[i][4]) != 1:
-        continue
-    pred_traj, acc_traj, rmse = predict_trajectory(model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway)
-    print(pred_traj)
-    print(acc_traj)
-    print(rmse)
-    if tf.is_tensor(rmse):
-        total_error += rmse
-        total_count += 1
-    print("next")
-print("------------THIS IS THE FINAL RMSE-------------")
-print(total_error/total_count)
+# total_error = 0
+# total_count = 0
+# for count, i in enumerate(meas.keys()):
+#     if count > 450:
+#         break
+#     if i == 0:
+#         continue
+#     if len(platooninfo[i][4]) != 1:
+#         continue
+#     pred_traj, acc_traj, rmse = predict_trajectory(model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway)
+#     print(pred_traj)
+#     print(acc_traj)
+#     print(rmse)
+#     if tf.is_tensor(rmse):
+#         total_error += rmse
+#         total_count += 1
+#     print("next")
+# print("------------THIS IS THE FINAL RMSE-------------")
+# print(total_error/total_count)
