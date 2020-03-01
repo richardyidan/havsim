@@ -340,13 +340,211 @@ def headway_helper(roadinfo, folroad, follane, leadroad):
         
     return out
 
+def dist_to_end(roadinfo, road, lane):
+    #calculates distance to the end of network starting from road 
+    L = roadinfo[road][2] 
+    nextroad, nextlane = roadinfo[road][1][lane][:]
+    while nextroad is not None: 
+        road = nextroad
+        lane = nextlane
+        L += roadinfo[road][2]
+        nextroad, nextlane = roadinfo[road][1][lane][:]
+    return L 
+    
+    
+def std_LC(i, a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax_cur = True, userelax_new = False, get_fol = True): 
+    #more generalized/updated version of LCmodel
+    curaux = auxinfo[i]
+    lfol, rfol = curaux[11][0], curaux[11][2]
+    
+    if lfol == '' and rfol == '': #nothing to check 
+        return 
+    
+    if np.random.rand() > curaux[8][3]: #consider change only with this probability 
+        return 
+    
+#    p = curaux[8]
+#    curhd = curstate[i][2]
+    #for both left and right sides, get new headway, new leader, cur/new headway for new follower
+    #initialize
+    llead=rlead=newlhd=newrhd=lfolhd=rfolhd=newlfolhd=newrfolhd = 0
+    if lfol != '': 
+        llead = auxinfo[lfol][1]
+        if llead == None: 
+            newlhd = dist_to_end(roadinfo, curaux[3], curaux[2]) - curstate[i][0] #assuming you stay on same road, works for simple network only 
+        else:
+            newlhd = get_headway(curstate, auxinfo, roadinfo, i, llead)
+        if type(lfol) == str:
+            pass
+        else:
+            lfolhd = curstate[lfol][2]
+            newlfolhd = get_headway(curstate, auxinfo, roadinfo, lfol, i)
+            
+    if rfol != '': #same code as for lfol
+        rlead = auxinfo[rfol][1]
+        if rlead == None: 
+            newrhd = dist_to_end(roadinfo, curaux[3], curaux[2]) - curstate[i][0]
+        else:
+            newrhd = get_headway(curstate, auxinfo, roadinfo, i, rlead)
+        if type(rfol) == str:
+            pass
+        else:
+            rfolhd = curstate[rfol][2]
+            newrfolhd = get_headway(curstate, auxinfo, roadinfo, rfol, i)
+            
+    
+    if get_fol: #model call uses current follower headway 
+        fol = curaux[11][1]
+        lead = curaux[1]
+        if type(fol) == str or lead == None:
+            newfolhd = 0
+        else: 
+            newfolhd = get_headway(curstate, auxinfo, roadinfo, fol, lead)
+        
+    #current standard call signature
+    out = mobil(i, a, curstate, auxinfo, roadinfo, modelinfo, lfol, rfol, llead, rlead, newlhd, newrhd, lfolhd, rfolhd, 
+                newlfolhd, newrfolhd, fol, lead, newfolhd, timeind, dt, userelax_cur, userelax_new)
+        
+    return out 
+        
+def mobil(i, a, curstate, auxinfo, roadinfo, modelinfo, lfol, rfol, llead, rlead, newlhd, newrhd, lfolhd, rfolhd, 
+          newlfolhd, newrfolhd, fol, lead, newfolhd, timeind, dt, userelax_cur, userelax_new):
+    #returns action according to mobil strategy - refactored of LCmodel and mobil_change
+    #options to use/not use relaxation when computing
+    #userelax_cur = True will recompute the action without relaxation if relaxation is activated (for all vehicles involved)
+    #userelax_new = True whether or not to use relaxation when computing the new actions 
+    
+    #LC parameters (by index)
+    #0 - safety criterion 
+    #1 - incentive criteria
+    #2 - politeness
+    #3 - probability to check discretionary
+    #4 - bias on left side 
+    #5 - bias on right side
+    
+    lincentive = rincentive = -math.inf
+    curaux = auxinfo[i]
+#    folaux = auxinfo[fol]
+#    lfolaux = auxinfo[lfol]
+#    rfolaux = auxinfo[rfol]
+    
+    p = curaux[8]
+    curhd = curstate[i][2]
+    
+    #vehicle's current action
+    if not userelax_cur and curaux[0][1] and curaux[1] is not None: 
+        cura = curaux[7](i, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, False)
+    else: 
+        cura = a[i]
+    
+    #get follower's action and new action 
+    fola, newfola = mobil_helper(fol, lead, i, newfolhd, a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax_cur, userelax_new)
+    
+#    if type(fol) == str: 
+#        fola = 0
+#        newfola = 0
+#    else: 
+#        #current follower acceleration 
+#        if not userelax_cur and folaux[0][1]: #don't use relaxation 
+#            fola = folaux[7](fol, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, False)
+#        else: 
+#            fola = a[fol]
+#        #new follower acceleration 
+#        curfolhd = curstate[fol][2]
+#        folaux[1] = lead
+#        curstate[fol][2] = newfolhd
+#        mybool = userelax_new and folaux[0][1]
+#        newfola = folaux[7](fol,curstate, auxinfo, roadinfo, modelinfo, timeind, dt, mybool)
+#        #reset follower state
+#        curstate[fol][2] = curfolhd
+#        folaux[1] = i
+    
+    if lfol != '':
+        #get left follower's action and new action 
+        lfola, newlfola = mobil_helper(lfol, i, llead, newlfolhd, a, curstate, auxinfo, 
+                                       roadinfo, modelinfo, timeind, dt, userelax_cur, userelax_new)
+        #vehicle's new action 
+        curaux[1] = llead
+        curstate[i][2] = newlhd
+        mybool = userelax_new and curaux[0][1]
+        newla = curaux[7](i, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, mybool)
+        #reset vehicle's state 
+        curstate[i][2] = curhd
+        curaux[1] = lead
+        #calculate incentive 
+        lincentive = newla - cura + p[2]*(newlfola-lfola + newfola - fola) + p[4]
+        
+    if rfol != '': 
+        rfola, newrfola = mobil_helper(rfol, i, rlead, newrfolhd, a, curstate, auxinfo, 
+                                       roadinfo, modelinfo, timeind, dt, userelax_cur, userelax_new)
+        #vehicle's new action 
+        curaux[1] = rlead
+        curstate[i][2] = newrhd
+        mybool = userelax_new and curaux[0][1]
+        newra = curaux[7](i, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, mybool)
+        #reset vehicle's state 
+        curstate[i][2] = curhd
+        curaux[1] = lead
+        #calculate incentive
+        rincentive = newra - cura + p[2]*(newrfola - rfola + newfola - fola) + p[5]
+    
+    
+    if rincentive > lincentive: 
+        side = 'r'
+        incentive = rincentive
+        selfsafe = newra
+        folsafe = newrfola
+    else:
+        side = 'l'
+        incentive = lincentive
+        selfsafe = newla
+        folsafe = newlfola
+    
+    if incentive > p[1]: #incentive criteria
+        if selfsafe > p[0] and folsafe > p[0]:
+            out = side
+        else: 
+            #do tactical/cooperation step if desired
+            pass
+    return out 
+        
+        
+        
+def mobil_helper(fol, lead, i, newfolhd, a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax_cur, userelax_new):
+    #calculates the current, new acceleration (action) for vehicle fol
+    #fol -vehicle to calculate current, new acceleration for 
+    #lead - new lead vehicle 
+    #i - current lead vehicle 
+    #newfolhd - newheadway corresponding to new lead vehicle 
+    
+    folaux = auxinfo[fol]
+    if type(fol) == str: 
+        fola = 0
+        newfola = 0
+    else: 
+        #current follower acceleration 
+        if not userelax_cur and folaux[0][1]: #don't use relaxation 
+            fola = folaux[7](fol, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, False)
+        else: 
+            fola = a[fol]
+        #new follower acceleration 
+        curfolhd = curstate[fol][2]
+        folaux[1] = lead
+        curstate[fol][2] = newfolhd
+        mybool = userelax_new and folaux[0][1]
+        newfola = folaux[7](fol,curstate, auxinfo, roadinfo, modelinfo, timeind, dt, mybool)
+        #reset follower state
+        curstate[fol][2] = curfolhd
+        folaux[1] = i
+    
+    return fola, newfola
+    
+
 def LCmodel(a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax = False): 
     #Based on MOBIL strategy
     #elements which won't be included 
     #   - cooperation for discretionary lane changes
     #   - aggressive state of target vehicle to force lane changes 
-    
-    #I think in general a better design is to calculate required quantities and pass to model 
     
     #LC parameters (by index)
     #0 - safety criterion 
@@ -401,47 +599,7 @@ def LCmodel(a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax = F
                 else: 
                     cura = a[i]
                 
-        if lfol != '': #new to calculate new vehicle acceleration, new left follower acceleration 
-            
-            #this code is wrapped in mobil_change now 
-#            if lfol == None: 
-#                lfola = 0
-#                newlfola = 0
-#            else: 
-#                lfolaux = auxinfo[lfol]
-#                #left follower current acceleration 
-#                if lfolaux[0][1] and not userelax:
-#                    lfola = lfolaux[7](lfol, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, False)
-#                else: 
-#                    lfola = a[lfol]
-#                #left side leader
-#                llead = lfolaux[1]
-#                
-#                #get new follower acceleration and vehicle acceleration
-#                lfolaux[1] = i
-#                newlfolhd = get_headway(curstate,auxinfo,roadinfo,lfol,i)
-#                curstate[lfol][2] = newlfolhd
-#                
-#                if lfolaux[0][1] and not userelax:
-#                    newlfola = lfolaux[7](lfol, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, False)
-#                else: 
-#                    newlfola = lfolaux[7](lfol, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, True)
-#                if llead == None: 
-#                    curaux[1] = None
-#                    curaux[2] = lfolaux[2]
-#                    newla = curaux[7](i, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, False) #lead is none means we don't check relax
-#                
-#                else: 
-#                    curaux[1] = llead
-#                    newlhd = get_headway(curstate, auxinfo, roadinfo, i, llead)
-#                    curstate[i][2] = newlhd
-#                    if curaux[0][1] and not userelax: 
-#                        newla = curaux[7](i,curstate,auxinfo,roadinfo,modelinfo,timeind,dt,False)
-#                    else: 
-#                        newla = curaux[7](i,curstate,auxinfo,roadinfo,modelinfo,timeind,dt,True)
-#                    
-#            lincentive = newla - cura + p[2]*(newlfola - lfola + newfola - fola) #no bias term 
-            
+        if lfol != '': #new to calculate new vehicle acceleration, new left follower acceleration             
             lincentive, newla, lfola, newlfola = mobil_change(i,lfol, curstate, auxinfo, roadinfo, 
                                                                             modelinfo, timeind, dt, userelax, a, cura, newfola, fola, p)
 
