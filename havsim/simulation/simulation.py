@@ -278,13 +278,15 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     """
 #    nextstate = {}
     a = {}
+    lca = {}
     
     #get actions in latitudinal movement 
     for i in curstate.keys():
         a[i] = auxinfo[i][7](i, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, auxinfo[i][0][1]) #wrapper function for model call 
         
     #get actions in latitudinal movement (from LC model)
-    lca = LCmodel(a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt)
+    for i in curstate.keys(): 
+        std_LC(i, lca, a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt)
     
     #update current state 
     nextstate = updatefun(curstate, a, auxinfo, roadinfo, dt)
@@ -352,7 +354,7 @@ def dist_to_end(roadinfo, road, lane):
     return L 
     
     
-def std_LC(i, a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax_cur = True, userelax_new = False, get_fol = True): 
+def std_LC(i, lca, a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax_cur = True, userelax_new = False, get_fol = True): 
     #more generalized/updated version of LCmodel
     curaux = auxinfo[i]
     lfol, rfol = curaux[11][0], curaux[11][2]
@@ -402,10 +404,10 @@ def std_LC(i, a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax_c
             newfolhd = get_headway(curstate, auxinfo, roadinfo, fol, lead)
         
     #current standard call signature
-    out = mobil(i, a, curstate, auxinfo, roadinfo, modelinfo, lfol, rfol, llead, rlead, newlhd, newrhd, lfolhd, rfolhd, 
+    lca[i] = mobil(i, a, curstate, auxinfo, roadinfo, modelinfo, lfol, rfol, llead, rlead, newlhd, newrhd, lfolhd, rfolhd, 
                 newlfolhd, newrfolhd, fol, lead, newfolhd, timeind, dt, userelax_cur, userelax_new)
         
-    return out 
+    return
         
 def mobil(i, a, curstate, auxinfo, roadinfo, modelinfo, lfol, rfol, llead, rlead, newlhd, newrhd, lfolhd, rfolhd, 
           newlfolhd, newrfolhd, fol, lead, newfolhd, timeind, dt, userelax_cur, userelax_new):
@@ -696,10 +698,13 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
     #There can be problems because a vehicle's left/right/new LC side leaders are not going to 
     #have their follower updated correctly when there is a road change coming up 
     for i in lca.keys(): 
-        #define change side, opposite side
+        #prepare for updates
         curaux = auxinfo[i]
         road = curaux[3]
         lane = curaux[2]
+        fol = curaux[11][1]
+        folaux = auxinfo[fol]
+        #define change side, opposite side
         if lca[i] == 'l': 
             lcside = 0
             opside = 2
@@ -710,93 +715,178 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             opside = 0
             lcsidelane = lane+1
             opsidelane = lane-1
-        
-        #update opposite side leader
-        opfol = curaux[11][opside]
-        if opfol == '':
-            pass
-        else:
-            if opfol == None:
-                oplead = roadinfo[road][6][opsidelane]
-            else: 
-                oplead = auxinfo[opfol][1]
-            if oplead is not None: 
-                auxinfo[oplead][11][lcside] = curaux[11][1] #opposite side LC side follower is current follower
-        
-        #update current leader
-        if curaux[1] == None: 
+        #################
+        #update current leader 
+        lead = curaux[1]
+        if lead == None: 
             pass
         else: 
-            auxinfo[curaux[1]][11][1] = curaux[11][1]
-            if curaux[11][lcside] == auxinfo[curaux[1]][11][lcside]:
-                auxinfo[curaux[1]][11][lcside] = i
+            auxinfo[lead][11][1] = fol
+#            if curaux[11][lcside] == auxinfo[lead][11][lcside]: 
+#                auxinfo[lead][11][lcside] = i 
         
-        #update LC side leader
+        #update opposite side leaders 
+        for j in curaux[20][opside]:
+            auxinfo[j][11][lcside] = fol
+        #update lc side leaders 
+        for j in curaux[20][lcside]: 
+            auxinfo[j][11][opside] = fol
+            
+        #update follower
+        folaux[20][lcside].update(curaux[20][lcside])
+        folaux[20][opside].update(curaux[20][opside])
+        folaux[1] = lead
+        folaux[16][-1].append(timeind) #update even if follower is special (i.e. str)
+        folaux[16].append([lead, timeind + 1])
+        
+        #update vehicle 
+        #update opposite side for veh
+        opsidefol = curaux[11][opside]
+        if opsidefol is not '':
+            auxinfo[curaux[11][opside]][20][lcside].remove(i) #old opposite side follower 
+        curaux[11][opside] = fol 
+        folaux[20][lcside].add(i)
+        #update cur side follower for veh 
         lcfol = curaux[11][lcside]
-        if lcfol == None: 
-            lclead = roadinfo[road][6][lcsidelane]
-#            ####last in road updates #no these are wrong 
-#            roadinfo[road][6][lcsidelane] = i #update last vehicle for road if necessary
-#            roadinfo[road][6][lane] = curaux[1]
-        else: 
-            lclead = auxinfo[lcfol][1]
-            auxinfo[lcfol][1] = i  #update leader for lcfol 
-        if lclead is not None: 
-            auxinfo[lclead][11][opside] = curaux[11][1]
-            auxinfo[lclead][11][1] = i
-            
-        #update vehicle and its follower
-        fol = curaux[11][1]
-        if fol is not None: 
-            auxinfo[fol][1] = curaux[1]
-        curaux[1] = lclead
-        curaux[11][opside] = fol
+        lcfolaux = auxinfo[lcfol]
+        lcfolaux[1] = i
+        lcfolaux[16][-1].append(timeind)
+        lcfolaux[16].append([i, timeind + 1])
+        lcfolaux[20][opside].remove(i)
         curaux[11][1] = lcfol
-        
-        #update memory for current vehicle
+        #update leader
+        lclead = auxinfo[lcfol][1]
+        curaux[1] = lclead
         curaux[16][-1].append(timeind)
-        curaux[16].append([lclead, timeind+1])
-        curaux[18][-1].append(timeind)
-        curaux[18].append([lcsidelane, timeind+1])
+        curaux[16].append([lclead, timeind + 1])
+        if lclead is not None: 
+            auxinfo[lclead][11][1] = i
+        #update for new left/right leaders
+        newset = set()
+        for j in lcfolaux[20][opside].copy():
+            curdist = get_dist(curstate, auxinfo, roadinfo, j, i)
+            if curdist < 0: 
+                auxinfo[j][11][lcside] = i
+                newset.add(j)
+                lcfolaux[20][opside].remove(j)
+        curaux[20][opside] = newset
         
-        #update memory for followers 
-        if fol is not None: 
-            auxinfo[fol][16][-1].append(timeind)
-            auxinfo[fol][16].append([auxinfo[fol][1], timeind+1])
-        if lcfol is not None: 
-            auxinfo[lcfol][16][-1].append(timeind)
-            auxinfo[lcfol][16].append([i, timeind+1])
-        
-        
-        
-        
-        #update new LC side 
-        #check if new LC side even exists - update the followers accordingly 
-        if lcsidelane ==0:
-            curaux[11][0] = ''
-        elif lcsidelane == roadinfo[road][0]:
-            curaux[11][2] = ''
+        newset = set()
+        maxdist = -math.inf
+        minveh = None
+        for j in lcfolaux[20][lcside].copy(): 
+            curdist = get_dist(curstate, auxinfo, roadinfo, j, i)
+            if curdist < 0: 
+                auxinfo[j][11][opside] = i
+                newset.add(j)
+                lcfolaux[20][lcside].remove(j)
+                if curdist > maxdist: 
+                    maxdist = curdist
+                    minveh = j
+        curaux[20][lcside] = newset
+        #update new lcside 
+        if (lcside == 0 and lane == 1) or (lcside == 2 and lane == roadinfo[road][0]-1): 
+            pass
         else: 
-            newlcside = lcsidelane -1 if lca[i] == 'l' else lcsidelane + 1 #lane index for new side 
-            
-            #basically need to figure out the leader/follower on the new lc side because the leader
-            #needs to have its opposite side follower updated the follower is the update for the vehicle lc side
-            #need to get a guess for a vehicle we think it could be
-            if lclead == None: 
-                if lcfol == None: 
-                    newlcveh = roadinfo[road][6][newlcside]
-                newlcveh = auxinfo[lcfol][11][lcside]
+            if minveh is not None: 
+                curaux[11][lcside] = auxinfo[minveh][11][1]
+                auxinfo[curaux[11][lcside]][20][opside].add(i)
             else: 
-                newlcveh = auxinfo[lclead][11][lcside]
-            if newlcveh == None: 
-                newlcveh = roadinfo[road][6][newlcside]
-            
-            #find new lcside follower and leader, if any 
-            newlclead, newlcfol = leadfol_find(curstate, auxinfo, roadinfo, i, newlcveh)
-            
-            if newlclead != None: 
-                auxinfo[newlclead][11][opside] = i
-            curaux[11][lcside]= newlcfol
+                #use guess and leadfol_find to get new lcside follower 
+                if len(lcfolaux[20][lcside]) > 0 :
+                    pass
+        
+        #check for vehicles moving into same gap (check left/right leaders of the lcfol)
+        
+        #also at this point you would also want to reset cooperative and tactical states 
+        
+        #relaxation would also be calculated at this step
+        
+#        ###############
+#        #update opposite side leader
+#        opfol = curaux[11][opside]
+#        if opfol == '':
+#            pass
+#        else:
+#            if opfol == None:
+#                oplead = roadinfo[road][6][opsidelane]
+#            else: 
+#                oplead = auxinfo[opfol][1]
+#            if oplead is not None: 
+#                auxinfo[oplead][11][lcside] = curaux[11][1] #opposite side LC side follower is current follower
+#        
+#        #update current leader
+#        if curaux[1] == None: 
+#            pass
+#        else: 
+#            auxinfo[curaux[1]][11][1] = curaux[11][1]
+#            if curaux[11][lcside] == auxinfo[curaux[1]][11][lcside]:
+#                auxinfo[curaux[1]][11][lcside] = i
+#        
+#        #update LC side leader
+#        lcfol = curaux[11][lcside]
+#        if lcfol == None: 
+#            lclead = roadinfo[road][6][lcsidelane]
+##            ####last in road updates #no these are wrong 
+##            roadinfo[road][6][lcsidelane] = i #update last vehicle for road if necessary
+##            roadinfo[road][6][lane] = curaux[1]
+#        else: 
+#            lclead = auxinfo[lcfol][1]
+#            auxinfo[lcfol][1] = i  #update leader for lcfol 
+#        if lclead is not None: 
+#            auxinfo[lclead][11][opside] = curaux[11][1]
+#            auxinfo[lclead][11][1] = i
+#            
+#        #update vehicle and its follower
+#        fol = curaux[11][1]
+#        if fol is not None: 
+#            auxinfo[fol][1] = curaux[1]
+#        curaux[1] = lclead
+#        curaux[11][opside] = fol
+#        curaux[11][1] = lcfol
+#        
+#        #update memory for current vehicle
+#        curaux[16][-1].append(timeind)
+#        curaux[16].append([lclead, timeind+1])
+#        curaux[18][-1].append(timeind)
+#        curaux[18].append([lcsidelane, timeind+1])
+#        
+#        #update memory for followers 
+#        if fol is not None: 
+#            auxinfo[fol][16][-1].append(timeind)
+#            auxinfo[fol][16].append([auxinfo[fol][1], timeind+1])
+#        if lcfol is not None: 
+#            auxinfo[lcfol][16][-1].append(timeind)
+#            auxinfo[lcfol][16].append([i, timeind+1])
+#        
+#        
+#        #update new LC side 
+#        #check if new LC side even exists - update the followers accordingly 
+#        if lcsidelane ==0:
+#            curaux[11][0] = ''
+#        elif lcsidelane == roadinfo[road][0]:
+#            curaux[11][2] = ''
+#        else: 
+#            newlcside = lcsidelane -1 if lca[i] == 'l' else lcsidelane + 1 #lane index for new side 
+#            
+#            #basically need to figure out the leader/follower on the new lc side because the leader
+#            #needs to have its opposite side follower updated the follower is the update for the vehicle lc side
+#            #need to get a guess for a vehicle we think it could be
+#            if lclead == None: 
+#                if lcfol == None: 
+#                    newlcveh = roadinfo[road][6][newlcside]
+#                newlcveh = auxinfo[lcfol][11][lcside]
+#            else: 
+#                newlcveh = auxinfo[lclead][11][lcside]
+#            if newlcveh == None: 
+#                newlcveh = roadinfo[road][6][newlcside]
+#            
+#            #find new lcside follower and leader, if any 
+#            newlclead, newlcfol = leadfol_find(curstate, auxinfo, roadinfo, i, newlcveh)
+#            
+#            if newlclead != None: 
+#                auxinfo[newlclead][11][opside] = i
+#            curaux[11][lcside]= newlcfol
             
         
         #update first in roads  
@@ -807,12 +897,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             roadinfo[road][6][lcsidelane] == i
             
             
-        #this would be the part where you need to check for vehicles requesting to move in same gap
-        #by checking newlclead, newlcfol membership in lca, and by lead/fol membership in lca
         
-        #also at this point you would also want to reset cooperative and tactical states 
-        
-        #relaxation would also be calculated at this step
         
     #update all vehicles states 
     for i in curstate.keys(): 
