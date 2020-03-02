@@ -889,12 +889,12 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
 #            curaux[11][lcside]= newlcfol
             
         
-        #update first in roads  
-        #in general this code has problems when vehicle may be first for several roads 
-        if roadinfo[road][6][lane] == i: 
-            roadinfo[road][6][lane] = curaux[1] #need to set before updating curaux[1]
-        if roadinfo[road][6][lcsidelane] == lclead: #this is not true if i is not on same road 
-            roadinfo[road][6][lcsidelane] == i
+#        #update first in roads  
+#        #in general this code has problems when vehicle may be first for several roads 
+#        if roadinfo[road][6][lane] == i: 
+#            roadinfo[road][6][lane] = curaux[1] #need to set before updating curaux[1]
+#        if roadinfo[road][6][lcsidelane] == lclead: #this is not true if i is not on same road 
+#            roadinfo[road][6][lcsidelane] == i
             
             
         
