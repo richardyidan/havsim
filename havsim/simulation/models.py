@@ -227,6 +227,11 @@ def drl_reward(nextstate, vavg, decay = .95, penalty = 1):
             cur = cur - penalty*(nextstate[i][2]-.2)**2 #here is a smaller penalty
         reward += cur
     return reward, vavg
+
+def drl_reward2(nextstate, vavg, decay = .95, lowereql = 11, eql = 15):
+    vlist = [i[1] for i in nextstate.values()]
+    vavg = np.average(vlist)
+    return 1 + np.interp(vavg, (lowereql, eql), (0, 1)), vavg
         
             
 def avgv_obj(sim,auxinfo):

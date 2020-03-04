@@ -28,8 +28,8 @@ class ProbabilityDistribution(tf.keras.Model):
 class Model(tf.keras.Model):
   def __init__(self, num_actions):
     super().__init__('mlp_policy')
-    self.hidden1 = kl.Dense(128, activation='relu') #hidden layer for actions (policy)
-    self.hidden2 = kl.Dense(128, activation='relu') #hidden layer for state-value
+    self.hidden1 = kl.Dense(256, activation='relu') #hidden layer for actions (policy)
+    self.hidden2 = kl.Dense(256, activation='relu') #hidden layer for state-value
     self.value = kl.Dense(1, name = 'value')
     # Logits are unnormalized log probabilities.
     self.logits = kl.Dense(num_actions, name = 'policy_logits')
@@ -96,10 +96,13 @@ class ACagent:
                     env.savestate()
                 
                 if done:
-                    losses.append(env.totloss)
-                    self.reset(env)
-                    
+#                    losses.append(env.totloss)
+#                    if run != nruns -1:
+#                        self.reset(env)
                     break
+            losses.append(env.totloss)
+            if run != nruns -1:
+                self.reset(env)
             run += 1
 
         env.totloss = np.sum(losses) / nruns
@@ -194,6 +197,7 @@ class ACagent:
             # Wall time: 1min 7s with original
             '''
             self.model.train_on_batch(statemem, [TDacc,TDerrors])
+#            self.train_step(statemem, TDacc,TDerrors)
             
         return ep_rewards
             
@@ -255,7 +259,7 @@ class circ_singleav: #example of single AV environment
         self.dt = dt
         self.rewardfn = rewardfn
         
-        self.mem = 4
+        self.mem = 2
         #stuff for building states (len self.mem+1 tuple of past states)
         self.paststates = [] #holds sequence of states
         self.statecnt = 0
@@ -288,22 +292,30 @@ class circ_singleav: #example of single AV environment
     
     def get_step_param(self,action):
         #action from NN gives a scalar, we convert it to the quantized acceleration
-        acc = tf.cast(action,tf.float32)*.1-1.5 #30 integer actions -> between -1.5 and 1.4 in increments of .1
+#        acc = tf.cast(action,tf.float32)*.1-1.5 #30 integer actions -> between -1.5 and 1.4 in increments of .1
+        acc = tf.cast(action, tf.float32) - 2
         return acc
     
-    def step(self, action, iter, timesteps): #basically just a wrapper for simulate step to get the next timestep
+    def step(self, action, iter, timesteps, save_state = True): #basically just a wrapper for simulate step to get the next timestep
         #simulate_step does all the updating; first line is just a hack which can be cleaned later
         self.auxinfo[self.avid][5] = action
         nextstate, _ = simulate_step(self.curstate, self.auxinfo,self.roadinfo,self.updatefun,self.dt)
-
-        allheadways = [ nextstate[i][2] for i in nextstate.keys() ]
-        shouldterminate = np.any(np.array(allheadways) <= 0)
-        if shouldterminate:
-            return nextstate, -15**2 * len(allheadways) * (timesteps - iter - 1), True
-
+        
+        #update environment state 
+        self.curstate = nextstate 
+        if save_state:
+            self.savestate()
+        
         #get reward, update average velocity
         reward, vavg = self.rewardfn(nextstate,self.vavg)
         self.vavg = vavg
+        
+        allheadways = [ nextstate[i][2] for i in nextstate.keys() ]
+        shouldterminate = np.any(np.array(allheadways) <= 0)
+        if shouldterminate:
+#            return nextstate, (-15**2 * len(allheadways) * (timesteps - iter - 1)+ reward), True
+            return nextstate, reward, True
+
         return nextstate, reward, False
 
     def simulate_baseline(self, CFmodel, p, timesteps): #can insert a CF model and parameters (e.g. put in human model or parametrized control model)
@@ -351,56 +363,67 @@ class cartpole_env:
     def savestate(self):
         pass
 
-if __name__ == "main":
-    pass
-    #%% initialize agent (we expect the agent to be awful before training)
-    env = gym.make('CartPole-v0')
-    model = Model(num_actions=env.action_space.n)
-    agent = ACagent(model)
-    testenv = cartpole_env(env)
-    #%%
-    agent.test(testenv,200) #200 timesteps
-    print('total reward before training is '+str(testenv.totloss)+' starting from initial with 200 timesteps')
-    #%%
-        #MWE of training
-    rewards = agent.train(testenv)
-    plt.plot(rewards)
-    plt.ylabel('rewards')
-    plt.xlabel('episode')
-    agent.test(testenv,200)
-    print('total reward is '+str(testenv.totloss))
+#if __name__ == "main":
+#    pass
+#%% initialize agent (we expect the agent to be awful before training)
+#env = gym.make('CartPole-v0')
+#model = Model(num_actions=env.action_space.n)
+#agent = ACagent(model)
+#testenv = cartpole_env(env)
+##%%
+#agent.test(testenv,200) #200 timesteps
+#print('total reward before training is '+str(testenv.totloss)+' starting from initial with 200 timesteps')
+##%%
+#    #MWE of training
+#rewards = agent.train(testenv)
+#plt.plot(rewards)
+#plt.ylabel('rewards')
+#plt.xlabel('episode')
+#agent.test(testenv,200)
+#print('total reward is '+str(testenv.totloss))
 
 
     #%%
-                    #specify simulation
-    p = [33.33, 1.2, 2, 1.1, 1.5] #parameters for human drivers
-    initstate, auxinfo, roadinfo = eq_circular(p, IDM_b3, update2nd_cir, IDM_b3_eql, 41, length = 2, L = None, v = 15, perturb = 2) #create initial state on road
-    sim, curstate, auxinfo = simulate_cir(initstate, auxinfo,roadinfo, update_cir, timesteps = 25000, dt = .25)
-    vlist = {i: curstate[i][1] for i in curstate.keys()}
-    avid = min(vlist, key=vlist.get)
-    
-    #create simulation environment
-    testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward,dt = .25)
-    #%% sanity check
-    ##test baseline with human AV and with control as a simple check for bugs
-    testenv.simulate_baseline(IDM_b3,p,200) #human model
-    print('loss for all human scenario is '+str(testenv.totloss)+' starting from initial with 1500 timesteps')
+#                    #specify simulation
+p = [33.33, 1.2, 2, 1.1, 1.5] #parameters for human drivers
+initstate, auxinfo, roadinfo = eq_circular(p, IDM_b3, update2nd_cir, IDM_b3_eql, 41, length = 2, L = None, v = 15, perturb = 2) #create initial state on road
+sim, curstate, auxinfo = simulate_cir(initstate, auxinfo,roadinfo, update_cir, timesteps = 25000, dt = .25)
+vlist = {i: curstate[i][1] for i in curstate.keys()}
+avid = min(vlist, key=vlist.get)
+testingtime = 1500
+
+#create simulation environment
+testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward2,dt = .25)
+#%% sanity check
+##test baseline with human AV and with control as a simple check for bugs
+testenv.simulate_baseline(IDM_b3,p,testingtime) #human model
+print('loss for all human scenario is '+str(testenv.totloss)+' starting from initial with '+str(testingtime)+' timesteps')
 #    myplot(testenv.sim,auxinfo,roadinfo)
-    #
-    testenv.simulate_baseline(FS,[2,.4,.4,3,3,7,15,2], 200) #control model
-    print('loss for one AV with parametrized control is '+str(testenv.totloss)+' starting from initial with 1500 timesteps')
+#
+testenv.simulate_baseline(FS,[2,.4,.4,3,3,7,15,2], testingtime) #control model
+print('loss for one AV with parametrized control is '+str(testenv.totloss)+' starting from initial with '+str(testingtime)+' timesteps')
 #    myplot(testenv.sim,auxinfo,roadinfo)
-    #%% initialize agent (we expect the agent to be awful before training)
-    model = Model(num_actions = 30)
-    agent = ACagent(model)
-    #%%
-    agent.test(testenv,800) #200 timesteps
-    print('before training total reward is '+str(testenv.totloss)+' over '+str(len(testenv.sim[testenv.avid]))+' timesteps')
-    #%%
-        #MWE of training
-    rewards = agent.train(testenv, 50)
-    plt.plot(rewards)
-    plt.ylabel('rewards')
-    plt.xlabel('episode')
-    agent.test(testenv,800)
-    print('total reward is '+str(testenv.totloss))
+#%% initialize agent (we expect the agent to be awful before training)
+model = Model(num_actions = 5)
+agent = ACagent(model)
+#%%
+agent.test(testenv,800) #200 timesteps
+print('before training total reward is '+str(testenv.totloss)+' over '+str(len(testenv.sim[testenv.avid]))+' timesteps')
+#%%
+#    MWE of training
+rewards = agent.train(testenv, 500)
+plt.plot(rewards)
+plt.ylabel('rewards')
+plt.xlabel('episode')
+agent.test(testenv,testingtime,nruns=1)
+print('total reward is '+str(testenv.totloss))
+
+#%%
+avtraj = np.asarray(testenv.sim[testenv.avid])
+plt.figure() #plots, in order, position, speed, and headway time series.
+plt.subplot(1,3,1)
+plt.plot(avtraj[:,0])
+plt.subplot(1,3,2)
+plt.plot(avtraj[:,1])
+plt.subplot(1,3,3)
+plt.plot(avtraj[:,2])

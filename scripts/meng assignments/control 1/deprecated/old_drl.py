@@ -294,9 +294,9 @@ myplot(testenv.sim,auxinfo,roadinfo)
 model = Model(num_actions = 30)
 agent = ACagent(model)
 #%%
-agent.test(testenv,800) #200 timesteps
-plt.close('all')
-myplot(testenv.sim,auxinfo,roadinfo) #plot of all vehicles
+#agent.test(testenv,800) #200 timesteps
+#plt.close('all')
+#myplot(testenv.sim,auxinfo,roadinfo) #plot of all vehicles
 avtraj = np.asarray(testenv.sim[testenv.avid])
 
 plt.figure() #plots, in order, position, speed, and headway time series.
