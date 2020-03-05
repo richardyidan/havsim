@@ -8,6 +8,19 @@ import tensorflow.keras.layers as kl
 import tensorflow.keras.losses as kls
 import matplotlib.pyplot as plt
 
+#disable gpu 
+physical_devices = tf.config.list_physical_devices('GPU') 
+try: 
+  # Disable first GPU 
+  tf.config.set_visible_devices(physical_devices[1:], 'GPU') 
+  logical_devices = tf.config.list_logical_devices('GPU') 
+  # Logical device was not created for first GPU 
+  assert len(logical_devices) == len(physical_devices) - 1 
+except: 
+  # Invalid device or cannot modify virtual devices once initialized. 
+  pass 
+
+
 import havsim
 from havsim.simulation.simulation import *
 from havsim.simulation.models import *
@@ -29,7 +42,11 @@ class Model(tf.keras.Model):
   def __init__(self, num_actions):
     super().__init__('mlp_policy')
     self.hidden1 = kl.Dense(256, activation='relu') #hidden layer for actions (policy)
+    self.hidden11 = kl.Dense(128,activation = 'relu')
+    self.hidden111 = kl.Dense(64, activation = 'relu')
     self.hidden2 = kl.Dense(256, activation='relu') #hidden layer for state-value
+    self.hidden22 = kl.Dense(128, activation='relu')
+    self.hidden222 = kl.Dense(64, activation='relu')
     self.value = kl.Dense(1, name = 'value')
     # Logits are unnormalized log probabilities.
     self.logits = kl.Dense(num_actions, name = 'policy_logits')
@@ -38,7 +55,11 @@ class Model(tf.keras.Model):
   def call(self, inputs, **kwargs):
     x = tf.convert_to_tensor(inputs)
     hidden_logs = self.hidden1(x)
+    hidden_logs = self.hidden11(hidden_logs)
+    hidden_logs = self.hidden111(hidden_logs)
     hidden_vals = self.hidden2(x)
+    hidden_vals = self.hidden22(hidden_vals)
+    hidden_vals = self.hidden222(hidden_vals)
     return self.logits(hidden_logs), self.value(hidden_vals)
 
   def action_value(self, obs):
@@ -54,7 +75,7 @@ class ACagent:
         self.gamma = .99 #discounting learning_rate = 3e-8
         self.model.compile(
                 optimizer = tf.keras.optimizers.RMSprop(learning_rate = 7e-3), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
-                #optimizer = tf.keras.optimizers.SGD(learning_rate=1e-7,)
+#                optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
                 loss = [self._logits_loss, self._value_loss])
         #I set learning rate small because rewards are pretty big, can try changing
         self.logitloss = kls.SparseCategoricalCrossentropy(from_logits=True)
@@ -92,8 +113,8 @@ class ACagent:
                 #update state, update cumulative reward
                 env.totloss += reward
                 
-                if (run == 0):
-                    env.savestate()
+#                if (run == 0):
+#                    env.savestate()
                 
                 if done:
 #                    losses.append(env.totloss)
@@ -154,7 +175,7 @@ class ACagent:
                 statemem[bstep] = actval_param
                 
                 acc = env.get_step_param(action)
-                nextstate, reward, done = env.step(acc,self.counter,self.simlen)
+                nextstate, reward, done = env.step(acc,self.counter,self.simlen, False)
                 actval_param = env.get_actval_param(nextstate)
                 nextaction, nextvalue = self.model.action_value(actval_param)
                 env.totloss += reward
@@ -258,8 +279,9 @@ class circ_singleav: #example of single AV environment
         self.updatefun = updatefun
         self.dt = dt
         self.rewardfn = rewardfn
+        self.sim = []
         
-        self.mem = 2
+        self.mem = 4
         #stuff for building states (len self.mem+1 tuple of past states)
         self.paststates = [] #holds sequence of states
         self.statecnt = 0
@@ -267,6 +289,7 @@ class circ_singleav: #example of single AV environment
         
     def reset(self):
         self.curstate = self.initstate
+        del self.sim
         self.sim = {i:[self.curstate[i]] for i in self.initstate.keys()}
         self.vavg = {i:self.initstate[i][1]  for i in self.initstate.keys()}
         self.totloss = 0
@@ -293,7 +316,7 @@ class circ_singleav: #example of single AV environment
     def get_step_param(self,action):
         #action from NN gives a scalar, we convert it to the quantized acceleration
 #        acc = tf.cast(action,tf.float32)*.1-1.5 #30 integer actions -> between -1.5 and 1.4 in increments of .1
-        acc = tf.cast(action, tf.float32) - 2
+        acc = tf.cast(action, tf.float32)/2 - .5
         return acc
     
     def step(self, action, iter, timesteps, save_state = True): #basically just a wrapper for simulate step to get the next timestep
@@ -313,7 +336,7 @@ class circ_singleav: #example of single AV environment
         allheadways = [ nextstate[i][2] for i in nextstate.keys() ]
         shouldterminate = np.any(np.array(allheadways) <= 0)
         if shouldterminate:
-#            return nextstate, (-15**2 * len(allheadways) * (timesteps - iter - 1)+ reward), True
+#            return nextstate, -10000+ reward, True
             return nextstate, reward, True
 
         return nextstate, reward, False
@@ -329,9 +352,9 @@ class circ_singleav: #example of single AV environment
             #update state, update cumulative reward
             self.curstate = nextstate
             self.totloss += reward
-            #save current state to memory (so we can plot everything)
-            for j in nextstate.keys():
-                self.sim[j].append(nextstate[j])
+#            #save current state to memory (so we can plot everything)
+#            for j in nextstate.keys():
+#                self.sim[j].append(nextstate[j])
             if done:
                 break
     
@@ -393,7 +416,7 @@ avid = min(vlist, key=vlist.get)
 testingtime = 1500
 
 #create simulation environment
-testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward2,dt = .25)
+testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward,dt = .25)
 #%% sanity check
 ##test baseline with human AV and with control as a simple check for bugs
 testenv.simulate_baseline(IDM_b3,p,testingtime) #human model
@@ -404,19 +427,22 @@ testenv.simulate_baseline(FS,[2,.4,.4,3,3,7,15,2], testingtime) #control model
 print('loss for one AV with parametrized control is '+str(testenv.totloss)+' starting from initial with '+str(testingtime)+' timesteps')
 #    myplot(testenv.sim,auxinfo,roadinfo)
 #%% initialize agent (we expect the agent to be awful before training)
-model = Model(num_actions = 5)
+model = Model(num_actions = 3)
 agent = ACagent(model)
 #%%
-agent.test(testenv,800) #200 timesteps
+agent.test(testenv,testingtime, nruns = 1) #200 timesteps
 print('before training total reward is '+str(testenv.totloss)+' over '+str(len(testenv.sim[testenv.avid]))+' timesteps')
 #%%
 #    MWE of training
-rewards = agent.train(testenv, 500)
-plt.plot(rewards)
-plt.ylabel('rewards')
-plt.xlabel('episode')
-agent.test(testenv,testingtime,nruns=1)
-print('total reward is '+str(testenv.totloss))
+allrewards = []
+for i in range(3):
+    rewards = agent.train(testenv, 500)
+#    plt.plot(rewards)
+#    plt.ylabel('rewards')
+#    plt.xlabel('episode')
+    allrewards.extend(rewards)
+    agent.test(testenv,testingtime,nruns=1)
+    print('total reward is '+str(testenv.totloss)+' over '+str(len(testenv.sim[testenv.avid]))+' timesteps')
 
 #%%
 avtraj = np.asarray(testenv.sim[testenv.avid])

@@ -226,13 +226,56 @@ def drl_reward(nextstate, vavg, decay = .95, penalty = 1):
 #            cur = cur - penalty*(2**(-5*(nextstate[i][2]-.2)) - 1) #if headway is small, we give a penalty
             cur = cur - penalty*(nextstate[i][2]-.2)**2 #here is a smaller penalty
         reward += cur
-    return reward, vavg
+    return 1+(vavg[9]+vavg[8]+vavg[10])/3, vavg
+
+def drl_reward4(nextstate, vavg, decay = .95, penalty = 1):
+    reward = []
+    for i in nextstate.keys():
+        vavg[i] = vavg[i]*decay + (1 - decay)*nextstate[i][1] #update exponential average of velocity
+        cur = -(nextstate[i][1] - vavg[i])**2 + vavg[i]  #penalize oscillations, reward high average
+        if nextstate[i][2] < .2: 
+#            cur = cur - penalty*(2**(-5*(nextstate[i][2]-.2)) - 1) #if headway is small, we give a penalty
+            cur = cur - penalty*(nextstate[i][2]-.2)**2 #here is a smaller penalty
+        reward.append(cur)
+    return np.average(reward)+4, vavg
 
 def drl_reward2(nextstate, vavg, decay = .95, lowereql = 11, eql = 15):
     vlist = [i[1] for i in nextstate.values()]
     vavg = np.average(vlist)
-    return 1 + np.interp(vavg, (lowereql, eql), (0, 1)), vavg
+    return 1+ np.interp(vavg, (lowereql, eql), (0, 1)), vavg
+
+def drl_reward3(nextstate, vavg, decay = .95, lowereql = 0, eql = 15):
+    vlist = [i[1] for i in nextstate.values()]
+    vavg = np.average(vlist)
+    return 1+ 1/30*vavg**3, vavg
+
+def drl_reward5(nextstate, vavg, decay = .95, lowereql = 0, eql = 15, avid = 9):
+#    vlist = [i[1] for i in nextstate.values()]
+    for i in [avid]:
+        vavg[i] = vavg[i]*decay + (1 - decay)*nextstate[i][1]
+    return 1+1/15*nextstate[avid][1]**2 - 1/5*(nextstate[avid][1] - vavg[avid])**2 , vavg
+
+def drl_reward8(nextstate, vavg, decay = .95, lowereql = 11, eql = 15, avid = 9):
+    vlist = [i[1] for i in nextstate.values()]
+    vavg = np.average(vlist)
+    return np.interp(vavg, (lowereql, eql), (0, 1)) + vlist[avid]/5, vavg #1 + np.interp(vavg, (lowereql, eql), (0, 1)) + vlist[avid],
+
+def drl_reward7(nextstate, vavg, decay = .95, lowereql = 0, eql = 15, avid = 9):
+#    vlist = [i[1] for i in nextstate.values()]
+#    vavg[avid] =  = np.average(vlist)
+    return 1+1/15*nextstate[avid][1], vavg
         
+
+def drl_reward6(nextstate, vavg, decay = .95, penalty = 1):
+    reward = 0
+    for i in [9]:
+        vavg[i] = vavg[i]*decay + (1 - decay)*nextstate[i][1] #update exponential average of velocity
+        cur = -5*(nextstate[i][1] - vavg[i])**2 + vavg[i]**2  #penalize oscillations, reward high average
+        if nextstate[i][2] < .2: 
+#            cur = cur - penalty*(2**(-5*(nextstate[i][2]-.2)) - 1) #if headway is small, we give a penalty
+            cur = cur - penalty*(nextstate[i][2]-.2)**2 #here is a smaller penalty
+        reward += cur
+    return reward, vavg
             
 def avgv_obj(sim,auxinfo):
     obj = 0
