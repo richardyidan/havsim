@@ -41,12 +41,12 @@ class ProbabilityDistribution(tf.keras.Model):
 class Model(tf.keras.Model):
   def __init__(self, num_actions):
     super().__init__('mlp_policy')
-    self.hidden1 = kl.Dense(256, activation='relu') #hidden layer for actions (policy)
-    self.hidden11 = kl.Dense(128,activation = 'relu')
-    self.hidden111 = kl.Dense(64, activation = 'relu')
-    self.hidden2 = kl.Dense(256, activation='relu') #hidden layer for state-value
-    self.hidden22 = kl.Dense(128, activation='relu')
-    self.hidden222 = kl.Dense(64, activation='relu')
+    self.hidden1 = kl.Dense(32, activation='tanh') #hidden layer for actions (policy)
+    self.hidden11 = kl.Dense(32,activation = 'tanh')
+    self.hidden111 = kl.Dense(32, activation = 'tanh')
+    self.hidden2 = kl.Dense(32, activation='tanh') #hidden layer for state-value
+    self.hidden22 = kl.Dense(32, activation='tanh')
+    self.hidden222 = kl.Dense(32, activation='tanh')
     self.value = kl.Dense(1, name = 'value')
     # Logits are unnormalized log probabilities.
     self.logits = kl.Dense(num_actions, name = 'policy_logits')
@@ -67,14 +67,14 @@ class Model(tf.keras.Model):
     action = self.dist.predict_on_batch(logits)
     return tf.squeeze(action, axis=-1), tf.squeeze(value, axis=-1)
 
-optimizer = tf.keras.optimizers.RMSprop(learning_rate = 7e-3)
+optimizer = tf.keras.optimizers.RMSprop(learning_rate = 9e-4)
 class ACagent:
     def __init__(self,model, batch_sz=64):
         self.model = model
 
         self.gamma = .99 #discounting learning_rate = 3e-8
         self.model.compile(
-                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 7e-3), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
+                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 9e-4), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
 #                optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
                 loss = [self._logits_loss, self._value_loss])
         #I set learning rate small because rewards are pretty big, can try changing
@@ -316,7 +316,7 @@ class circ_singleav: #example of single AV environment
     def get_step_param(self,action):
         #action from NN gives a scalar, we convert it to the quantized acceleration
 #        acc = tf.cast(action,tf.float32)*.1-1.5 #30 integer actions -> between -1.5 and 1.4 in increments of .1
-        acc = tf.cast(action, tf.float32)/2 - .5
+        acc = tf.cast(action, tf.float32) - 1
         return acc
     
     def step(self, action, iter, timesteps, save_state = True): #basically just a wrapper for simulate step to get the next timestep
@@ -416,7 +416,7 @@ avid = min(vlist, key=vlist.get)
 testingtime = 1500
 
 #create simulation environment
-testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward,dt = .25)
+testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward8,dt = .25)
 #%% sanity check
 ##test baseline with human AV and with control as a simple check for bugs
 testenv.simulate_baseline(IDM_b3,p,testingtime) #human model
@@ -426,7 +426,7 @@ print('loss for all human scenario is '+str(testenv.totloss)+' starting from ini
 testenv.simulate_baseline(FS,[2,.4,.4,3,3,7,15,2], testingtime) #control model
 print('loss for one AV with parametrized control is '+str(testenv.totloss)+' starting from initial with '+str(testingtime)+' timesteps')
 #    myplot(testenv.sim,auxinfo,roadinfo)
-#%% initialize agent (we expect the agent to be awful before training)
+#%% initialize agent
 model = Model(num_actions = 3)
 agent = ACagent(model)
 #%%
@@ -435,8 +435,8 @@ print('before training total reward is '+str(testenv.totloss)+' over '+str(len(t
 #%%
 #    MWE of training
 allrewards = []
-for i in range(3):
-    rewards = agent.train(testenv, 500)
+for i in range(10):
+    rewards = agent.train(testenv, 100)
 #    plt.plot(rewards)
 #    plt.ylabel('rewards')
 #    plt.xlabel('episode')
