@@ -719,12 +719,12 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             lcside = 0
             opside = 2
             lcsidelane = lane-1
-            opsidelane = lane+1
+#            opsidelane = lane+1
         else: 
             lcside = 2
             opside = 0
             lcsidelane = lane+1
-            opsidelane = lane-1
+#            opsidelane = lane-1
         #################
         #update current leader 
         lead = curaux[1]
@@ -950,9 +950,15 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             newroad = roadinfo[curaux[3]][1][curaux[2]]
             if newroad == None: #vehicle reaches end - remove from simulation
                 #update follower's lead
-                fol = auxinfo[i][1]
-                if fol is not None: 
-                    auxinfo[fol][1] = None
+                lfol, fol, rfol = auxinfo[i][11][:]
+                auxinfo[lfol][20][2].remove(i)
+                auxinfo[rfol][20][0].remove(i)
+                auxinfo[fol][1] = None
+                #update memory
+                auxinfo[fol][16].append(timeind)
+                auxinfo[fol][16].append([None,timeind+1])
+                curaux[17].append(timeind)
+                curaux[18].append(timeind)
                 del curstate[i]
                 continue
             newroad, newlane = newroad[0], newroad[1]
@@ -964,6 +970,8 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             #update states
             curstate[0] += -roadinfo[curaux[3]][2]
             curaux[2], curaux[3] = newlane, newroad
+            
+            ####################
             #update road's first vehicle 
             curfirst = roadinfo[newroad][6][newlane]
             if auxinfo[curfirst][3] != curaux[3] or curstate[curfirst][0] > curstate[i][0]: 
@@ -988,7 +996,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             elif curaux[11][2] is '': #new change on right side
                 pass
             
-            
+    #update inflow and add vehicles if necessary 
     pass
 
 def update2nd(i, curstate,  auxinfo, roadinfo, a, dt):
