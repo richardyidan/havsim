@@ -319,7 +319,6 @@ def std_CF(veh, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, relax):
     
 def get_headway(curstate, auxinfo, roadinfo, fol, lead):
     hd = curstate[lead][0] - curstate[fol][0] - auxinfo[lead][4]
-    
     if auxinfo[fol][3] != auxinfo[lead][3]:
 #        hd += headway_helper(roadinfo,auxinfo[fol][3],auxinfo[fol][2], auxinfo[lead][3]) #old solution 
         hd += roadinfo[(auxinfo[fol][3], auxinfo[lead][3])] #better to just store in roadinfo 
@@ -329,6 +328,17 @@ def get_dist(curstate, auxinfo, roadinfo, fol, lead):
     dist = curstate[lead][0] - curstate[fol][0]
     if auxinfo[fol][3] != auxinfo[lead][3]:
         dist += roadinfo[(auxinfo[fol][3], auxinfo[lead][3])]
+    return dist
+        
+def get_dist2(curstate, auxinfo, roadinfo, fol, lead):
+    #can handle case where fol might be special string (i.e. None vehicle)
+    if type(fol) == str: 
+        dist = curstate[lead][0] + roadinfo[(auxinfo[fol][3], auxinfo[lead][3])]
+    else: 
+        dist = curstate[lead][0] - curstate[fol][0]
+        if auxinfo[fol][3] != auxinfo[lead][3]:
+            dist += roadinfo[(auxinfo[fol][3], auxinfo[lead][3])]
+    return dist
 
 def headway_helper(roadinfo, folroad, follane, leadroad):
     #deprecated######
@@ -759,6 +769,8 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
         curaux[1] = lclead
         curaux[16][-1].append(timeind)
         curaux[16].append([lclead, timeind + 1])
+        curaux[18][-1].append(timeind)
+        curaux[18].append([lcsidelane, timeind+1])
         if lclead is not None: 
             auxinfo[lclead][11][1] = i
         #update for new left/right leaders
@@ -785,7 +797,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
                     minveh = j
         curaux[20][lcside] = newset
         #update new lcside 
-        if (lcside == 0 and lane == 1) or (lcside == 2 and lane == roadinfo[road][0]-1): 
+        if lcsidelane == 0 or lcsidelane == roadinfo[road][0]: 
             pass
         else: 
             if minveh is not None: 
@@ -793,8 +805,10 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
                 auxinfo[curaux[11][lcside]][20][opside].add(i)
             else: 
                 #use guess and leadfol_find to get new lcside follower 
-                if len(lcfolaux[20][lcside]) > 0 :
-                    pass
+                guess = lcfolaux[11][lcside]
+                unused, newlcsidefol = leadfol_find(curstate, auxinfo, roadinfo, i, guess)
+                curaux[11][lcside] = newlcsidefol
+                auxinfo[newlcsidefol][20][opside].add(i)
         
         #check for vehicles moving into same gap (check left/right leaders of the lcfol)
         
@@ -909,16 +923,25 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
     for i in curstate.keys():
         curaux = auxinfo[i]
         lfol, rfol = curaux[11][0], curaux[11][2]
-        if lfol == '':
+        if lfol == '' or type(lfol) == str:
             pass
         #you could calculate headway here, but this is faster and works except in very weird edge case 
-        #with on/off ramps though this method does not work
+        #may just want to use getdist 
         elif curstate[i][0] < curstate[lfol][0] and curaux[3] == auxinfo[lfol][3]: 
+            #update vehicle
             curaux[11][0] = auxinfo[lfol][11][1]
-        if rfol == '':
+            auxinfo[curaux[11][0]][20][2].add(i)
+            auxinfo[lfol][11][2] = i
+            auxinfo[lfol][20][2].remove(i)
+            curaux[20][0].add(lfol)
+        if rfol == '' or type(rfol) == str:
             pass
         elif curstate[i][0] < curstate[rfol][0] and curaux[3] == auxinfo[rfol][3]: 
-            curaux[11][2] = auxinfo[rfol][11][1]
+            curaux[11][0] = auxinfo[rfol][11][1]
+            auxinfo[curaux[11][2]][20][0].add(i)
+            auxinfo[rfol][11][0] = i
+            auxinfo[rfol][20][0].remove(i)
+            curaux[20][2].add(rfol)
             
     #check if roads change
     for i in curstate.keys():
@@ -986,30 +1009,30 @@ def leadfol_find(curstate, auxinfo, roadinfo, veh, guess):
     if guess == None: 
         return None, None
     else: 
-        hd = get_dist(curstate, auxinfo, roadinfo, guess, veh)
+        hd = get_dist2(curstate, auxinfo, roadinfo, guess, veh)
         if hd < 0: 
             nextguess = auxinfo[guess][1]
             if nextguess == None: 
                 return nextguess, guess
-            nexthd = get_dist(curstate, auxinfo, roadinfo, nextguess, veh)
+            nexthd = get_dist2(curstate, auxinfo, roadinfo, nextguess, veh)
             while nexthd < 0: 
                 guess = nextguess
                 nextguess = auxinfo[guess][1]
                 if nextguess == None: 
                     return nextguess, guess
-                nexthd = get_dist(curstate, auxinfo,roadinfo,nextguess,veh)
+                nexthd = get_dist2(curstate, auxinfo,roadinfo,nextguess,veh)
             return nextguess, guess
         else:
             nextguess = auxinfo[guess][11][1]
             if nextguess == None: 
                 return guess, nextguess
-            nexthd = get_dist(curstate, auxinfo, roadinfo, nextguess, veh)
+            nexthd = get_dist2(curstate, auxinfo, roadinfo, nextguess, veh)
             while nexthd > 0: 
                 guess = nextguess
                 nextguess = auxinfo[guess][11][1]
                 if nextguess == None: 
                     return guess, nextguess
-                nexthd = get_dist(curstate, auxinfo, roadinfo, nextguess, veh)
+                nexthd = get_dist2(curstate, auxinfo, roadinfo, nextguess, veh)
         
             return guess, nextguess
 
