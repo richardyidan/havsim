@@ -21,11 +21,15 @@ out2 = logitloss(actions2, logits2)
 
 #method 2 - manually compute what I think sparse categorical crossentropy does
 def mylogitsloss(actions, logits):
+    #actions - tensor of integer actions selected at each step, with dimensions are like (batch_sz, 1) (type = int)
+    #logits - tensor of logits at each step, with dimensions like (batch_sz, n_actions) (type = float)
+    
+    #output - negative log probabilities of selecting each action at each step, given the logits 
     p = tf.math.exp(logits)
     p = p /  tf.repeat(tf.math.reduce_sum(p, axis = 1,keepdims = True), 3,1) #probabilities
     a = tf.expand_dims(tf.range(0, len(actions), dtype = tf.int32), 1)
     actions = tf.concat([a,actions], 1)
-    out = tf.gather_nd(p, actions)
+    out = tf.gather_nd(p, actions) #these are the actual probabilities computed from logits 
     return -tf.math.log(out)
 
 out3 = mylogitsloss(actions1, logits1)
