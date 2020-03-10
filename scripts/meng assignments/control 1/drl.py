@@ -9,7 +9,7 @@ import tensorflow.keras.losses as kls
 import matplotlib.pyplot as plt
 
 #disable gpu 
-physical_devices = tf.config.list_physical_devices('GPU') 
+physical_devices = tf.config.experimental.list_physical_devices('GPU') 
 try: 
   # Disable first GPU 
   tf.config.set_visible_devices(physical_devices[1:], 'GPU') 
@@ -72,10 +72,10 @@ class ACagent:
     def __init__(self,model, batch_sz=64):
         self.model = model
 
-        self.gamma = .99 #discounting learning_rate = 3e-8
+        self.gamma = .9995 #discounting learning_rate = 3e-8
         self.model.compile(
                 optimizer = tf.keras.optimizers.RMSprop(learning_rate = 9e-4), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
-#                optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
+                #optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
                 loss = [self._logits_loss, self._value_loss])
         #I set learning rate small because rewards are pretty big, can try changing
         self.logitloss = kls.SparseCategoricalCrossentropy(from_logits=True)
@@ -89,27 +89,26 @@ class ACagent:
         #goal for how long we want the simulation to be ideally (with no early termination)
         self.simlen = 1500
         
-        # Weight Checkpoints
+        #Weight Checkpoints
         self.checkpoint_path = "trainingcp/cp-{version:04d}.ckpt"
         self.checkpoint_dir = os.path.dirname(self.checkpoint_path)
 
     def reset(self, env):
-        env.reset()
+        state = env.reset()
         self.counter = 0
         self.I = 1
+        return state
            
-    def test(self, env, timesteps, nruns = 4): #Note that this is pretty much the same as simulate_baseline in the environment = circ_singleav
-        self.reset(env)
+    def test_orig(self, env, timesteps, nruns = 4): #Note that this is pretty much the same as simulate_baseline in the environment = circ_singleav
+        curstate = self.reset(env)
 
         run = 0
         losses = []
         while (run < nruns):
             for i in range(timesteps):
-                actval_param = env.get_actval_param(env.curstate)
-                action,value = self.model.action_value(actval_param)
-                acc = env.get_step_param(action)
+                action,value = self.model.action_value(curstate)
                 
-                env.curstate, reward, done = env.step(acc, i, timesteps)
+                curstate, reward, done = env.step(action, i, timesteps)
                 #update state, update cumulative reward
                 env.totloss += reward
                 
@@ -127,7 +126,32 @@ class ACagent:
             run += 1
 
         env.totloss = np.sum(losses) / nruns
-     
+        
+    def test(self,env,timesteps,nruns = 4):
+        curstate = self.reset(env)
+        run = 0
+        rewards = []
+        rewardslist = []
+        eplenlist = []
+        while (run < nruns):
+            for i in tqdm(range(timesteps)):
+                action, value = self.model.action_value(curstate)
+                curstate, reward, done = env.step(action, i, timesteps)
+                self.counter += 1
+                rewards.append(reward)
+                env.totloss += reward
+                if done:
+                    eplenlist.append(self.counter)
+                    rewardslist.append(sum(rewards))
+                    if (run + 1 < nruns):
+                        curstate = self.reset(env)
+                    rewards = []
+                    break
+            run += 1
+        num_eps = len(eplenlist) if len(eplenlist) > 0 else 1
+        env.totloss = np.sum(rewardslist) / num_eps
+        return rewardslist, eplenlist
+    
     def train_step(self,statemem, TDacc, TDerrors) :
         with tf.GradientTape(persistent=True) as tape:
             logits, values = self.model.call(statemem)
@@ -157,7 +181,7 @@ class ACagent:
         plt.close(fig)
     
     def train(self, env, updates=250):
-        self.reset(env)
+        curstate = self.reset(env)
         
         statemem = np.empty((self.batch_sz,env.statememdim))
         
@@ -165,19 +189,18 @@ class ACagent:
         values = np.empty((self.batch_sz))
         actions = np.empty(self.batch_sz)
         dones = np.empty((self.batch_sz))
+        gamma_adjust = np.zeros((self.batch_sz + 1))
+        gamma_adjust[-1] = -1
         
         ep_rewards = []
         
-        actval_param = env.get_actval_param(env.curstate)
-        action,value = self.model.action_value(actval_param)
+        action,value = self.model.action_value(curstate)
         for i in tqdm(range(updates)):
             for bstep in range(self.batch_sz):
-                statemem[bstep] = actval_param
+                statemem[bstep] = curstate
                 
-                acc = env.get_step_param(action)
-                nextstate, reward, done = env.step(acc,self.counter,self.simlen, False)
-                actval_param = env.get_actval_param(nextstate)
-                nextaction, nextvalue = self.model.action_value(actval_param)
+                nextstate, reward, done = env.step(action,self.counter,self.simlen, False)
+                nextaction, nextvalue = self.model.action_value(nextstate)
                 env.totloss += reward
                 self.counter += 1
 
@@ -185,15 +208,15 @@ class ACagent:
                 values[bstep] = value
                 dones[bstep] = done
                 actions[bstep] = action
-                    
+                gamma_adjust[bstep] = np.floor(self.counter / self.batch_sz) * self.batch_sz
+                
+                action, value = nextaction, nextvalue    
                 if done or self.counter >=self.simlen: #reset simulation 
                     ep_rewards.append(env.totloss)
-                    self.reset(env)
-                    actval_param = env.get_actval_param(env.curstate)
-                    action,value = self.model.action_value(actval_param)
-                action, value = nextaction, nextvalue
+                    curstate = self.reset(env)
+                    action,value = self.model.action_value(curstate)
                 
-            TDerrors = self._TDerrors(rewards, values, dones, nextvalue)
+            TDerrors = self._TDerrors(rewards, values, dones, nextvalue, gamma_adjust, 3)
             TDacc = tf.stack([TDerrors, tf.cast(actions, tf.float32)], axis = 1)
             
             '''
@@ -222,11 +245,18 @@ class ACagent:
             
         return ep_rewards
             
-    def _TDerrors(self, rewards, values, dones, nextvalue):
+    def _TDerrors(self, rewards, values, dones, nextvalue, gamma_adjust, nstep):
         returns = np.append(np.zeros_like(rewards), nextvalue, axis = -1)
         
         for t in reversed(range(rewards.shape[0])):
-            returns[t] = rewards[t] + self.gamma*returns[t+1]*(1 - dones[t])
+            gamma_factor = 1 if (gamma_adjust[t] == gamma_adjust[t+1]) else self.gamma**gamma_adjust[t] 
+            returns[t] = rewards[t] + self.gamma*returns[t+1]*(1 - dones[t])*gamma_factor
+            
+            if (t + nstep  < len(returns) - 1):
+                returns[t] = returns[t] \
+                            - self.gamma**nstep*returns[t+nstep]*(1 - dones[t])*gamma_factor  \
+                            + self.gamma**nstep*values[t+nstep]*(1 - dones[t])*gamma_factor
+            
         returns = returns[:-1]
         return returns - values
 
@@ -293,15 +323,21 @@ class circ_singleav: #example of single AV environment
         self.sim = {i:[self.curstate[i]] for i in self.initstate.keys()}
         self.vavg = {i:self.initstate[i][1]  for i in self.initstate.keys()}
         self.totloss = 0
-        
+   
         self.paststates = []
         self.statecnt = 0
+        return self.get_state(self.curstate)
 
-    def get_actval_param(self, curstate):
+    def get_state(self, curstate):
         avlead = self.auxinfo[self.avid][1]
+        avfol = self.auxinfo[self.avid][11] #( [left, current, right] ) 
+        if len(avfol) > 0:
+            import pdb; pdb.set_trace()
         extend_seq = (np.interp(curstate[self.avid][1], (0,25.32), (0,1)),
                       np.interp(curstate[avlead][1], (0,25.32), (0,1)),
-                      np.interp(curstate[self.avid][2], (1.84,43.13), (0,1))                
+                      np.interp(curstate[self.avid][2], (1.84,43.13), (0,1)),
+#                      np.interp(curstate[avfol][1], (0,25.32), (0,1)),
+#                      np.interp(curstate[avfol][2], (1.84,43.13), (0,1))
                       )
         self.paststates.extend(extend_seq)
         if self.statecnt < self.mem:
@@ -313,15 +349,24 @@ class circ_singleav: #example of single AV environment
         avstate = tf.convert_to_tensor([avstate])
         return avstate
     
-    def get_step_param(self,action):
+    def get_acceleration(self,action,curstate):
         #action from NN gives a scalar, we convert it to the quantized acceleration
 #        acc = tf.cast(action,tf.float32)*.1-1.5 #30 integer actions -> between -1.5 and 1.4 in increments of .1
         acc = tf.cast(action, tf.float32) - 1
+        
+        nextspeed = curstate[self.avid][1] + self.dt*acc
+        if nextspeed < 0:
+            acc = -curstate[self.avid][1]/self.dt
+        
         return acc
     
-    def step(self, action, iter, timesteps, save_state = True): #basically just a wrapper for simulate step to get the next timestep
+    def step(self, action, iter, timesteps, save_state = True, baseline = False): #basically just a wrapper for simulate step to get the next timestep
         #simulate_step does all the updating; first line is just a hack which can be cleaned later
-        self.auxinfo[self.avid][5] = action
+        if baseline:
+            acc = action
+        else:
+            acc = self.get_acceleration(action,self.curstate)
+        self.auxinfo[self.avid][5] = acc
         nextstate, _ = simulate_step(self.curstate, self.auxinfo,self.roadinfo,self.updatefun,self.dt)
         
         #update environment state 
@@ -335,6 +380,9 @@ class circ_singleav: #example of single AV environment
         
         allheadways = [ nextstate[i][2] for i in nextstate.keys() ]
         shouldterminate = np.any(np.array(allheadways) <= 0)
+        
+        nextstate = nextstate if baseline else self.get_state(nextstate)
+        
         if shouldterminate:
 #            return nextstate, -10000+ reward, True
             return nextstate, reward, True
@@ -348,7 +396,7 @@ class circ_singleav: #example of single AV environment
         avlead = self.auxinfo[avid][1]
         for i in range(timesteps):
             action = CFmodel(p, self.curstate[avid],self.curstate[avlead], dt = self.dt)
-            nextstate, reward, done = self.step(action[1],i,timesteps)
+            nextstate, reward, done = self.step(action[1],i,timesteps, baseline = True)
             #update state, update cumulative reward
             self.curstate = nextstate
             self.totloss += reward
@@ -362,7 +410,7 @@ class circ_singleav: #example of single AV environment
         for j in self.curstate.keys():
             self.sim[j].append(self.curstate[j])
         
-class cartpole_env:
+class gym_env:
     def __init__(self, env):
         self.env = env
         self.initstate = self.env.reset()
@@ -371,17 +419,15 @@ class cartpole_env:
     def reset(self):
         self.curstate = self.env.reset()
         self.totloss = 0
+        return self.get_state(self.curstate)
     
-    def get_actval_param(self, curstate):
+    def get_state(self, curstate):
         return curstate[None, :]
-    
-    def get_step_param(self,action):
-        return np.array(action)
     
     def step(self, action, *_, **__):
         nextstate, reward, done, _ = self.env.step(action)
         self.curstate = nextstate
-        return nextstate, reward, done
+        return self.get_state(nextstate), reward, done
     
     def savestate(self):
         pass
@@ -392,7 +438,7 @@ class cartpole_env:
 #env = gym.make('CartPole-v0')
 #model = Model(num_actions=env.action_space.n)
 #agent = ACagent(model)
-#testenv = cartpole_env(env)
+#testenv = gym_env(env)
 ##%%
 #agent.test(testenv,200) #200 timesteps
 #print('total reward before training is '+str(testenv.totloss)+' starting from initial with 200 timesteps')
@@ -405,7 +451,13 @@ class cartpole_env:
 #agent.test(testenv,200)
 #print('total reward is '+str(testenv.totloss))
 
+''' 
+gym_env is flexible to pass in other environments, including MountainCar-V0
 
+for MountainCar:
+reward := -1 for each time step, until the goal position of 0.5 is reached
+The episode ends when you reach 0.5 position, or if 200 iterations are reached.
+'''
     #%%
 #                    #specify simulation
 p = [33.33, 1.2, 2, 1.1, 1.5] #parameters for human drivers
