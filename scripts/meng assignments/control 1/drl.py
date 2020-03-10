@@ -236,44 +236,49 @@ class ACagent:
         plt.savefig(os.path.join(os.path.dirname(self.checkpoint_path),filename))
         plt.close(fig)
         
-    def train_eps(self, env, updates=250, numeps = 1):
-        curstate = self.reset(env)
-        statemem = np.empty((self.simlen * numeps,env.statememdim))
-        rewards = np.empty((self.simlen * numeps))
-        values = np.empty((self.simlen * numeps))
-        actions = np.empty(self.simlen * numeps)
-        dones = np.empty((self.simlen * numeps))
+    def train(self, env, updates=250, by_eps = False, numeps = 1):   
+        batch_sz = self.simlen * numeps if by_eps else self.batch_sz
         
+        curstate = self.reset(env)
+        statemem = np.empty((batch_sz,env.statememdim))
+        rewards = np.empty((batch_sz))
+        values = np.empty((batch_sz))
+        actions = np.empty(batch_sz)
+        dones = np.empty((batch_sz))
+        gamma_adjust = np.zeros((batch_sz + 1))
+        gamma_adjust[-1] = -1
         ep_rewards = []
         
         action,value = self.action_value(curstate)
         for i in tqdm(range(updates)):
             batchlen = 0
             epsdone = 0
-            for sstep in range(self.simlen * numeps):
-                statemem[sstep] = curstate
+            for bstep in range(batch_sz):
+                statemem[bstep] = curstate
+                
                 nextstate, reward, done = env.step(action,self.counter,self.simlen, False)
                 nextaction, nextvalue = self.action_value(nextstate)
                 env.totloss += reward
                 self.counter += 1
                 
-                rewards[sstep] = reward
-                values[sstep] = value
-                dones[sstep] = done
-                actions[sstep] = action
+                rewards[bstep] = reward
+                values[bstep] = value
+                dones[bstep] = done
+                actions[bstep] = action
                 batchlen += 1
+                gamma_adjust[bstep] = np.floor(self.counter / batch_sz) * batch_sz
                 
                 action, value = nextaction, nextvalue    
-                if done or self.counter >=self.simlen: #reset simulation 
+                if done or self.counter >= self.simlen: #reset simulation 
                     ep_rewards.append(env.totloss)
                     curstate = self.reset(env)
                     action,value = self.action_value(curstate)
-                    epsdone += 1
-                    if epsdone == numeps:
-                        break
                     
-            gamma_adjust = np.zeros(batchlen+1)
-            TDerrors = self._TDerrors(rewards[:batchlen], values[:batchlen], dones[:batchlen], nextvalue, gamma_adjust, 3)
+                    epsdone += 1
+                    if by_eps and epsdone == numeps:
+                        break
+
+            TDerrors = self._TDerrors(rewards[:batchlen], values[:batchlen], dones[:batchlen], nextvalue, gamma_adjust[:batchlen+1], 3)
             TDacc = tf.stack([TDerrors, tf.cast(actions[:batchlen], tf.float32)], axis = 1)
         
             self.policymodel.train_on_batch(statemem[:batchlen,:], TDacc)
@@ -281,7 +286,7 @@ class ACagent:
 
         return ep_rewards
     
-    def train(self, env, updates=250):
+    def train_orig(self, env, updates=250):
         curstate = self.reset(env)
         
         statemem = np.empty((self.batch_sz,env.statememdim))
@@ -366,18 +371,7 @@ class ACagent:
         returns = returns[:-1]
         return returns - values
 
-    def _value_loss(self, target, value):
-        '''
-        equiv1 = np.any(np.isclose(tf.reshape(-target*value, (64,)),.5 * kls.mean_squared_error(target, value)))
-        equiv2 = np.any(np.isclose(-target*value,.5*tf.math.square(target - value)))
-        # false
-        
-        equiv3 = np.all(np.isclose(.5 * kls.mean_squared_error(target, value), tf.reshape(.5*tf.math.square(target - value), (64,))))
-        # true
-        
-        import pdb; pdb.set_trace()
-        '''
-        
+    def _value_loss(self, target, value):        
         return -target*value
     
     def _logits_loss(self,target, logits):
@@ -596,7 +590,7 @@ print('before training total reward is '+str(testenv.totloss)+' over '+str(len(t
 #    MWE of training
 allrewards = []
 for i in range(10):
-    rewards = agent.train_eps(testenv, 100)
+    rewards = agent.train(testenv, 100)
 #    plt.plot(rewards)
 #    plt.ylabel('rewards')
 #    plt.xlabel('episode')
