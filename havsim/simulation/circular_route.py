@@ -155,3 +155,16 @@ if __name__ == '__main__':
         vehicles[i].lead_vehicle = vehicles[(i + 1) % 20]
     res = simulate_circular_road(vehicles_init=vehicles, T=100, dt=0.25)
 
+#%%
+from havsim.plotting import plotformat, platoonplot
+import math
+import matplotlib.pyplot as plt
+#auxinfo pass as [], roadinfo pass as {0:840} #where 840 is len of road 
+#sim is dictionary where keys are vehicles, values are nested lists of [position, speed, headway] (same discretization for all vehicles )
+def myplot(sim, auxinfo, roadinfo, platoon= []):
+    #note to self: very hacky
+    meas, platooninfo = plotformat(sim,auxinfo,roadinfo, starttimeind = 0, endtimeind = math.inf, density = 1)
+    platoonplot(meas,None,platooninfo,platoon=platoon, lane=1, colorcode= True, speed_limit = [0,25])
+    plt.ylim(0,roadinfo[0])
+    
+myplot(sim2, auxinfo, roadinfo)
