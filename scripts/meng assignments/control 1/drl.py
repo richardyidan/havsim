@@ -235,6 +235,51 @@ class ACagent:
         
         plt.savefig(os.path.join(os.path.dirname(self.checkpoint_path),filename))
         plt.close(fig)
+        
+    def train_eps(self, env, updates=250, numeps = 1):
+        curstate = self.reset(env)
+        statemem = np.empty((self.simlen * numeps,env.statememdim))
+        rewards = np.empty((self.simlen * numeps))
+        values = np.empty((self.simlen * numeps))
+        actions = np.empty(self.simlen * numeps)
+        dones = np.empty((self.simlen * numeps))
+        
+        ep_rewards = []
+        
+        action,value = self.action_value(curstate)
+        for i in tqdm(range(updates)):
+            batchlen = 0
+            epsdone = 0
+            for sstep in range(self.simlen * numeps):
+                statemem[sstep] = curstate
+                nextstate, reward, done = env.step(action,self.counter,self.simlen, False)
+                nextaction, nextvalue = self.action_value(nextstate)
+                env.totloss += reward
+                self.counter += 1
+                
+                rewards[sstep] = reward
+                values[sstep] = value
+                dones[sstep] = done
+                actions[sstep] = action
+                batchlen += 1
+                
+                action, value = nextaction, nextvalue    
+                if done or self.counter >=self.simlen: #reset simulation 
+                    ep_rewards.append(env.totloss)
+                    curstate = self.reset(env)
+                    action,value = self.action_value(curstate)
+                    epsdone += 1
+                    if epsdone == numeps:
+                        break
+                    
+            gamma_adjust = np.zeros(batchlen+1)
+            TDerrors = self._TDerrors(rewards[:batchlen], values[:batchlen], dones[:batchlen], nextvalue, gamma_adjust, 3)
+            TDacc = tf.stack([TDerrors, tf.cast(actions[:batchlen], tf.float32)], axis = 1)
+        
+            self.policymodel.train_on_batch(statemem[:batchlen,:], TDacc)
+            self.valuemodel.train_on_batch(statemem[:batchlen,:], TDerrors)
+
+        return ep_rewards
     
     def train(self, env, updates=250):
         curstate = self.reset(env)
@@ -551,7 +596,7 @@ print('before training total reward is '+str(testenv.totloss)+' over '+str(len(t
 #    MWE of training
 allrewards = []
 for i in range(10):
-    rewards = agent.train(testenv, 100)
+    rewards = agent.train_eps(testenv, 100)
 #    plt.plot(rewards)
 #    plt.ylabel('rewards')
 #    plt.xlabel('episode')
