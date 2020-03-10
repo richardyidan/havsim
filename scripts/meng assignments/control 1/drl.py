@@ -31,6 +31,7 @@ import math
 import gym
 import os
 from tqdm import tqdm
+from scipy.interpolate import interp1d
 #to start we will just use a quantized action space since continuous actions is more complicated
 #%%
 class ProbabilityDistribution(tf.keras.Model):
@@ -110,7 +111,7 @@ class ValueModel(tf.keras.Model):
 
 optimizer = tf.keras.optimizers.RMSprop(learning_rate = 9e-4)
 class ACagent:
-    def __init__(self,policymodel, valuemodel, batch_sz=64):
+    def __init__(self,policymodel, valuemodel, batch_sz=64, eps = 0.05):
         #self.model = model
         self.policymodel = policymodel
         self.valuemodel = valuemodel
@@ -145,9 +146,17 @@ class ACagent:
         #Weight Checkpoints
         self.checkpoint_path = "trainingcp/cp-{version:04d}.ckpt"
         self.checkpoint_dir = os.path.dirname(self.checkpoint_path)
-
+        
+        self.eps = eps
+    
     def action_value(self, obs):
-        return policymodel.action(obs), valuemodel.value(obs)
+        if (np.random.uniform(0,1) < self.eps):
+            num_actions = self.policymodel.layers[-2].get_config()['units']
+            random_action = np.random.randint(num_actions)
+            return tf.convert_to_tensor(random_action, dtype=np.int64), self.valuemodel.value(obs)
+            
+        else:
+            return self.policymodel.action(obs), self.valuemodel.value(obs)
         
     def reset(self, env):
         state = env.reset()
@@ -376,13 +385,25 @@ class ACagent:
     
     def _logits_loss(self,target, logits):
         TDerrors, actions = tf.split(target, 2, axis = -1) 
+        
+        p = tf.math.exp(logits)
+        p = p /  tf.repeat(tf.math.reduce_sum(p, axis = 1,keepdims = True), 3,1) #probabilities
+        a = tf.expand_dims(tf.range(0, len(actions), dtype = tf.int32), 1)
+        actions = tf.concat([a,actions], 1)
+        out = tf.gather_nd(p, actions)
+        
+        num_actions = self.policymodel.layers[-2].get_config()['units']
+        out = (1-self.eps)*out + self.eps/num_actions
+        
+        return TDerrors * -tf.math.log(out)
+        '''
         logprob = self.logitloss(actions, logits, sample_weight = TDerrors) #really the log probability is negative of this.
         
         probs = tf.nn.softmax(logits)
         entropy_loss = kls.categorical_crossentropy(probs,probs)
 
         return logprob - 1e-4*entropy_loss   
-
+        '''
 def NNhelper(out, curstate, *args, **kwargs):
     #this is hacky but basically we just want the action from NN to end up
     #in a[i][1]
@@ -415,7 +436,7 @@ class circ_singleav: #example of single AV environment
         #stuff for building states (len self.mem+1 tuple of past states)
         self.paststates = [] #holds sequence of states
         self.statecnt = 0
-        self.statememdim = (self.mem + 1)*3
+        self.statememdim = (self.mem + 1)*5
         
     def reset(self):
         self.curstate = self.initstate
@@ -430,14 +451,13 @@ class circ_singleav: #example of single AV environment
 
     def get_state(self, curstate):
         avlead = self.auxinfo[self.avid][1]
-        avfol = self.auxinfo[self.avid][11] #( [left, current, right] ) 
-        if len(avfol) > 0:
-            import pdb; pdb.set_trace()
+        avfol = [k for k,v in self.auxinfo.items() if v[1] == self.avid][0] 
+        
         extend_seq = (np.interp(curstate[self.avid][1], (0,25.32), (0,1)),
                       np.interp(curstate[avlead][1], (0,25.32), (0,1)),
-                      np.interp(curstate[self.avid][2], (1.84,43.13), (0,1)),
-#                      np.interp(curstate[avfol][1], (0,25.32), (0,1)),
-#                      np.interp(curstate[avfol][2], (1.84,43.13), (0,1))
+                      interp1d((1.84,43.13), (0,1),fill_value = 'extrapolate')(curstate[self.avid][2])*1,
+                      np.interp(curstate[avfol][1], (0,25.32), (0,1)),
+                      interp1d((1.84,43.13), (0,1),fill_value = 'extrapolate')(curstate[avfol][2])*1
                       )
         self.paststates.extend(extend_seq)
         if self.statecnt < self.mem:
