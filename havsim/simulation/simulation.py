@@ -1009,7 +1009,8 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             if j == None: #some lanes don't have this quantity
                 continue
             elif type(j) == str: #string type -> using anchor vehicle 
-                continue
+                if auxinfo[j][1] is not None: 
+                    roadinfo[i][8][count] = auxinfo[j][1]
             elif j in lca: #vehicle changed lanes -> default to follower
                 if lca[j] == 'l':
                     newguess = auxinfo[j][11][2]
