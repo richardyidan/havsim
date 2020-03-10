@@ -250,8 +250,9 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     3 - upstream boundary - list of lists, inner lists are sequences of speeds (or none), outer lists correspond to lanes
     4 - downstream boundary - same format as upstream boundary, but for downstream 
     5 - inflow buffer - list of floats, represents how close we are to adding next vehicle
-    6 - first vehicle - list of keys corresponding to first vehicle in each lane. may correspond to anchor (string key)
+    6 - anchor vehicles - list of keys corresponding to anchor for each lane (string key)
     7 - what lanes are connected from (array of (key, lane) tuples) corresponding to lanes 
+    8 - first vehicles - list of keys or None corresponding to first vehicle in lane. Only required for certain lanes
     roadinfo also contains special keys which are tuples of (road1, road2) which correspond to the distance between 
     these roads - these are for properly computing the headway when vehicles are on different 
     roads. 
@@ -943,6 +944,8 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             auxinfo[rfol][20][0].remove(i)
             curaux[20][2].add(rfol)
             
+
+            
     #check if roads change
     for i in curstate.keys():
         if curstate[i][0] > roadinfo[auxinfo[i][3]][2]: #roads change 
@@ -971,15 +974,18 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             curstate[0] += -roadinfo[curaux[3]][2]
             curaux[2], curaux[3] = newlane, newroad
             
-            ####################
-            #update road's first vehicle 
-            curfirst = roadinfo[newroad][6][newlane]
-            if auxinfo[curfirst][3] != curaux[3] or curstate[curfirst][0] > curstate[i][0]: 
-                roadinfo[newroad][6][newlane] = i 
+            
+#            #update road's first vehicle 
+#            curfirst = roadinfo[newroad][6][newlane]
+#            if auxinfo[curfirst][3] != curaux[3] or curstate[curfirst][0] > curstate[i][0]: 
+#                roadinfo[newroad][6][newlane] = i 
                 
+            ########################
             #update followers for vehicle 
             if newlane == 0: #new left side is null
-                curaux[11][0] = ''
+                if curaux[11][0] != '': 
+                    auxinfo[curaux[11][0]][20][2].remove(i)
+                    curaux[11][0] = ''
             elif curaux[11][0] is '': #new change on left side
                 newlead = roadinfo[newroad][newlane][6]
                 if newlead is not None: 
@@ -996,7 +1002,30 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             elif curaux[11][2] is '': #new change on right side
                 pass
             
-    #update inflow and add vehicles if necessary 
+    
+    #keep special vehicles updated
+    for i in roadinfo.keys():
+        for count, j in roadinfo[i][8]:
+            if j == None: #some lanes don't have this quantity
+                continue
+            elif type(j) == str: #string type -> using anchor vehicle 
+                continue
+            elif j in lca: #vehicle changed lanes -> default to follower
+                if lca[j] == 'l':
+                    newguess = auxinfo[j][11][2]
+                else:
+                    newguess = auxinfo[j][11][0]
+                if newguess == '': #special case where we can't find a vehicle to use as update
+                        #defaults to anchor vehicle; in general could use better heuristic
+                        roadinfo[i][8][count] = roadinfo[i][6][count] 
+                    else:
+                        roadinfo[i][8][count] = newguess
+            else: #regular update 
+                #check if vehicle passes threshold or moved onto new road 
+                if auxinfo[j][3] == i: 
+                    roadinfo[i][8][count] = auxinfo[j][11][1]
+            
+    #update inflow and add vehicles if necessary ###############
     pass
 
 def update2nd(i, curstate,  auxinfo, roadinfo, a, dt):
