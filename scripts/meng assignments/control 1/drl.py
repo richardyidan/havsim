@@ -94,15 +94,16 @@ class ValueModel(tf.keras.Model):
     super().__init__('mlp_policy')
     self.hidden2 = kl.Dense(32, activation='tanh') #hidden layer for state-value
     self.hidden22 = kl.Dense(32, activation='tanh')
-    self.hidden222 = kl.Dense(15, activation='tanh')
-    self.value = kl.Dense(1, name = 'value')
+    self.hidden222 = kl.Dense(32, activation='tanh')
+    self.val = kl.Dense(1, name = 'value')
 
   def call(self, inputs, **kwargs):
     x = tf.convert_to_tensor(inputs)
     hidden_vals = self.hidden2(x)
     hidden_vals = self.hidden22(hidden_vals)
     hidden_vals = self.hidden222(hidden_vals)
-    return self.value(hidden_vals)
+    return self.val(hidden_vals)
+#    return hidden_vals
 
   def value(self, obs):
     value = self.predict_on_batch(obs)
@@ -368,7 +369,7 @@ class ACagent:
                             - self.gamma**nstep*returns[t+nstep]*(1 - dones[t])*gamma_factor  \
                             + self.gamma**nstep*values[t+nstep]*(1 - dones[t])*gamma_factor
             
-        returns = returns[:-1]
+        returns = returns[:-1] 
         return returns - values
 
     def _value_loss(self, target, value):        
@@ -377,6 +378,9 @@ class ACagent:
     def _logits_loss(self,target, logits):
         TDerrors, actions = tf.split(target, 2, axis = -1) 
         logprob = self.logitloss(actions, logits, sample_weight = TDerrors) #really the log probability is negative of this.
+        #equivalent to 
+        #logprob = mylogitsloss(actions, logits)  <-- from untitled12.py
+        #logprob = TDerrors * logprob
         
         probs = tf.nn.softmax(logits)
         entropy_loss = kls.categorical_crossentropy(probs,probs)
