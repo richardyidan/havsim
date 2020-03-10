@@ -67,16 +67,69 @@ class Model(tf.keras.Model):
     action = self.dist.predict_on_batch(logits)
     return tf.squeeze(action, axis=-1), tf.squeeze(value, axis=-1)
 
+class PolicyModel(tf.keras.Model):
+  def __init__(self, num_actions):
+    super().__init__('mlp_policy')
+    self.hidden1 = kl.Dense(32, activation='tanh') #hidden layer for actions (policy)
+    self.hidden11 = kl.Dense(32,activation = 'tanh')
+    self.hidden111 = kl.Dense(32, activation = 'tanh')
+    # Logits are unnormalized log probabilities.
+    self.logits = kl.Dense(num_actions, name = 'policy_logits')
+    self.dist = ProbabilityDistribution()
+
+  def call(self, inputs, **kwargs):
+    x = tf.convert_to_tensor(inputs)
+    hidden_logs = self.hidden1(x)
+    hidden_logs = self.hidden11(hidden_logs)
+    hidden_logs = self.hidden111(hidden_logs)
+    return self.logits(hidden_logs)
+
+  def action(self, obs):
+    logits = self.predict_on_batch(obs)
+    action = self.dist.predict_on_batch(logits)
+    return tf.squeeze(action, axis=-1)
+
+class ValueModel(tf.keras.Model):
+  def __init__(self):
+    super().__init__('mlp_policy')
+    self.hidden2 = kl.Dense(32, activation='tanh') #hidden layer for state-value
+    self.hidden22 = kl.Dense(32, activation='tanh')
+    self.hidden222 = kl.Dense(15, activation='tanh')
+    self.value = kl.Dense(1, name = 'value')
+
+  def call(self, inputs, **kwargs):
+    x = tf.convert_to_tensor(inputs)
+    hidden_vals = self.hidden2(x)
+    hidden_vals = self.hidden22(hidden_vals)
+    hidden_vals = self.hidden222(hidden_vals)
+    return self.value(hidden_vals)
+
+  def value(self, obs):
+    value = self.predict_on_batch(obs)
+    return tf.squeeze(value, axis=-1)
+
 optimizer = tf.keras.optimizers.RMSprop(learning_rate = 9e-4)
 class ACagent:
-    def __init__(self,model, batch_sz=64):
-        self.model = model
-
+    def __init__(self,policymodel, valuemodel, batch_sz=64):
+        #self.model = model
+        self.policymodel = policymodel
+        self.valuemodel = valuemodel
         self.gamma = .9995 #discounting learning_rate = 3e-8
+        '''
         self.model.compile(
                 optimizer = tf.keras.optimizers.RMSprop(learning_rate = 9e-4), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
                 #optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
                 loss = [self._logits_loss, self._value_loss])
+        '''
+        self.policymodel.compile(
+                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 9e-4), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
+                #optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
+                loss = [self._logits_loss])
+        self.valuemodel.compile(
+                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 9e-4), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
+                #optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
+                loss = [self._value_loss])
+        
         #I set learning rate small because rewards are pretty big, can try changing
         self.logitloss = kls.SparseCategoricalCrossentropy(from_logits=True)
         
@@ -93,6 +146,9 @@ class ACagent:
         self.checkpoint_path = "trainingcp/cp-{version:04d}.ckpt"
         self.checkpoint_dir = os.path.dirname(self.checkpoint_path)
 
+    def action_value(self, obs):
+        return policymodel.action(obs), valuemodel.value(obs)
+        
     def reset(self, env):
         state = env.reset()
         self.counter = 0
@@ -106,7 +162,7 @@ class ACagent:
         losses = []
         while (run < nruns):
             for i in range(timesteps):
-                action,value = self.model.action_value(curstate)
+                action,value = self.action_value(curstate)
                 
                 curstate, reward, done = env.step(action, i, timesteps)
                 #update state, update cumulative reward
@@ -135,7 +191,7 @@ class ACagent:
         eplenlist = []
         while (run < nruns):
             for i in tqdm(range(timesteps)):
-                action, value = self.model.action_value(curstate)
+                action, value = self.action_value(curstate)
                 curstate, reward, done = env.step(action, i, timesteps)
                 self.counter += 1
                 rewards.append(reward)
@@ -184,7 +240,6 @@ class ACagent:
         curstate = self.reset(env)
         
         statemem = np.empty((self.batch_sz,env.statememdim))
-        
         rewards = np.empty((self.batch_sz))
         values = np.empty((self.batch_sz))
         actions = np.empty(self.batch_sz)
@@ -194,13 +249,14 @@ class ACagent:
         
         ep_rewards = []
         
-        action,value = self.model.action_value(curstate)
+        action,value = self.action_value(curstate)
         for i in tqdm(range(updates)):
             for bstep in range(self.batch_sz):
+
                 statemem[bstep] = curstate
                 
                 nextstate, reward, done = env.step(action,self.counter,self.simlen, False)
-                nextaction, nextvalue = self.model.action_value(nextstate)
+                nextaction, nextvalue = self.action_value(nextstate)
                 env.totloss += reward
                 self.counter += 1
 
@@ -214,7 +270,7 @@ class ACagent:
                 if done or self.counter >=self.simlen: #reset simulation 
                     ep_rewards.append(env.totloss)
                     curstate = self.reset(env)
-                    action,value = self.model.action_value(curstate)
+                    action,value = self.action_value(curstate)
                 
             TDerrors = self._TDerrors(rewards, values, dones, nextvalue, gamma_adjust, 3)
             TDacc = tf.stack([TDerrors, tf.cast(actions, tf.float32)], axis = 1)
@@ -240,13 +296,18 @@ class ACagent:
             # Wall time: 1min 10s with tape
             # Wall time: 1min 7s with original
             '''
-            self.model.train_on_batch(statemem, [TDacc,TDerrors])
+            #self.model.train_on_batch(statemem, [TDacc,TDerrors])
+            
+            self.policymodel.train_on_batch(statemem, TDacc)
+            self.valuemodel.train_on_batch(statemem, TDerrors)
+            
 #            self.train_step(statemem, TDacc,TDerrors)
             
         return ep_rewards
             
     def _TDerrors(self, rewards, values, dones, nextvalue, gamma_adjust, nstep):
-        returns = np.append(np.zeros_like(rewards), nextvalue, axis = -1)
+        #returns = np.append(np.zeros_like(rewards), nextvalue, axis = -1)
+        returns = np.append(np.zeros_like(rewards), nextvalue)
         
         for t in reversed(range(rewards.shape[0])):
             gamma_factor = 1 if (gamma_adjust[t] == gamma_adjust[t+1]) else self.gamma**gamma_adjust[t] 
@@ -479,8 +540,10 @@ testenv.simulate_baseline(FS,[2,.4,.4,3,3,7,15,2], testingtime) #control model
 print('loss for one AV with parametrized control is '+str(testenv.totloss)+' starting from initial with '+str(testingtime)+' timesteps')
 #    myplot(testenv.sim,auxinfo,roadinfo)
 #%% initialize agent
-model = Model(num_actions = 3)
-agent = ACagent(model)
+#model = Model(num_actions = 3)
+policymodel = PolicyModel(num_actions = 3)
+valuemodel = ValueModel()
+agent = ACagent(policymodel, valuemodel)
 #%%
 agent.test(testenv,testingtime, nruns = 1) #200 timesteps
 print('before training total reward is '+str(testenv.totloss)+' over '+str(len(testenv.sim[testenv.avid]))+' timesteps')
