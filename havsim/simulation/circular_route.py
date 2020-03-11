@@ -28,6 +28,19 @@ def zhangkim(parameters: List[float],
 
     return out
 
+def gipps(p : List[float], 
+          delayed_headway: float, 
+          delayed_lead_speed: float, 
+          delayed_self_speed: float):
+    #p = parameters - [\tau, \dot S_f, \ddot S_f, \Delta S^0, \hat b, b_f]
+    #original formulation of gipps
+    #6 parameters version with \alpha \beta \gamma \theta taken as their nominal values 
+    #this assumes that \hat b and b_f are given as positive 
+    acc = delayed_self_speed + 2.5 * p[2]*p[0]*(1 - delayed_self_speed/p[1])*(.025 + delayed_self_speed/p[1])**.5
+    dec = -p[5]*(p[0]) + ((p[5]**2*p[0]**2) +
+            p[5]*(2*(delayed_headway - p[3]) - delayed_self_speed*p[0] + (delayed_lead_speed**2)/p[4]))**.5
+    return min(acc, dec)
+
 
 class VehicleStateSnapshot:
     def __init__(self,
