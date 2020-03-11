@@ -104,7 +104,6 @@ class ValueModel(tf.keras.Model):
     hidden_vals = self.hidden22(hidden_vals)
     hidden_vals = self.hidden222(hidden_vals)
     return self.val(hidden_vals)
-#    return hidden_vals
 
   def value(self, obs):
     value = self.predict_on_batch(obs)
@@ -247,22 +246,25 @@ class ACagent:
         plt.close(fig)
         
     def train(self, env, updates=250, by_eps = False, numeps = 1):   
-        batch_sz = self.simlen * numeps if by_eps else self.batch_sz
-        
         curstate = self.reset(env)
+        
+        batch_sz = self.simlen * numeps if by_eps else self.batch_sz
         statemem = np.empty((batch_sz,env.statememdim))
         rewards = np.empty((batch_sz))
         values = np.empty((batch_sz))
         actions = np.empty(batch_sz)
         dones = np.empty((batch_sz))
-        gamma_adjust = np.zeros((batch_sz + 1))
-        gamma_adjust[-1] = -1
+        
         ep_rewards = []
         
         action,value = self.action_value(curstate)
         for i in tqdm(range(updates)):
-            batchlen = 0
+            batchlen = 0 #enable flexible batch sizes if training by episode
             epsdone = 0
+            
+            firstdone = -1
+            gammafactor = self.counter
+            
             for bstep in range(batch_sz):
                 statemem[bstep] = curstate
                 
@@ -276,7 +278,6 @@ class ACagent:
                 dones[bstep] = done
                 actions[bstep] = action
                 batchlen += 1
-                gamma_adjust[bstep] = np.floor(self.counter / batch_sz) * batch_sz
                 
                 action, value = nextaction, nextvalue    
                 if done or self.counter >= self.simlen: #reset simulation 
@@ -287,98 +288,36 @@ class ACagent:
                     epsdone += 1
                     if by_eps and epsdone == numeps:
                         break
+                    if firstdone == -1:
+                        firstdone = bstep
 
-            TDerrors = self._TDerrors(rewards[:batchlen], values[:batchlen], dones[:batchlen], nextvalue, gamma_adjust[:batchlen+1], 3)
+            gamma_adjust = np.ones(batchlen)
+            gamma_adjust[:firstdone + 1] = self.gamma**gammafactor
+            TDerrors = self._TDerrors(rewards[:batchlen], values[:batchlen], dones[:batchlen], nextvalue, gamma_adjust, 3)
             TDacc = tf.stack([TDerrors, tf.cast(actions[:batchlen], tf.float32)], axis = 1)
         
             self.policymodel.train_on_batch(statemem[:batchlen,:], TDacc)
             self.valuemodel.train_on_batch(statemem[:batchlen,:], TDerrors)
 
         return ep_rewards
-    
-    def train_orig(self, env, updates=250):
-        curstate = self.reset(env)
-        
-        statemem = np.empty((self.batch_sz,env.statememdim))
-        rewards = np.empty((self.batch_sz))
-        values = np.empty((self.batch_sz))
-        actions = np.empty(self.batch_sz)
-        dones = np.empty((self.batch_sz))
-        gamma_adjust = np.zeros((self.batch_sz + 1))
-        gamma_adjust[-1] = -1
-        
-        ep_rewards = []
-        
-        action,value = self.action_value(curstate)
-        for i in tqdm(range(updates)):
-            for bstep in range(self.batch_sz):
-
-                statemem[bstep] = curstate
-                
-                nextstate, reward, done = env.step(action,self.counter,self.simlen, False)
-                nextaction, nextvalue = self.action_value(nextstate)
-                env.totloss += reward
-                self.counter += 1
-
-                rewards[bstep] = reward
-                values[bstep] = value
-                dones[bstep] = done
-                actions[bstep] = action
-                gamma_adjust[bstep] = np.floor(self.counter / self.batch_sz) * self.batch_sz
-                
-                action, value = nextaction, nextvalue    
-                if done or self.counter >=self.simlen: #reset simulation 
-                    ep_rewards.append(env.totloss)
-                    curstate = self.reset(env)
-                    action,value = self.action_value(curstate)
-                
-            TDerrors = self._TDerrors(rewards, values, dones, nextvalue, gamma_adjust, 3)
-            TDacc = tf.stack([TDerrors, tf.cast(actions, tf.float32)], axis = 1)
-            
-            '''
-            self.model.save_weights(self.checkpoint_path.format(version=0))
-            v0 = tf.train.latest_checkpoint(self.checkpoint_dir)
-            
-            self.model.load_weights(v0)
-            self.model.train_on_batch(statemem, [TDacc,TDerrors])
-            self.model.save_weights(self.checkpoint_path.format(version=1))
-            
-            self.hist_weights("Batch Weights")
-            
-            self.model.load_weights(v0)
-            self.train_step(statemem, TDacc,TDerrors)
-            self.model.save_weights(self.checkpoint_path.format(version=2))  
-            
-            self.hist_weights("Tape Weights")
-            
-            import pdb; pdb.set_trace()
-            
-            # Wall time: 1min 10s with tape
-            # Wall time: 1min 7s with original
-            '''
-            #self.model.train_on_batch(statemem, [TDacc,TDerrors])
-            
-            self.policymodel.train_on_batch(statemem, TDacc)
-            self.valuemodel.train_on_batch(statemem, TDerrors)
-            
-#            self.train_step(statemem, TDacc,TDerrors)
-            
-        return ep_rewards
             
     def _TDerrors(self, rewards, values, dones, nextvalue, gamma_adjust, nstep):
-        #returns = np.append(np.zeros_like(rewards), nextvalue, axis = -1)
         returns = np.append(np.zeros_like(rewards), nextvalue)
+        stepreturns = np.zeros_like(rewards)
         
         for t in reversed(range(rewards.shape[0])):
-            gamma_factor = 1 if (gamma_adjust[t] == gamma_adjust[t+1]) else self.gamma**gamma_adjust[t] 
-            returns[t] = rewards[t] + self.gamma*returns[t+1]*(1 - dones[t])*gamma_factor
+            #cumulative rewards
+            returns[t] = rewards[t] + self.gamma*returns[t+1]*(1 - dones[t])
             
-            if (t + nstep  < len(returns) - 1):
-                returns[t] = returns[t] \
-                            - self.gamma**nstep*returns[t+nstep]*(1 - dones[t])*gamma_factor  \
-                            + self.gamma**nstep*values[t+nstep]*(1 - dones[t])*gamma_factor
-            
-        returns = returns[:-1] 
+            #adjustment for nstep
+            if ((t + nstep  < len(returns)-1) and (1 not in dones[t:t+nstep])):
+                stepreturns[t] = returns[t] \
+                            - self.gamma**nstep*returns[t+nstep]  \
+                            + self.gamma**nstep*values[t+nstep]
+            else:
+                stepreturns[t] = returns[t]
+                
+        returns = stepreturns * gamma_adjust
         return returns - values
 
     def _value_loss(self, target, value):        
@@ -386,7 +325,7 @@ class ACagent:
     
     def _logits_loss(self,target, logits):
         TDerrors, actions = tf.split(target, 2, axis = -1) 
-        
+        '''
         p = tf.math.exp(logits)
         p = p /  tf.repeat(tf.math.reduce_sum(p, axis = 1,keepdims = True), 3,1) #probabilities
         a = tf.expand_dims(tf.range(0, len(actions), dtype = tf.int32), 1)
@@ -397,6 +336,8 @@ class ACagent:
         out = (1-self.eps)*out + self.eps/num_actions
         
         return TDerrors * -tf.math.log(out)
+        
+        AttributeError: module 'tensorflow' has no attribute 'repeat'
         '''
         logprob = self.logitloss(actions, logits, sample_weight = TDerrors) #really the log probability is negative of this.
         #equivalent to 
@@ -407,7 +348,7 @@ class ACagent:
         entropy_loss = kls.categorical_crossentropy(probs,probs)
 
         return logprob - 1e-4*entropy_loss   
-        '''
+        
 def NNhelper(out, curstate, *args, **kwargs):
     #this is hacky but basically we just want the action from NN to end up
     #in a[i][1]
@@ -440,7 +381,7 @@ class circ_singleav: #example of single AV environment
         #stuff for building states (len self.mem+1 tuple of past states)
         self.paststates = [] #holds sequence of states
         self.statecnt = 0
-        self.statememdim = (self.mem + 1)*5
+        self.statememdim = (self.mem+1)*5
         
     def reset(self):
         self.curstate = self.initstate
@@ -468,7 +409,7 @@ class circ_singleav: #example of single AV environment
             avstate = list(extend_seq) * int(self.mem + 1)
             self.statecnt += 1
         else:
-            avstate = self.paststates[-(self.mem+1)*3:]
+            avstate = self.paststates[-self.statememdim:]
         
         avstate = tf.convert_to_tensor([avstate])
         return avstate
