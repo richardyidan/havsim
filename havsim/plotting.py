@@ -734,7 +734,7 @@ def platoonplot_v2(meas, sim, platooninfo, platoon=[], newfig=True, clr=['C0', '
 
         for j in range(len(LCind) - 1):
             kwargs = {}
-            if meas[i][LCind[j], 7] != lane and lane is not None:
+            if veh[LCind[j], 7] != lane and lane is not None:
                 kwargs = {'linestyle': '--', 'alpha': opacity}  # dashed line .4 opacity (60% see through)
                 plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[0], **kwargs)
                 artist2veh.append(counter)
@@ -769,7 +769,7 @@ def platoonplot_v2(meas, sim, platooninfo, platoon=[], newfig=True, clr=['C0', '
 
             for j in range(len(LCind) - 1):
                 kwargs = {}
-                if sim[i][LCind[j], 7] != lane and lane is not None:
+                if veh[LCind[j], 7] != lane and lane is not None:
                     kwargs = {'linestyle': '--', 'alpha': .4}  # dashed line .4 opacity (60% see through)
                 plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[1], **kwargs)
 
@@ -821,25 +821,35 @@ def platoonplot_v2(meas, sim, platooninfo, platoon=[], newfig=True, clr=['C0', '
     return
 
 def extract_relevant_data(veh, i, platooninfo, fulltraj, timerange):
+    #if fulltraj is True, plot between t_nstar - T_n; plot between t_n and T_nm1 otherwise
+    #trajectories additionally must be between timerange if possible
     t_nstar, t_n, T_nm1, T_n = platooninfo[i][0:4]
         
     if fulltraj:  # entire trajectory including pre simulation and shifted end
-        start = 0
-        end = T_n - t_nstar
+        start = t_nstar
+        end = T_n
     else:  # only show trajectory which is simulated
-        start = t_n - t_nstar
-        end = T_nm1 - t_nstar
-        if timerange[0] is not None and timerange[1] is not None:
-            if timerange[0] >= t_nstar and timerange[0] <= T_nm1:
-                start = timerange[0] - t_nstar
+        start = t_n
+        end = T_nm1
+        
+    if timerange[0] is not None:
+        if timerange[0] <= end:
+            if start > timerange[0]:
+                pass
             else:
-                return None
-            if timerange[1] > timerange[0] and timerange[1] <= T_nm1:
-                end = timerange[1] - t_nstar
-            else:
-                return None
+                start = timerange[0]
+        else:
+            start = None
     
-    return veh[start:end, :]
+    if timerange[1] is not None: 
+        if end < timerange[1]:
+            pass
+        else: 
+            end = timerange[1]
+    
+    if start is None: 
+        return None
+    return veh[start-t_nstar:end-t_nstar, :]
 
 
 def generate_LCind(veh, lane):
@@ -1259,6 +1269,8 @@ def plotvhd_v2(meas, sim, platooninfo, vehicle_id, show_sim=True, show_meas=True
     else:
         # If both meas and sim are provided,
         # will plot both simulation and measurement data for the first vehicle in vehicle_id
+        if len(vehicle_id) > 1: 
+            print('plotting first vehicle '+str(vehicle_id[0])+' only')
         plot_one_vehicle(plt, meas, sim, platooninfo, vehicle_id[0], effective_headway, rp, h, datalen, end, delay)
         plt.legend(['Simulation', 'Measurements'])
     return
@@ -1685,10 +1697,10 @@ def animatevhd_list_v2(meas, sim, platooninfo, my_id, lentail=20, h=.1, datalen=
             y_lim = max(y_lim, meas_y_max)
             
             #################
-            #current_leader_id = find_current_leader(t_n + index + i, leadinfo[0])
-            #if current_leader_id != leader_id:
-            #    leader_id = current_leader_id
-            #    vehicle_id = vehicle_id + 0.1
+#            current_leader_id = find_current_leader(t_n + index + i, leadinfo[0])
+#            if current_leader_id != leader_id:
+#                leader_id = current_leader_id
+#                vehicle_id = vehicle_id + 0.1
             #print(current_leader_id)
             #################
             
@@ -1702,7 +1714,7 @@ def animatevhd_list_v2(meas, sim, platooninfo, my_id, lentail=20, h=.1, datalen=
             #else:
             #    line_data[i] = [(line1, line2, line3, line4, vehicle_id)]
 
-        trueheadway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, meas, id, relax)
+#        trueheadway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, meas, id, relax)
     
     ####plotting
 
