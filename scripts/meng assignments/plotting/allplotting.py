@@ -30,7 +30,7 @@ from havsim.calibration.algs import makeplatoonlist
 #with open(path_highd26, 'rb') as f:
 #    highd = pickle.load(f)[0]
 
-#takes maybe 60 seconds to get platoonlist to get 
+#takes maybe 60 seconds to get platoonlist
 meas, platooninfo, platoonlist = makeplatoonlist(data, 6)
 #meas, platooninfo = makeplatoonlist(data,1,False) #you can call like this to get meas/platooninfo fast
 
@@ -58,7 +58,6 @@ sim2, curstate, auxinfo = simulate_cir(initstate, auxinfo,roadinfo, update_cir, 
 platoonplot(meas,None, platooninfo, platoon = testplatoon[0], colorcode=True, speed_limit=[20,35]) #single platoon, can specify colorcoding speeds
 platoonplot(meas,None,platooninfo, platoon=platoonlist[48:60], colorcode = True) #list of platoons
 platoonplot(meas,None,platooninfo, platoon=platoonlist[48:60], colorcode = True, lane = 2, opacity = .1) #can specify specific lane, if colorcode = True you probably want the opacity turned off
-#one nice feature would be to automatically hide trajectories which are completely in different lane when lane is specified
 #another good feature would be able to select vehicles and see their IDs when colorcode is True- currently you can only do that when colorcode is False. 
 #another idea is to use different colorkeys for both simulation/measurments so you can compare that way 
 

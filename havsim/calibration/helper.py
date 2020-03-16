@@ -1065,6 +1065,14 @@ def is_pareto_efficient(costs, return_mask = True): #copy pasted from stack exch
 
 def boundaryspeeds(meas, entrylanes, exitlanes, timeind, outtimeind, car_ids=None):
     #car_ids is a list of vehicle IDs, only use those values in meas 
+    #entrylanes, exitlanes are list of laneIDs at which the boundary speeds will be calculated 
+    #i.e. entry speeds are calculated for entrylanes, exit speeds for exitlanes
+    #timeind is time (measured in seconds) for data 
+    #e.g. .1 seconds for ngsim 
+    #outtimeind is time for output timeseries 
+    
+    #output is nested list of speeds for each lane in entryspeeds/exitspeeds
+    #nested list of (first time, last time) tuples for each lane in entry/exittimes
     
     # filter meas based on car ids, merge the result into a single 2d array
     if car_ids is None:
