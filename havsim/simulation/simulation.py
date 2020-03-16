@@ -6,7 +6,7 @@ houses the main code for running simulations
     
 """
 
-from havsim.simulation.models import dboundary
+from havsim.simulation.models import dboundary, IDM_b3
 import numpy as np 
 import math 
 
@@ -290,9 +290,11 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
         std_LC(i, lca, a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt)
     
     #update current state 
-    nextstate = updatefun(curstate, a, auxinfo, roadinfo, dt)
+    updatefun(curstate, a, auxinfo, roadinfo, dt) #updates curstate, auxinfo, roadinfo in place 
     
-    return nextstate, auxinfo
+    #update inflow
+    
+    return curstate, auxinfo, roadinfo
 
 
 def std_CF(veh, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, relax): 
@@ -427,7 +429,7 @@ def mobil(i, a, curstate, auxinfo, roadinfo, modelinfo, lfol, rfol, llead, rlead
     #userelax_cur = True will recompute the action without relaxation if relaxation is activated (for all vehicles involved)
     #userelax_new = True whether or not to use relaxation when computing the new actions 
     
-    #LC parameters (by index)
+    #LC parameters (by index) e.g. parameters = [2, .1, .2, .2, .2, .2]
     #0 - safety criterion 
     #1 - incentive criteria
     #2 - politeness
@@ -753,7 +755,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
         #update vehicle 
         #update opposite side for veh
         opsidefol = curaux[11][opside]
-        if opsidefol is not '':
+        if opsidefol != '':
             auxinfo[curaux[11][opside]][20][lcside].remove(i) #old opposite side follower 
         curaux[11][opside] = fol 
         folaux[20][lcside].add(i)
@@ -980,27 +982,40 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
 #            if auxinfo[curfirst][3] != curaux[3] or curstate[curfirst][0] > curstate[i][0]: 
 #                roadinfo[newroad][6][newlane] = i 
                 
-            ########################
             #update followers for vehicle 
             if newlane == 0: #new left side is null
                 if curaux[11][0] != '': 
                     auxinfo[curaux[11][0]][20][2].remove(i)
                     curaux[11][0] = ''
-            elif curaux[11][0] is '': #new change on left side
-                newlead = roadinfo[newroad][newlane][6]
-                if newlead is not None: 
-                    newleaddist = get_dist(curstate, auxinfo, roadinfo, i, newlead)
-                    if newleaddist > 0: 
-                        curaux[11][0] = auxinfo[newlead][11][1]
-                    else: 
-                        curaux[11][0] = newlead
-                else: 
-                    #need code to find the vehicle 
-                    pass
-            if newlane == roadinfo[road][0]: #same thing for other side 
-                curaux[11][2] = ''
-            elif curaux[11][2] is '': #new change on right side
-                pass
+            elif curaux[11][0] == '': #new change on left side
+                newfolguess = roadinfo[newroad][newlane-1][8]
+                newlead, newfol = leadfol_find(curstate, auxinfo, roadinfo, i, newfolguess)
+                curaux[11][0] = newfol
+                auxinfo[newfol][20][2].add(i)
+            if newlane == roadinfo[road][0]: #same thing for other side
+                if curaux[11][2] != '': 
+                    auxinfo[curaux[11][2]][20][0].remove(i)
+                    curaux[11][2] = ''
+            elif curaux[11][2] == '': #new change on left side
+                newfolguess = roadinfo[newroad][newlane+1][8]
+                newlead, newfol = leadfol_find(curstate, auxinfo, roadinfo, i, newfolguess)
+                curaux[11][2] = newfol
+                auxinfo[newfol][20][0].add(i)
+                
+                #old code
+#                if newlead is not None: 
+#                    newleaddist = get_dist(curstate, auxinfo, roadinfo, i, newlead)
+#                    if newleaddist > 0: 
+#                        curaux[11][0] = auxinfo[newlead][11][1]
+#                    else: 
+#                        curaux[11][0] = newlead
+#                else: 
+#                    #need code to find the vehicle 
+#                    pass
+#            if newlane == roadinfo[road][0]: #same thing for other side 
+#                curaux[11][2] = ''
+#            elif curaux[11][2] is '': #new change on right side
+#                pass
             
     
     #keep special vehicles updated
@@ -1017,17 +1032,17 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
                 else:
                     newguess = auxinfo[j][11][0]
                 if newguess == '': #special case where we can't find a vehicle to use as update
-                        #defaults to anchor vehicle; in general could use better heuristic
-                        roadinfo[i][8][count] = roadinfo[i][6][count] 
-                    else:
-                        roadinfo[i][8][count] = newguess
+                    #defaults to anchor vehicle; in general could use better heuristic in rare corner case
+                    #(e.g. check left/right of follower)
+                    roadinfo[i][8][count] = roadinfo[i][6][count] 
+                else:
+                    roadinfo[i][8][count] = newguess
             else: #regular update 
                 #check if vehicle passes threshold or moved onto new road 
                 if auxinfo[j][3] == i: 
                     roadinfo[i][8][count] = auxinfo[j][11][1]
             
-    #update inflow and add vehicles if necessary ###############
-    pass
+    
 
 def update2nd(i, curstate,  auxinfo, roadinfo, a, dt):
     curstate[i][0] += dt*a[0]
@@ -1073,11 +1088,48 @@ def leadfol_find(curstate, auxinfo, roadinfo, veh, guess):
                 nexthd = get_dist2(curstate, auxinfo, roadinfo, nextguess, veh)
         
             return guess, nextguess
-
+        
+def increment_inflow(curstate, auxinfo, roadinfo, entryveh, timeind, dt, defaultspeed = 10, chkhd = 20):
+    #hacky solution for now - refer to notes BC3- 1. 
+    #defaultspeed and chkhd magic numbers 
+    for i in roadinfo.keys(): 
+        #increment flow buffer
+        for count, j in enumerate(roadinfo[i][3]):
+            if j == None: 
+                continue
+            else: 
+                roadinfo[i][5][count] += dt*j[timeind]
+                #check if we need to add vehicle
+                add = False
+                if roadinfo[i][5][count]>= 1: 
+                    anchor = roadinfo[i][6][count]
+                    lead = auxinfo[anchor][1]
+                    if lead is None: 
+                        add = True
+                    else: 
+                        hd = get_headway(curstate, auxinfo, roadinfo, anchor, lead )
+                        if hd > chkhd: 
+                            add = True
+                if add: 
+                    newind = list(curstate.keys())[-1] + 1
+                    curp = [23, 1.2, 2, 1.1, 1.5]
+                    curLC = [2, .1, .2, .2, .2, .2]
+                    curp[0] += np.random.rand()*20-10
+                    curstate[newind] = [0, defaultspeed, hd]
+                    auxinfo[newind] = [None, lead, count, i, 3, curp, IDM_b3, std_CF, curLC, None, None, [], 
+                            [], timeind+1, [], [], [], [], [], [], []]
+                    
+                    #need code for adding the [11] [20] info, initialize memory  16, 17, 18
+                    
+            
+        
+        
 def simulate_sn():
     """
     simulate on a simple network (sn = simple network)
     """
+    
+    
     pass
 
 

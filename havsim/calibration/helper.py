@@ -1040,8 +1040,10 @@ def is_pareto_efficient(costs, return_mask = True): #copy pasted from stack exch
     else:
         return is_efficient
 
-def boundaryspeeds(meas, entrylanes, exitlanes, timeind, outtimeind, car_ids=None):
+def boundaryspeeds(meas, entrylanes, exitlanes, timeind, outtimeind, car_ids=None, my_mod = False):
     #car_ids is a list of vehicle IDs, only use those values in meas 
+    #gets entry/exit speeds empirically from trajectory data; documentation is in boundaryspeeds assignment pdf
+    #my_mod - calculates the entry headways as well and outputs the resulting flows - DO NOT USE 
     
     # filter meas based on car ids, merge the result into a single 2d array
     if car_ids is None:
@@ -1067,8 +1069,30 @@ def boundaryspeeds(meas, entrylanes, exitlanes, timeind, outtimeind, car_ids=Non
 
     for entrylane in entrylanes:
         # filter entry data according to lane number, then take only 2 columns: time and speed
-        entry_data_for_lane = entry_data[entry_data[:, -2] == entrylane][:, [1, 3]]
-        entryspeed, entrytime = interpolate(entry_data_for_lane, interval)
+        entry_data_for_lane = entry_data[entry_data[:, -2] == entrylane]
+        if my_mod: #calculates headways as well to output flows 
+            #you don't want to actually compute flow like this because you will always get an overestimate
+            #calculate headways, same length as the speeds
+            myheadways = list()
+            for i in range(len(entry_data_for_lane)):
+                curlead,curtime, vehlen = entry_data_for_lane[i,[4,1,6]]
+                if curlead == 0:
+                    curhd = 40 #magic number just guess a headway (net headway = tail to tail)
+                else:
+                    curleadlen, leadt_nstar = meas[curlead][0,[6,1]]
+                    curhd = meas[curlead][int(curtime - leadt_nstar), 2] - curleadlen - entry_data_for_lane[i,2] + vehlen
+                myheadways.append(curhd)
+            #same as for no modification 
+            entry_data_for_lane = entry_data_for_lane[:,[1,3]]
+            entryspeed, entrytime = interpolate(entry_data_for_lane, interval)
+            #compute headways using same interpolation function 
+            entry_data_for_lane[:,1] = myheadways
+            entryhd, unused = interpolate(entry_data_for_lane, interval)
+            entryspeed = list(np.divide(entryspeed,entryhd)) #flows = speed / (net) headway 
+        else:
+            entry_data_for_lane = entry_data_for_lane[:,[1,3]]
+            entryspeed, entrytime = interpolate(entry_data_for_lane, interval)
+        
         entryspeeds.append(entryspeed)
         entrytimes.append(entrytime)
 
@@ -1084,8 +1108,10 @@ def boundaryspeeds(meas, entrylanes, exitlanes, timeind, outtimeind, car_ids=Non
 
 def interpolate(data, interval=1.0):
     # entry/exit data: 2d array with 2 columns: time and speed for a lane
+    #second column is the one we act on; not necessarily have to be speed
     # interval: aggregation units.
     # returns: (aggregated_speed_list, (start_time_of_first_interval, start_time_of_last_interval))
+    
     if not len(data):
         return list(), ()
     speeds = list()
@@ -1110,6 +1136,44 @@ def interpolate(data, interval=1.0):
     speed += remained * data[-1, 1]
     speeds.append(speed / interval)
     return speeds, (data[0, 0], data[0, 0] + (len(speeds) - 1) * interval)
+
+
+def getentryflows(meas, entrylanes,  timeind, outtimeind):
+    #meas - data in normal format
+    #entrylanes - list of laneIDs 
+    #timeind - discretization (in real time) for data
+    #outtimeind - discretization (in real time) for output
+    times = {i:[] for i in entrylanes}
+    for i in meas.keys():
+        curtime, lane = meas[i][0,[1,7]]
+        if lane not in entrylanes: 
+            continue
+        times[lane].append(curtime)
+    
+    interval = outtimeind / timeind
+    entryflows = list()
+    entrytimes = list()
+    
+    for i in entrylanes: 
+        times[i].sort()
+        
+        curdata = np.zeros((int(times[i][-1] - times[i][0]),2)) #initialize output
+        curdata[:,0] = range(int(times[i][0]), int(times[i][-1]))
+        firsttime = times[i][0]
+        for count, j in enumerate(times[i][:-1]):
+            nexttime, curtime = times[i][count+1], j
+            curflow = 1/((nexttime - curtime)*timeind)
+            
+            curdata[int(curtime - firsttime):int(nexttime - firsttime),1] = curflow
+        entryflow, entrytime = interpolate(curdata, interval)
+        entryflows.append(entryflow)
+        entrytimes.append(entrytime)
+            
+    return entryflows, entrytimes
+        
+    
+        
+    
 
 #################################################
 #old makeleadfolinfo functions - this ravioli code has now been fixed! 
