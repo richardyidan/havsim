@@ -418,12 +418,12 @@ def std_LC(i, lca, a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, usere
             newfolhd = get_headway(curstate, auxinfo, roadinfo, fol, lead)
         
     #current standard call signature
-    lca[i] = mobil(i, a, curstate, auxinfo, roadinfo, modelinfo, lfol, rfol, llead, rlead, newlhd, newrhd, lfolhd, rfolhd, 
+    mobil(i, a, lca, curstate, auxinfo, roadinfo, modelinfo, lfol, rfol, llead, rlead, newlhd, newrhd, lfolhd, rfolhd, 
                 newlfolhd, newrfolhd, fol, lead, newfolhd, timeind, dt, userelax_cur, userelax_new)
         
     return
         
-def mobil(i, a, curstate, auxinfo, roadinfo, modelinfo, lfol, rfol, llead, rlead, newlhd, newrhd, lfolhd, rfolhd, 
+def mobil(i, a, lca, curstate, auxinfo, roadinfo, modelinfo, lfol, rfol, llead, rlead, newlhd, newrhd, lfolhd, rfolhd, 
           newlfolhd, newrfolhd, fol, lead, newfolhd, timeind, dt, userelax_cur, userelax_new):
     #returns action according to mobil strategy - refactored of LCmodel and mobil_change
     #options to use/not use relaxation when computing
@@ -449,9 +449,9 @@ def mobil(i, a, curstate, auxinfo, roadinfo, modelinfo, lfol, rfol, llead, rlead
     
     #vehicle's current action
     if not userelax_cur and curaux[0][1] and curaux[1] is not None: 
-        cura = curaux[7](i, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, False)
+        cura = curaux[7](i, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, False)[1]
     else: 
-        cura = a[i]
+        cura = a[i][1]
     
     #get follower's action and new action 
     fola, newfola = mobil_helper(fol, lead, i, newfolhd, a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, userelax_cur, userelax_new)
@@ -483,7 +483,7 @@ def mobil(i, a, curstate, auxinfo, roadinfo, modelinfo, lfol, rfol, llead, rlead
         curaux[1] = llead
         curstate[i][2] = newlhd
         mybool = userelax_new and curaux[0][1]
-        newla = curaux[7](i, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, mybool)
+        newla = curaux[7](i, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, mybool)[1]
         #reset vehicle's state 
         curstate[i][2] = curhd
         curaux[1] = lead
@@ -497,7 +497,7 @@ def mobil(i, a, curstate, auxinfo, roadinfo, modelinfo, lfol, rfol, llead, rlead
         curaux[1] = rlead
         curstate[i][2] = newrhd
         mybool = userelax_new and curaux[0][1]
-        newra = curaux[7](i, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, mybool)
+        newra = curaux[7](i, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, mybool)[1]
         #reset vehicle's state 
         curstate[i][2] = curhd
         curaux[1] = lead
@@ -518,11 +518,11 @@ def mobil(i, a, curstate, auxinfo, roadinfo, modelinfo, lfol, rfol, llead, rlead
     
     if incentive > p[1]: #incentive criteria
         if selfsafe > p[0] and folsafe > p[0]:
-            out = side
+            lca[i] = side
         else: 
             #do tactical/cooperation step if desired
             pass
-    return out 
+    return
         
         
         
@@ -540,15 +540,15 @@ def mobil_helper(fol, lead, i, newfolhd, a, curstate, auxinfo, roadinfo, modelin
     else: 
         #current follower acceleration 
         if not userelax_cur and folaux[0][1]: #don't use relaxation 
-            fola = folaux[7](fol, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, False)
+            fola = folaux[7](fol, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, False)[1]
         else: 
-            fola = a[fol]
+            fola = a[fol][1]
         #new follower acceleration 
         curfolhd = curstate[fol][2]
         folaux[1] = lead
         curstate[fol][2] = newfolhd
         mybool = userelax_new and folaux[0][1]
-        newfola = folaux[7](fol,curstate, auxinfo, roadinfo, modelinfo, timeind, dt, mybool)
+        newfola = folaux[7](fol,curstate, auxinfo, roadinfo, modelinfo, timeind, dt, mybool)[1]
         #reset follower state
         curstate[fol][2] = curfolhd
         folaux[1] = i
@@ -919,7 +919,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
         
     #update all vehicles states 
     for i in curstate.keys(): 
-        update2nd(i, curstate, auxinfo, roadinfo, a, dt)
+        update2nd(i, curstate, auxinfo, roadinfo, a[i], dt)
         
     
     
@@ -953,7 +953,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
     for i in curstate.keys():
         if curstate[i][0] > roadinfo[auxinfo[i][3]][2]: #roads change 
             curaux = auxinfo[i]
-            newroad = roadinfo[curaux[3]][1][curaux[2]]
+            newroad, newlane = roadinfo[curaux[3]][1][curaux[2]]
             if newroad == None: #vehicle reaches end - remove from simulation
                 #update follower's lead
                 lfol, fol, rfol = auxinfo[i][11][:]
@@ -967,14 +967,14 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
                 curaux[18].append(timeind)
                 del curstate[i]
                 continue
-            newroad, newlane = newroad[0], newroad[1]
+#            newroad, newlane = newroad[0], newroad[1]
             #update memory 
             curaux[17].append(timeind)
             curaux[17].append([newroad, timeind+1])
             curaux[18].append(timeind)
             curaux[18].append([newlane, timeind+1])
             #update states
-            curstate[0] += -roadinfo[curaux[3]][2]
+            curstate[i][0] += -roadinfo[curaux[3]][2]
             curaux[2], curaux[3] = newlane, newroad
             
             
@@ -1107,18 +1107,20 @@ def increment_inflow(curstate, auxinfo, roadinfo, timeind, dt, defaultspeed = 10
                     lead = auxinfo[anchor][1]
                     if lead is None: 
                         add = True
+                        hd = None
                     else: 
                         hd = get_headway(curstate, auxinfo, roadinfo, anchor, lead )
                         if hd > chkhd: 
                             add = True
                 if add: 
-                    newind = list(curstate.keys())[-1] + 1
+                    newind = list(curstate.keys())
+                    newind = newind[-1]+1 if len(newind)>0 else 0
                     curp = [23, 1.2, 2, 1.1, 1.5]
                     curLC = [2, .1, .2, .2, .2, .2]
                     curp[0] += np.random.rand()*20-10
                     curstate[newind] = [0, defaultspeed, hd]
                     auxinfo[newind] = [[None,False], lead, count, i, 3, curp, IDM_b3, std_CF, curLC, None, None, [None, None, None], 
-                            [], timeind+1, [], [], [], [], [], [], []]
+                            [], timeind+1, [], [], [], [], [], [], [None, None, None]]
                     
                     #update the followers of leader for [20]
                     if lead is not None: 
@@ -1139,7 +1141,7 @@ def increment_inflow(curstate, auxinfo, roadinfo, timeind, dt, defaultspeed = 10
                     else: 
                         auxinfo[newind][11][0] = roadinfo[i][6][count-1]
                     auxinfo[newind][11][1] = anchor
-                    if count == roadinfo[i][0]: 
+                    if count == roadinfo[i][0]-1: 
                         auxinfo[newind][11][2] = ''
                     else: 
                         auxinfo[newind][11][2] = roadinfo[i][6][count+1]
@@ -1161,7 +1163,10 @@ def simulate_sn(curstate, auxinfo, roadinfo, modelinfo, timesteps = 1000, dt = .
         simulate_step2(curstate, auxinfo, roadinfo, modelinfo, update_sn, starttime + j, dt)
         
         for i in curstate.keys(): 
-            sim[i].append(curstate[i])
+            if i in sim.keys(): 
+                sim[i].append(curstate[i])
+            else: 
+                sim[i] = [curstate[i]]
     
     return sim, curstate, auxinfo, roadinfo, starttime + j+1
 
