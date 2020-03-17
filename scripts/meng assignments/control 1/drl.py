@@ -115,7 +115,7 @@ class ACagent:
         #self.model = model
         self.policymodel = policymodel
         self.valuemodel = valuemodel
-        self.gamma = .9995 #discounting learning_rate = 3e-8
+        self.gamma = .9995
         '''
         self.model.compile(
                 optimizer = tf.keras.optimizers.RMSprop(learning_rate = 9e-4), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
@@ -123,11 +123,11 @@ class ACagent:
                 loss = [self._logits_loss, self._value_loss])
         '''
         self.policymodel.compile(
-                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 9e-4), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
+                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 7e-3), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
                 #optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
                 loss = [self._logits_loss])
         self.valuemodel.compile(
-                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 9e-4), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
+                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 7e-3), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
                 #optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
                 loss = [self._value_loss])
         
@@ -150,13 +150,13 @@ class ACagent:
         self.eps = eps
     
     def action_value(self, obs):
-        if (np.random.uniform(0,1) < self.eps):
-            num_actions = self.policymodel.layers[-2].get_config()['units']
-            random_action = np.random.randint(num_actions)
-            return tf.convert_to_tensor(random_action, dtype=np.int64), self.valuemodel.value(obs)
-            
-        else:
-            return self.policymodel.action(obs), self.valuemodel.value(obs)
+#        if (np.random.uniform(0,1) < self.eps):
+#            num_actions = self.policymodel.layers[-2].get_config()['units']
+#            random_action = np.random.randint(num_actions)
+#            return tf.convert_to_tensor(random_action, dtype=np.int64), self.valuemodel.value(obs)
+#            
+#        else:
+        return self.policymodel.action(obs), self.valuemodel.value(obs)
         
     def reset(self, env):
         state = env.reset()
@@ -279,7 +279,7 @@ class ACagent:
                 actions[bstep] = action
                 batchlen += 1
                 
-                action, value = nextaction, nextvalue    
+                action, value, curstate = nextaction, nextvalue, nextstate    
                 if done or self.counter >= self.simlen: #reset simulation 
                     ep_rewards.append(env.totloss)
                     curstate = self.reset(env)
@@ -294,7 +294,7 @@ class ACagent:
             gamma_adjust = np.ones(batchlen)
             adj_idx = firstdone + 1 if (firstdone!= -1) else batchlen #update all gammas if no dones in batch
             gamma_adjust[:adj_idx] = self.gamma**gammafactor
-            TDerrors = self._TDerrors(rewards[:batchlen], values[:batchlen], dones[:batchlen], nextvalue, gamma_adjust, 3)
+            TDerrors = self._TDerrors(rewards[:batchlen], values[:batchlen], dones[:batchlen], nextvalue, gamma_adjust, batch_sz)
             TDacc = tf.stack([TDerrors, tf.cast(actions[:batchlen], tf.float32)], axis = 1)
         
             self.policymodel.train_on_batch(statemem[:batchlen,:], TDacc)
@@ -575,15 +575,15 @@ plt.plot(avtraj[:,1])
 plt.subplot(1,3,3)
 plt.plot(avtraj[:,2])
 #%%
-mcenv = gym.make('MountainCar-v0')
-mcagent = ACagent(PolicyModel(num_actions=mcenv.action_space.n), ValueModel())
-mctestenv = gym_env(mcenv)
-allmcrewards = []
-for i in range(10):
-    rewards = mcagent.train(mctestenv, 100)
-#    plt.plot(rewards)
-#    plt.ylabel('rewards')
-#    plt.xlabel('episode')
-    allmcrewards.extend(rewards)
-    mcagent.test(mctestenv,testingtime,nruns=1)
-    print('total reward is '+str(mctestenv.totloss)+' over '+str(mcagent.counter)+' timesteps')
+#mcenv = gym.make('MountainCar-v0')
+#mcagent = ACagent(PolicyModel(num_actions=mcenv.action_space.n), ValueModel())
+#mctestenv = gym_env(mcenv)
+#allmcrewards = []
+#for i in range(4):
+#    rewards = mcagent.train(mctestenv, 100)
+##    plt.plot(rewards)
+##    plt.ylabel('rewards')
+##    plt.xlabel('episode')
+#    allmcrewards.extend(rewards)
+#    mcagent.test(mctestenv,1000,nruns=1)
+#    print('total reward is '+str(mctestenv.totloss)+' over '+str(mcagent.counter)+' timesteps')
