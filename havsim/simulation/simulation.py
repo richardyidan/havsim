@@ -204,7 +204,7 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     """
     does a step of the simulation for the full simulation which includes boundary conditions and LC
     -discretionary only changing, no routes 
-    -no mergers on network means on/off ramps cannot be simulated, only diverges/merges
+    -on/off ramps cannot be simulated, only diverges/merges
     -no mandatory changing means bottlenecks are not going to lead to correct behavior
     -no relaxation
     -no tactical or cooperative behavior
@@ -290,9 +290,10 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
         std_LC(i, lca, a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt)
     
     #update current state 
-    updatefun(curstate, a, auxinfo, roadinfo, dt) #updates curstate, auxinfo, roadinfo in place 
+    updatefun(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt) #updates curstate, auxinfo, roadinfo in place 
     
     #update inflow
+    increment_inflow(curstate, auxinfo, roadinfo, timeind, dt) #adds vehicle with default parameters 
     
     return curstate, auxinfo, roadinfo
 
@@ -1020,7 +1021,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
     
     #keep special vehicles updated
     for i in roadinfo.keys():
-        for count, j in roadinfo[i][8]:
+        for count, j in enumerate(roadinfo[i][8]):
             if j == None: #some lanes don't have this quantity
                 continue
             elif type(j) == str: #string type -> using anchor vehicle 
@@ -1089,7 +1090,7 @@ def leadfol_find(curstate, auxinfo, roadinfo, veh, guess):
         
             return guess, nextguess
         
-def increment_inflow(curstate, auxinfo, roadinfo, entryveh, timeind, dt, defaultspeed = 10, chkhd = 20):
+def increment_inflow(curstate, auxinfo, roadinfo, timeind, dt, defaultspeed = 10, chkhd = 20):
     #hacky solution for now - refer to notes BC3- 1. 
     #defaultspeed and chkhd magic numbers 
     for i in roadinfo.keys(): 
@@ -1116,21 +1117,53 @@ def increment_inflow(curstate, auxinfo, roadinfo, entryveh, timeind, dt, default
                     curLC = [2, .1, .2, .2, .2, .2]
                     curp[0] += np.random.rand()*20-10
                     curstate[newind] = [0, defaultspeed, hd]
-                    auxinfo[newind] = [None, lead, count, i, 3, curp, IDM_b3, std_CF, curLC, None, None, [], 
+                    auxinfo[newind] = [[None,False], lead, count, i, 3, curp, IDM_b3, std_CF, curLC, None, None, [None, None, None], 
                             [], timeind+1, [], [], [], [], [], [], []]
                     
-                    #need code for adding the [11] [20] info, initialize memory  16, 17, 18
+                    #update the followers of leader for [20]
+                    if lead is not None: 
+                        auxinfo[lead][11][1] = newind
+                    for k in auxinfo[anchor][20][0]: 
+                        auxinfo[k][11][2] = newind
+                    auxinfo[newind][20][0] = auxinfo[anchor][20][0]
+                    auxinfo[anchor][20][0] = set()
                     
+                    for k in auxinfo[anchor][20][2]: 
+                        auxinfo[k][11][0] = newind
+                    auxinfo[newind][20][0] = auxinfo[anchor][20][0]
+                    auxinfo[anchor][20][0] = set()
+                    
+                    #update followers in [11]
+                    if count == 0: 
+                        auxinfo[newind][11][0] = ''
+                    else: 
+                        auxinfo[newind][11][0] = roadinfo[i][6][count-1]
+                    auxinfo[newind][11][1] = anchor
+                    if count == roadinfo[i][0]: 
+                        auxinfo[newind][11][2] = ''
+                    else: 
+                        auxinfo[newind][11][2] = roadinfo[i][6][count+1]
+                    
+                    #initialize memory 
+                    auxinfo[newind][16].append([lead, timeind+1])
+                    auxinfo[newind][17].append([i, timeind+1])
+                    auxinfo[newind][18].append([count, timeind+1])
             
         
         
-def simulate_sn():
+def simulate_sn(curstate, auxinfo, roadinfo, modelinfo, timesteps = 1000, dt = .25, starttime = 0):
     """
     simulate on a simple network (sn = simple network)
     """
+    sim = {i: curstate[i] for i in curstate.keys()}
     
+    for j in range(timesteps): 
+        simulate_step2(curstate, auxinfo, roadinfo, modelinfo, update_sn, starttime + j, dt)
+        
+        for i in curstate.keys(): 
+            sim[i].append(curstate[i])
     
-    pass
+    return sim, curstate, auxinfo, roadinfo, starttime + j+1
 
 
 ########################end code for simple network#################
