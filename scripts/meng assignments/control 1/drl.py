@@ -292,7 +292,8 @@ class ACagent:
                         firstdone = bstep
 
             gamma_adjust = np.ones(batchlen)
-            gamma_adjust[:firstdone + 1] = self.gamma**gammafactor
+            adj_idx = firstdone + 1 if (firstdone!= -1) else batchlen #update all gammas if no dones in batch
+            gamma_adjust[:adj_idx] = self.gamma**gammafactor
             TDerrors = self._TDerrors(rewards[:batchlen], values[:batchlen], dones[:batchlen], nextvalue, gamma_adjust, 3)
             TDacc = tf.stack([TDerrors, tf.cast(actions[:batchlen], tf.float32)], axis = 1)
         
