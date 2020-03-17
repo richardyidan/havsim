@@ -383,6 +383,7 @@ class circ_singleav: #example of single AV environment
         self.paststates = [] #holds sequence of states
         self.statecnt = 0
         self.statememdim = (self.mem+1)*5
+        self.interp1d = interp1d((1.84,43.13), (0,1),fill_value = 'extrapolate')
         
     def reset(self):
         self.curstate = self.initstate
@@ -401,9 +402,9 @@ class circ_singleav: #example of single AV environment
         
         extend_seq = (np.interp(curstate[self.avid][1], (0,25.32), (0,1)),
                       np.interp(curstate[avlead][1], (0,25.32), (0,1)),
-                      interp1d((1.84,43.13), (0,1),fill_value = 'extrapolate')(curstate[self.avid][2])*1,
+                     self.interp1d(curstate[self.avid][2])*1,
                       np.interp(curstate[avfol][1], (0,25.32), (0,1)),
-                      interp1d((1.84,43.13), (0,1),fill_value = 'extrapolate')(curstate[avfol][2])*1
+                      self.interp1d(curstate[avfol][2])*1
                       )
         self.paststates.extend(extend_seq)
         if self.statecnt < self.mem:
