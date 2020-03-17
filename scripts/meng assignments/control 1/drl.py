@@ -491,7 +491,7 @@ class gym_env:
         return curstate[None, :]
     
     def step(self, action, *_, **__):
-        nextstate, reward, done, _ = self.env.step(action)
+        nextstate, reward, done, _ = self.env.step(action.numpy())
         self.curstate = nextstate
         return self.get_state(nextstate), reward, done
     
@@ -573,3 +573,4 @@ plt.subplot(1,3,2)
 plt.plot(avtraj[:,1])
 plt.subplot(1,3,3)
 plt.plot(avtraj[:,2])
+#%%
