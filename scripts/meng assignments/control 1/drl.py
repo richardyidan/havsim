@@ -574,3 +574,15 @@ plt.plot(avtraj[:,1])
 plt.subplot(1,3,3)
 plt.plot(avtraj[:,2])
 #%%
+mcenv = gym.make('MountainCar-v0')
+mcagent = ACagent(PolicyModel(num_actions=mcenv.action_space.n), ValueModel())
+mctestenv = gym_env(mcenv)
+allmcrewards = []
+for i in range(10):
+    rewards = mcagent.train(mctestenv, 100)
+#    plt.plot(rewards)
+#    plt.ylabel('rewards')
+#    plt.xlabel('episode')
+    allmcrewards.extend(rewards)
+    mcagent.test(mctestenv,testingtime,nruns=1)
+    print('total reward is '+str(mctestenv.totloss)+' over '+str(mcagent.counter)+' timesteps')
