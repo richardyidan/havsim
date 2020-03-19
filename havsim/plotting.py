@@ -1640,7 +1640,7 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
 def animatevhd_list_v2(meas, sim, platooninfo, my_id, lentail=20, h=.1, datalen=9, timerange=[None, None], delay=0):
     # plot multiple vehicles in phase space (speed v headway)
     # my_id - id of the vehicle to plot
-    # lentail = 20 - number of observations to show in the past
+    # lentail = 20 number of observations to show in the past
     # h = .1 - data discretization
     # datalen = 9
     # timerange = [usestart, useend]
@@ -1657,133 +1657,119 @@ def animatevhd_list_v2(meas, sim, platooninfo, my_id, lentail=20, h=.1, datalen=
     if sim is None:
         plotOne = True
         
-    x_lim = 0.0
-    y_lim = 0.0
+    x_min_lim = 1e10
+    y_min_lim = 1e10
+    x_max_lim = 0
+    y_max_lim = 0
     
     # 0: tnstar, 1: tn, 2: t
-    for id in my_id:
+    for veh_id in my_id:
 
-        t_nstar, t_n, T_nm1, T_n = platooninfo[id][0:4]
+        t_nstar, t_n, T_nm1, T_n = platooninfo[veh_id][0:4]
         
         # Compute and validate start and end time
         start, end = compute_validate_time(timerange, t_n, T_nm1, h=.1, delay=0)
         
         # animation in the velocity headway plane
-        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([id], platooninfo, meas, relaxtype = 'none')
+        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([veh_id], platooninfo, meas, relaxtype = 'none')
                 
         frames = [t_n, T_nm1]
         relax, unused = r_constant(rinfo[0], frames, T_n, None, False, h)  # get the relaxation amounts for the current vehicle; these depend on the parameter curp[-1] only.
 
-        trueheadway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, meas, id, relax)
-        index = start - t_n
-                        
-        ################
-        vehicle_id = id
-        leader_id = leadinfo[0][0][0]
-        ################
+        trueheadway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, meas, veh_id, relax)
+#        index = start - t_n
         
         for i in range(len(trueheadway) - lentail - (T_n - end)):
             if plotOne:
-                line1 = None
-                line3 = None
+                sim_line = None
+                sim_label = None
             else:
-                headway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, sim, id, relax)
-                line1, line3, sim_x_max, sim_y_max = compute_line_data(headway, i, lentail, sim, id, t_n - t_nstar)
-                x_lim = max(x_lim, sim_x_max)
-                y_lim = max(y_lim, sim_y_max)
+                headway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, sim, veh_id, relax)
+                sim_line, sim_label, sim_x_min, sim_y_min, sim_x_max, sim_y_max = compute_line_data(headway, i, lentail, sim, veh_id, t_n - t_nstar)
+                x_min_lim = min(x_min_lim, sim_x_min)
+                y_min_lim = min(y_min_lim, sim_y_min)
+                x_max_lim = max(x_max_lim, sim_x_max)
+                y_max_lim = max(y_max_lim, sim_y_max)
             
-            line2, line4, meas_x_max, meas_y_max = compute_line_data(trueheadway, i, lentail, meas, id, t_n - t_nstar)
-            x_lim = max(x_lim, meas_x_max)
-            y_lim = max(y_lim, meas_y_max)
+            meas_line, meas_label, meas_x_min, meas_y_min, meas_x_max, meas_y_max = compute_line_data(trueheadway, i, lentail, meas, veh_id, t_n - t_nstar)
+            x_min_lim = min(x_min_lim, meas_x_min)
+            y_min_lim = min(y_min_lim, meas_y_min)
+            x_max_lim = max(x_max_lim, meas_x_max)
+            y_max_lim = max(y_max_lim, meas_y_max)
             
-            #################
-#            current_leader_id = find_current_leader(t_n + index + i, leadinfo[0])
-#            if current_leader_id != leader_id:
-#                leader_id = current_leader_id
-#                vehicle_id = vehicle_id + 0.1
-            #print(current_leader_id)
-            #################
-            
-            if i + index in line_data.keys():
-                line_data[i + index].append((line1, line2, line3, line4, vehicle_id))
-            else:
-                line_data[i + index] = [(line1, line2, line3, line4, vehicle_id)]
-                
-            #if i in line_data.keys():
-            #    line_data[i].append((line1, line2, line3, line4, vehicle_id))
-            #else:
-            #    line_data[i] = [(line1, line2, line3, line4, vehicle_id)]
+#            if i + index in line_data.keys():
+#                line_data[i + index].append((sim_line, meas_line, sim_label, meas_label, veh_id))
+#            else:
+#                line_data[i + index] = [(sim_line, meas_line, sim_label, meas_label, veh_id)]
 
-#        trueheadway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, meas, id, relax)
+            if i + start in line_data.keys():
+                line_data[i + start].append((sim_line, meas_line, sim_label, meas_label, veh_id))
+            else:
+                line_data[i + start] = [(sim_line, meas_line, sim_label, meas_label, veh_id)]
     
     ####plotting
 
     ax = plt.gca()    
-    ax.set_xlim(0, x_lim + 20)
-    ax.set_ylim(0, y_lim + 20)
+    ax.set_xlim(x_min_lim - 10, x_max_lim + 10)
+    ax.set_ylim(y_min_lim - 10, y_max_lim + 10)
     sortedKeys = list(sorted(line_data.keys()))
     curLines = []
-    annotion_list = []
+
+    def init():
+        # Clean up, takes in effect when the animation starts to repeat
+        for veh_id in id2Line:
+            sim_line, meas_line, sim_annotation, meas_annotation, vehicle_id = id2Line[veh_id]
+            if not plotOne:
+                sim_line.set_data([],[])
+                sim_annotation.set_text("")
+            meas_line.set_data([],[])
+            meas_annotation.set_text("")
+            curLines.remove(vehicle_id)
+            del id2Line[vehicle_id]
+        return
     
     def aniFunc(frame):
+        allLines = line_data[sortedKeys[frame]]
 
-        lines = line_data[sortedKeys[frame]]
-        ids = [j[4] for j in lines]
+        for line in allLines:
+            veh_id = line[4]
+            # Check if veh_id has already been plotted in the last frame
+            if veh_id in curLines:
+                # If yes, fetch existing lines and annotations and modify
+                sim_line, meas_line, sim_annotation, meas_annotation, vehicle_id = id2Line[veh_id]
 
-        for j in lines:
-            id = j[4]
+                # In order to remove horizontal lines when the leader changes,
+                # need to detect leader change here and separate data into two groups
+                # Need to create new line and annotation for the new group
+                # We'll call a function that processes (line[0][0], line[0][1]) and (line[1][0], line[1][1])
+                # which returns a list of xy-coordinates
+                # The size of the list determines how many groups of data it got separated
+                # Essentially, if the list size > 1, there is a leader change
 
-            if id in curLines:
-                line1, line2, line3, line4, id = id2Line[id]
+                if not plotOne:
+                    sim_line.set_data(line[0][0], line[0][1])
+                    sim_annotation.set_position((line[2][0], line[2][1]))
 
-                if line1:
-                    line1.set_xdata(j[0][0])
-                    line1.set_ydata(j[0][1])
-
-                line2.set_xdata(j[1][0])
-                line2.set_ydata(j[1][1])
-
-                if line3:
-                    line3.set_x(j[2][0])
-                    line3.set_y(j[2][1])
-
-                line4.set_x(j[3][0])
-                line4.set_y(j[3][1])
+                meas_line.set_data(line[1][0], line[1][1])
+                meas_annotation.set_position((line[3][0], line[3][1]))
             else:
+                # If no, plot new lines and annotations
                 if plotOne:
-                    line1 = None
-                    line3 = None
+                    sim_line = None
+                    sim_annotation = None
                 else:
-                    line1, = ax.plot(j[0][0], j[0][1], 'C1')
-                    line3 = ax.annotate(str(math.floor(id)), (j[2][0], j[2][1]), fontsize=7)
-                    annotion_list.append(line3)
+                    sim_line, = ax.plot(line[0][0], line[1][1], 'C1')
+                    sim_annotation = ax.annotate(str(math.floor(veh_id)), (line[2][0], line[2][1]), fontsize=7)
                 
-                line2, = ax.plot(j[1][0], j[1][1], 'C0')
-                line4 = ax.annotate(str(math.floor(id)), (j[3][0], j[3][1]), fontsize=7)
-                annotion_list.append(line4)
+                meas_line, = ax.plot(line[1][0], line[1][1], 'C0')
+                meas_annotation = ax.annotate(str(math.floor(veh_id)), (line[3][0], line[3][1]), fontsize=7)
                 
-                id2Line[id] = (line1, line2, line3, line4, id)
-                curLines.append(id)
-        
-        
-        
-        for line_id in curLines.copy():
-            if line_id not in ids:
-                line = id2Line[line_id]
-                for plotted_line in line:
-                    if plotted_line in ax.lines:
-                        plotted_line.remove()
-                curLines.remove(line_id)
-                del id2Line[line_id]
-        #print(curLines)
-        
-        
-    def init():
-        for i in annotion_list:
-            i.remove()
-        annotion_list.clear()
+                # Save lines and annotations
+                id2Line[veh_id] = (sim_line, meas_line, sim_annotation, meas_annotation, veh_id)
+                curLines.append(veh_id)
+        return
 
-    im_ani = animation.FuncAnimation(fig, aniFunc, init_func=init, frames=len(sortedKeys), interval=0)
+    im_ani = animation.FuncAnimation(fig, aniFunc, init_func=init, frames=len(sortedKeys), interval=10)
     plt.show()
     return im_ani
 
@@ -1816,28 +1802,32 @@ def compute_validate_time(timerange, t_n, T_nm1, h=.1, delay=0):
         end = timerange[1]
     return start, end
 
-def compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, dataset, id, relax):
+def compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, dataset, veh_id, relax):
     lead = np.zeros((T_n + 1 - t_n, datalen))  # initialize the lead vehicle trajectory
     for j in leadinfo[0]:
         curleadid = j[0]  # current leader ID
         leadt_nstar = int(dataset[curleadid][0, 1])  # t_nstar for the current lead, put into int
         lead[j[1] - t_n:j[2] + 1 - t_n, :] = dataset[curleadid][j[1] - leadt_nstar:j[2] + 1 - leadt_nstar,:]  # get the lead trajectory from simulation
-    headway = lead[start - t_n:, 2] - dataset[id][start - t_nstar:, 2] - lead[start - t_n:, 6] + relax[start - t_n:]
+    headway = lead[start - t_n:, 2] - dataset[veh_id][start - t_nstar:, 2] - lead[start - t_n:, 6] + relax[start - t_n:]
     return headway
 
-def compute_line_data(headway, i, lentail, dataset, id, time):
-    trajectory = (headway[i:i + lentail], dataset[id][time + i:time + i + lentail, 3])
-    label = (headway[i + lentail], dataset[id][time + i + lentail, 3])
+def compute_line_data(headway, i, lentail, dataset, veh_id, time):
+    trajectory = (headway[i:i + lentail], dataset[veh_id][time + i:time + i + lentail, 3])
+    label = (headway[i + lentail], dataset[veh_id][time + i + lentail, 3])
     
-    # Compute x_max and y_max for the given data and return
+    # Compute x_min, y_min, x_max and y_max for the given data and return
     if lentail == 0:
+        x_min = 0
+        y_min = 0
         x_max = 0
         y_max = 0
     else:
+        x_min = min(headway[i:i + lentail])
         x_max = max(headway[i:i + lentail])
-        y_max = max(dataset[id][time + i:time + i + lentail, 3])
+        y_min = min(dataset[veh_id][time + i:time + i + lentail, 3])
+        y_max = max(dataset[veh_id][time + i:time + i + lentail, 3])
     
-    return trajectory, label, x_max, y_max
+    return trajectory, label, x_min, y_min, x_max, y_max
 
 ###########################
 
