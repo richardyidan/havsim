@@ -51,12 +51,12 @@ platoonplot(meas, sim, platooninfo, platoon = testplatoon[0:2], colorcode = Fals
 
 #%% plotvhd and animatevhd\_list
 #plotvhd(meas,sim,platooninfo,928)
-plotvhd_v2(meas,sim,platooninfo,[928,931,967])
+plotvhd_v2(meas,None,platooninfo,[928,931,967])
 
 #print(platooninfo[928.0])
 
 #ani = animatevhd_list(meas,None,platooninfo,testplatoon[1], show_meas=True, usestart = 2850,useend = 2950)
-ani2 = animatevhd_list_v2(meas, sim, platooninfo, testplatoon[0], timerange=[2850, 2950])
+#ani2 = animatevhd_list_v2(meas, sim, platooninfo, testplatoon[0], timerange=[2850, 2950])
 
 #%%
 
@@ -73,3 +73,12 @@ ani2 = animatevhd_list_v2(meas, sim, platooninfo, testplatoon[0], timerange=[285
 #meanspeedplot(sim2, 50, 8)
 #%%
 #plotvhd(sim2,None,platooninfo,1)
+#%% #for selectoscillation/selectvehID
+#option 1 - select rectangular area, press n to call selectvehID with chosen region (will automatically get vehicles in chosen region top left vertex)
+times, x, lane, veh = selectoscillation(data,50,20,lane=3)
+
+#option 2 - call selectvehID directly, but need to specify a starting vehicle list and also the rectangular region 
+#gives error? 
+test2 = [[(5562.474476963611, 1476.8050669428), (6311.045414797408, 164.0527611552), (7203.064516129032, 164.0527611552), (6454.493578295235, 1476.8050669428)]]
+test3 = [224.0, 194.0, 244.0, 240.0, 249.0, 255.0, 260.0, 267.0, 257.0] 
+selectvehID(data,times,x,3,veh,test2,test3)
