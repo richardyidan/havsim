@@ -24,14 +24,14 @@ from havsim.calibration.algs import makeplatoonlist
 #%%
 #load the data from pickle file (you should uncomment this and put in the full/path/to/pickle.pkl as path_)
 ## ngsim data
-#with open(path_reconngsim, 'rb') as f:
-#    reconngsim = pickle.load(f)[0]
-## highd data
-#with open(path_highd26, 'rb') as f:
-#    highd = pickle.load(f)[0]
+with open('reconngsim.pkl', 'rb') as f:
+    reconngsim = pickle.load(f)[0]
+# highd data
+with open('highd26.pkl', 'rb') as f:
+    highd = pickle.load(f)[0]
 
 #takes maybe 60 seconds to get platoonlist
-meas, platooninfo, platoonlist = makeplatoonlist(data, 6)
+meas, platooninfo, platoonlist = makeplatoonlist(reconngsim, 6)
 #meas, platooninfo = makeplatoonlist(data,1,False) #you can call like this to get meas/platooninfo fast
 
 testplatoon =[[904.0, 907.0, 914.0, 926.0, 927.0, 939.0],[967.0, 906.0, 928.0, 931.0],[973.0, 983.0, 987.0, 997.0, 1004.0, 1025.0, 1032.0]] #here are some test platoons 
