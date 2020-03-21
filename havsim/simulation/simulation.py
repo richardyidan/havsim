@@ -309,7 +309,7 @@ def std_CF(veh, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, relax):
             dbc = roadinfo[vehaux[3]][4][vehaux[2]][timeind]
             out = dboundary(dbc, curstate[veh], dt)
         else:  #standard CF call 
-            out = vehaux[7](vehaux[5], curstate[veh], curstate[vehaux[1]], dt) 
+            out = vehaux[6](vehaux[5], curstate[veh], curstate[vehaux[1]], dt) 
             
         curstate[veh][2] += -modelinfo[veh][0] #undo relaxation 
         
@@ -318,7 +318,7 @@ def std_CF(veh, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, relax):
             dbc = roadinfo[vehaux[3]][4][vehaux[2]][timeind]
             out = dboundary(dbc, curstate[veh], dt)
         else:  #standard CF call 
-            out = vehaux[7](vehaux[5], curstate[veh], curstate[vehaux[1]], dt) 
+            out = vehaux[6](vehaux[5], curstate[veh], curstate[vehaux[1]], dt) 
     return out 
     
 def get_headway(curstate, auxinfo, roadinfo, fol, lead):
@@ -335,14 +335,18 @@ def get_dist(curstate, auxinfo, roadinfo, fol, lead):
     return dist
         
 def get_dist2(curstate, auxinfo, roadinfo, fol, lead):
-    #can handle case where fol might be special string (i.e. None vehicle)
+    #can handle case where fol might be special string (i.e. anchor vehicle)
     if type(fol) == str: 
-        dist = curstate[lead][0] + roadinfo[(auxinfo[fol][3], auxinfo[lead][3])]
-    else: 
-        dist = curstate[lead][0] - curstate[fol][0]
+        dist = curstate[lead][0]
         if auxinfo[fol][3] != auxinfo[lead][3]:
             dist += roadinfo[(auxinfo[fol][3], auxinfo[lead][3])]
-    return dist
+        return dist
+    else: 
+        return get_dist(curstate, auxinfo, roadinfo, fol, lead)
+#        dist = curstate[lead][0] - curstate[fol][0]
+#        if auxinfo[fol][3] != auxinfo[lead][3]:
+#            dist += roadinfo[(auxinfo[fol][3], auxinfo[lead][3])]
+#    return dist
 
 def headway_helper(roadinfo, folroad, follane, leadroad):
     #deprecated######
@@ -957,8 +961,10 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             if newroad == None: #vehicle reaches end - remove from simulation
                 #update follower's lead
                 lfol, fol, rfol = auxinfo[i][11][:]
-                auxinfo[lfol][20][2].remove(i)
-                auxinfo[rfol][20][0].remove(i)
+                if lfol is not '': 
+                    auxinfo[lfol][20][2].remove(i)
+                if rfol is not '':
+                    auxinfo[rfol][20][0].remove(i)
                 auxinfo[fol][1] = None
                 #update memory
                 auxinfo[fol][16].append(timeind)
@@ -1090,7 +1096,7 @@ def leadfol_find(curstate, auxinfo, roadinfo, veh, guess):
         
             return guess, nextguess
         
-def increment_inflow(curstate, auxinfo, roadinfo, timeind, dt, defaultspeed = 10, chkhd = 20):
+def increment_inflow(curstate, auxinfo, roadinfo, timeind, dt, defaultspeed = 10, chkhd = 15):
     #hacky solution for now - refer to notes BC3- 1. 
     #defaultspeed and chkhd magic numbers 
     for i in roadinfo.keys(): 
@@ -1109,7 +1115,7 @@ def increment_inflow(curstate, auxinfo, roadinfo, timeind, dt, defaultspeed = 10
                         add = True
                         hd = None
                     else: 
-                        hd = get_headway(curstate, auxinfo, roadinfo, anchor, lead )
+                        hd = get_dist2(curstate, auxinfo, roadinfo, anchor, lead ) - auxinfo[lead][4]
                         if hd > chkhd: 
                             add = True
                 if add: 
@@ -1135,16 +1141,24 @@ def increment_inflow(curstate, auxinfo, roadinfo, timeind, dt, defaultspeed = 10
                     auxinfo[newind][20][0] = auxinfo[anchor][20][0]
                     auxinfo[anchor][20][0] = set()
                     
+                    auxinfo[anchor][1] = newind
+                    auxinfo[anchor][16][-1].append(timeind)
+                    auxinfo[anchor][16].append([newind, timeind+1])
+                    
                     #update followers in [11]
                     if count == 0: 
                         auxinfo[newind][11][0] = ''
                     else: 
-                        auxinfo[newind][11][0] = roadinfo[i][6][count-1]
+                        leftanchor = roadinfo[i][6][count-1]
+                        auxinfo[newind][11][0] = leftanchor
+                        auxinfo[leftanchor][20][2].add(newind)
                     auxinfo[newind][11][1] = anchor
                     if count == roadinfo[i][0]-1: 
                         auxinfo[newind][11][2] = ''
                     else: 
-                        auxinfo[newind][11][2] = roadinfo[i][6][count+1]
+                        rightanchor = roadinfo[i][6][count+1]
+                        auxinfo[newind][11][2] = rightanchor
+                        auxinfo[rightanchor][20][0].add(newind)
                     
                     #initialize memory 
                     auxinfo[newind][16].append([lead, timeind+1])
