@@ -17,16 +17,16 @@ from havsim.calibration.opt import platoonobjfn_obj, platoonobjfn_objder
 from havsim.simulation.simulation import eq_circular, simulate_cir, update2nd_cir, update_cir
 from havsim.simulation.models import IDM_b3, IDM_b3_eql
 #plotting 
-from havsim.plotting import platoonplot, platoonplot_v2, plotflows, plotvhd, plotvhd_v2, animatevhd_list, animatevhd_list_v2, animatetraj, meanspeedplot, optplot, selectoscillation, plotformat, selectvehID
+from havsim.plotting import platoonplot, platoonplot_v2, plotflows, animatevhd, plotvhd, plotvhd_v2, animatevhd_list, animatevhd_list_v2, animatetraj, meanspeedplot, optplot, selectoscillation, plotformat, selectvehID
 #data processing
 from havsim.calibration.algs import makeplatoonlist
 #%% #load data
 
-with open('../../../../input/reconngsim.pkl','rb') as f:
+with open('reconngsim.pkl','rb') as f:
     data = pickle.load(f)[0]
-with open('../../../../input/platoonlist.pkl','rb') as f:
+with open('platoonlist.pkl','rb') as f:
     platoonlist = pickle.load(f) #platoonlist = list of platoons 
-with open('../../../../input/testcalout.pkl','rb') as f:
+with open('testcalout.pkl','rb') as f:
     out, rmse = pickle.load(f) #calibration results for the testplatoon 
 meas, platooninfo = makeplatoonlist(data,1,False)
 testplatoon =[[904.0, 907.0, 914.0, 926.0, 927.0, 939.0],[967.0, 906.0, 928.0, 931.0],[973.0, 983.0, 987.0, 997.0, 1004.0, 1025.0, 1032.0]]
@@ -50,13 +50,14 @@ platoonplot(meas, sim, platooninfo, platoon = testplatoon[0:2], colorcode = Fals
 
 
 #%% plotvhd and animatevhd\_list
-#plotvhd(meas,sim,platooninfo,928)
-plotvhd_v2(meas,None,platooninfo,[928,931,967])
+#plotvhd_v2(meas,sim,platooninfo,[967])
+#plotvhd_v2(meas,None,platooninfo,[928, 931, 967])
 
 #print(platooninfo[928.0])
 
 #ani = animatevhd_list(meas,None,platooninfo,testplatoon[1], show_meas=True, usestart = 2850,useend = 2950)
-#ani2 = animatevhd_list_v2(meas, sim, platooninfo, testplatoon[0], timerange=[2850, 2950])
+#ani2 = animatevhd_list_v2(meas, None, platooninfo, testplatoon[1])
+animatevhd(meas, None, platooninfo, [928, 931, 967])
 
 #%%
 
