@@ -69,20 +69,35 @@ class Model(tf.keras.Model):
     return tf.squeeze(action, axis=-1), tf.squeeze(value, axis=-1)
 
 class PolicyModel(tf.keras.Model):
-  def __init__(self, num_actions):
+  def __init__(self, num_actions, num_hiddenlayers = 3, num_neurons = 32, activationlayer = kl.Activation('tanh')):
     super().__init__('mlp_policy')
-    self.hidden1 = kl.Dense(32, activation='tanh') #hidden layer for actions (policy)
-    self.hidden11 = kl.Dense(32,activation = 'tanh')
-    self.hidden111 = kl.Dense(32, activation = 'tanh')
+    self.num_hiddenlayers=num_hiddenlayers
+    self.activationlayer = activationlayer
+    
+    self.hidden1 = kl.Dense(num_neurons) #hidden layer for actions (policy)
+    self.hidden11 = kl.Dense(num_neurons)
+    if self.num_hiddenlayers > 2:
+        self.hidden111 = kl.Dense(num_neurons)
+    if self.num_hiddenlayers > 3:
+        self.hidden1111 = kl.Dense(num_neurons)
+
     # Logits are unnormalized log probabilities.
     self.logits = kl.Dense(num_actions, name = 'policy_logits')
     self.dist = ProbabilityDistribution()
-
+    
+    
   def call(self, inputs, **kwargs):
     x = tf.convert_to_tensor(inputs)
     hidden_logs = self.hidden1(x)
+    hidden_logs = self.activationlayer(hidden_logs)
     hidden_logs = self.hidden11(hidden_logs)
-    hidden_logs = self.hidden111(hidden_logs)
+    hidden_logs = self.activationlayer(hidden_logs)
+    if self.num_hiddenlayers > 2:
+        hidden_logs = self.hidden111(hidden_logs)
+        hidden_logs = self.activationlayer(hidden_logs)
+    if self.num_hiddenlayers > 3:
+        hidden_logs = self.hidden1111(hidden_logs)
+        hidden_logs = self.activationlayer(hidden_logs)
     return self.logits(hidden_logs)
 
   def action(self, obs):
@@ -91,18 +106,33 @@ class PolicyModel(tf.keras.Model):
     return tf.squeeze(action, axis=-1)
 
 class ValueModel(tf.keras.Model):
-  def __init__(self):
+  def __init__(self, num_hiddenlayers = 3, num_neurons=32, activationlayer = kl.Activation('tanh')):
     super().__init__('mlp_policy')
-    self.hidden2 = kl.Dense(32, activation='tanh') #hidden layer for state-value
-    self.hidden22 = kl.Dense(32, activation='tanh')
-    self.hidden222 = kl.Dense(32, activation='tanh')
+    self.num_hiddenlayers=num_hiddenlayers
+    self.activationlayer = activationlayer
+    
+    self.hidden2 = kl.Dense(num_neurons) #hidden layer for state-value
+    self.hidden22 = kl.Dense(num_neurons)
+    if self.num_hiddenlayers > 2:
+        self.hidden222 = kl.Dense(num_neurons)
+    if self.num_hiddenlayers > 3:
+       self.hidden2222 = kl.Dense(num_neurons)
+       
     self.val = kl.Dense(1, name = 'value')
+    
 
   def call(self, inputs, **kwargs):
     x = tf.convert_to_tensor(inputs)
     hidden_vals = self.hidden2(x)
+    hidden_vals = self.activationlayer(hidden_vals)
     hidden_vals = self.hidden22(hidden_vals)
-    hidden_vals = self.hidden222(hidden_vals)
+    hidden_vals = self.activationlayer(hidden_vals)
+    if self.num_hiddenlayers > 2:
+        hidden_vals = self.hidden222(hidden_vals)
+        hidden_vals = self.activationlayer(hidden_vals)
+    if self.num_hiddenlayers > 3:
+        hidden_vals = self.hidden2222(hidden_vals)
+        hidden_vals = self.activationlayer(hidden_vals)
     return self.val(hidden_vals)
 
   def value(self, obs):
@@ -111,7 +141,7 @@ class ValueModel(tf.keras.Model):
 
 optimizer = tf.keras.optimizers.RMSprop(learning_rate = 9e-4)
 class ACagent:
-    def __init__(self,policymodel, valuemodel, batch_sz=64, eps = 0.05):
+    def __init__(self,policymodel, valuemodel, batch_sz=64, eps = 0.05, lr = 7e-3, entropy_const = 1e-4):
         #self.model = model
         self.policymodel = policymodel
         self.valuemodel = valuemodel
@@ -123,11 +153,11 @@ class ACagent:
                 loss = [self._logits_loss, self._value_loss])
         '''
         self.policymodel.compile(
-                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 7e-3), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
+                optimizer = tf.keras.optimizers.RMSprop(lr), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
                 #optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
                 loss = [self._logits_loss])
         self.valuemodel.compile(
-                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 7e-3), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
+                optimizer = tf.keras.optimizers.RMSprop(lr), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
                 #optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
                 loss = [self._value_loss])
         
@@ -148,6 +178,7 @@ class ACagent:
         self.checkpoint_dir = os.path.dirname(self.checkpoint_path)
         
         self.eps = eps
+        self.entropy_const = entropy_const
     
     def action_value(self, obs):
 #        if (np.random.uniform(0,1) < self.eps):
@@ -245,10 +276,12 @@ class ACagent:
         plt.savefig(os.path.join(os.path.dirname(self.checkpoint_path),filename))
         plt.close(fig)
         
-    def train(self, env, updates=250, by_eps = False, numeps = 1):   
+    def train(self, env, updates=250, by_eps = False, numeps = 1, nTDsteps = -1):   
         curstate = self.reset(env)
         
         batch_sz = self.simlen * numeps if by_eps else self.batch_sz
+        if nTDsteps < 0:
+            nTDsteps = batch_sz
         statemem = np.empty((batch_sz,env.statememdim))
         rewards = np.empty((batch_sz))
         values = np.empty((batch_sz))
@@ -294,7 +327,7 @@ class ACagent:
             gamma_adjust = np.ones(batchlen)
             adj_idx = firstdone + 1 if (firstdone!= -1) else batchlen #update all gammas if no dones in batch
             gamma_adjust[:adj_idx] = self.gamma**gammafactor
-            TDerrors = self._TDerrors(rewards[:batchlen], values[:batchlen], dones[:batchlen], nextvalue, gamma_adjust, batch_sz)
+            TDerrors = self._TDerrors(rewards[:batchlen], values[:batchlen], dones[:batchlen], nextvalue, gamma_adjust, nTDsteps)
             TDacc = tf.stack([TDerrors, tf.cast(actions[:batchlen], tf.float32)], axis = 1)
         
             self.policymodel.train_on_batch(statemem[:batchlen,:], TDacc)
@@ -348,7 +381,7 @@ class ACagent:
         probs = tf.nn.softmax(logits)
         entropy_loss = kls.categorical_crossentropy(probs,probs)
 
-        return logprob - 1e-4*entropy_loss   
+        return logprob - self.entropy_const*entropy_loss   
         
 def NNhelper(out, curstate, *args, **kwargs):
     #this is hacky but basically we just want the action from NN to end up
@@ -367,7 +400,7 @@ class circ_singleav: #example of single AV environment
     #avid = id of AV
     #simulates on a circular road
     
-    def __init__(self, initstate,auxinfo,roadinfo,avid,rewardfn,updatefun=update_cir,dt=.25):
+    def __init__(self, initstate,auxinfo,roadinfo,avid,rewardfn,updatefun=update_cir,dt=.25,statemem=4):
         self.initstate = initstate
         self.auxinfo = auxinfo
         self.auxinfo[avid][6] = NNhelper
@@ -378,7 +411,7 @@ class circ_singleav: #example of single AV environment
         self.rewardfn = rewardfn
         self.sim = []
         
-        self.mem = 4
+        self.mem = statemem
         #stuff for building states (len self.mem+1 tuple of past states)
         self.paststates = [] #holds sequence of states
         self.statecnt = 0
@@ -498,7 +531,7 @@ class gym_env:
     
     def savestate(self):
         pass
-
+'''
 #if __name__ == "main":
 #    pass
 #%% initialize agent (we expect the agent to be awful before training)
@@ -518,13 +551,13 @@ class gym_env:
 #agent.test(testenv,200)
 #print('total reward is '+str(testenv.totloss))
 
-''' 
+\''' 
 gym_env is flexible to pass in other environments, including MountainCar-V0
 
 for MountainCar:
 reward := -1 for each time step, until the goal position of 0.5 is reached
 The episode ends when you reach 0.5 position, or if 200 iterations are reached.
-'''
+\'''
     #%%
 #                    #specify simulation
 p = [33.33, 1.2, 2, 1.1, 1.5] #parameters for human drivers
@@ -587,3 +620,209 @@ plt.plot(avtraj[:,2])
 #    allmcrewards.extend(rewards)
 #    mcagent.test(mctestenv,1000,nruns=1)
 #    print('total reward is '+str(mctestenv.totloss)+' over '+str(mcagent.counter)+' timesteps')
+#%%
+
+learning rate (~2e-4, 3e-4, ... 1e-3)
+entropy (1e-5 5e-5 1e-4 5e-4) 
+for both neural nets:
+    number of neurons in each layer (32 64 128)
+    depth of each neural net (2, 3, 4)
+    activation (relu, leaky relu, tanh)
+state memory (statemem parameter in code) (1, 5, 10)
+nstep for TD errors (5, 10, 20, math.inf)
+'''
+p = [33.33, 1.2, 2, 1.1, 1.5] #parameters for human drivers
+initstate, auxinfo, roadinfo = eq_circular(p, IDM_b3, update2nd_cir, IDM_b3_eql, 41, length = 2, L = None, v = 15, perturb = 2) #create initial state on road
+sim, curstate, auxinfo = simulate_cir(initstate, auxinfo,roadinfo, update_cir, timesteps = 25000, dt = .25)
+vlist = {i: curstate[i][1] for i in curstate.keys()}
+avid = min(vlist, key=vlist.get)
+
+lr_vals = np.arange(2e-4,1.1e-3,1e-4) # lr arg in ACagent
+entropy_vals = [1e-5, 5e-5, 1e-4, 5e-4]  # entropy_const arg in ACagent
+nstep_vals = [5,10,20,math.inf] # nTDsteps arg in train()
+
+netdepths = [2,3,4] # num_hiddenlayers
+numneuron_vals = [32,64,128] # num_neurons 
+activations = [kl.Activation('relu'),kl.LeakyReLU(alpha = 0.3),kl.Activation('tanh')] # activationlayer
+
+
+statemem_vals = [1,5,10] # statemem in circ_singleav()
+
+
+lr_best = lr_vals[0]
+ev_best = entropy_vals[0]
+nstep_best = nstep_vals[0]
+
+netd_bestPol = netdepths[0]
+nneur_bestPol = numneuron_vals[0]
+act_bestPol = activations[0]
+netd_bestVal = netdepths[0]
+nneur_bestVal = numneuron_vals[0]
+act_bestVal = activations[0]
+
+sm_best = statemem_vals[0]
+
+def traintest(agent_tt, testenv_tt, nTDsteps_tt):
+    agent_tt.train(testenv_tt, updates=1000, nTDsteps=nTDsteps_tt)
+    agent_tt.test(testenv_tt,1500)
+    
+    return testenv_tt.totloss, len(testenv_tt.sim[testenv_tt.avid])
+    #print('total reward is '+str(testenv_tt.totloss)+' over '+str(len(testenv_tt.sim[testenv_tt.avid]))+' timesteps')
+def resetPolVal():
+    policymodel = PolicyModel(num_actions = 3, num_hiddenlayers=netd_bestPol,num_neurons=nneur_bestPol,activationlayer=act_bestPol)
+    valuemodel = ValueModel(num_hiddenlayers=netd_bestVal,num_neurons=nneur_bestVal,activationlayer=act_bestVal)
+    return policymodel,valuemodel
+
+res = ''''''
+for i in range(3):
+    res+= '''+------------------------------------------+\n| Iter: {}                                  |\n+------------------------------------------+\n'''.format(i)
+    
+    policymodel,valuemodel = resetPolVal()
+    testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward8,dt = .25,statemem=sm_best)
+    
+    res+='''| Learning rate                            |\n+------------------------------------------+\n'''
+    rewards = []
+    for lrv in lr_vals:  
+        agent = ACagent(policymodel, valuemodel, lr=lrv, entropy_const = ev_best)
+        totreward, testlen = traintest(agent, testenv, nstep_best)
+        policymodel,valuemodel = resetPolVal()
+        res+="{:.4f}:\t{} reward over {} timesteps\n".format(lrv, totreward, testlen)
+        rewards.append(totreward)
+    #set lr_best var
+    lr_best = lr_vals[np.argmax(rewards)]
+    rewards = []
+    res += "\nSelected learning rate: {:.4f}\n".format(lr_best)
+    print();print("\n".join(res.splitlines()[-16:]))
+    res+='''+------------------------------------------+\n| Entropy                                  |\n+------------------------------------------+\n'''    
+    for ev in entropy_vals:
+        agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev)
+        totreward, testlen = traintest(agent, testenv, nstep_best)
+        policymodel,valuemodel = resetPolVal()
+        res+="{}:\t{} reward over {} timesteps\n".format(ev, totreward, testlen)
+        rewards.append(totreward)
+    #set ev_best
+    ev_best = entropy_vals[np.argmax(rewards)]
+    rewards = []
+    res += "\nSelected entropy const: {}\n".format(ev_best)
+    print();print("\n".join(res.splitlines()[-9:]))
+    res+='''+------------------------------------------+\n| Nstep for TD errors                      |\n+------------------------------------------+\n'''
+    for ns in nstep_vals:
+        agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)
+        totreward, testlen = traintest(agent, testenv, ns)
+        policymodel,valuemodel = resetPolVal()
+        res+="{}:\t{} reward over {} timesteps\n".format(ns, totreward, testlen)
+        rewards.append(totreward)
+    #set nstep_best
+    nstep_best = nstep_vals[np.argmax(rewards)]
+    rewards = []
+    res += "\nSelected nstep: {}\n".format(nstep_best)
+    print();print("\n".join(res.splitlines()[-9:]))
+    res+='''+------------------------------------------+\n| Depth (Policy)                           |\n+------------------------------------------+\n'''
+    for ndP in netdepths:
+        policymodel = PolicyModel(num_actions = 3, num_hiddenlayers=ndP,num_neurons=nneur_bestPol,activationlayer=act_bestPol)
+        agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)       
+        totreward, testlen = traintest(agent, testenv, nstep_best)
+        _,valuemodel = resetPolVal()
+        res+="{}:\t{} reward over {} timesteps\n".format(ndP, totreward, testlen)
+        rewards.append(totreward)
+    #set netd_bestPol
+    netd_bestPol = netdepths[np.argmax(rewards)]
+    rewards = []
+    res += "\nSelected Policy depth: {}\n".format(netd_bestPol)
+    print();print("\n".join(res.splitlines()[-8:]))
+    res+='''+------------------------------------------+\n| Number of neurons in each layer (Policy) |\n+------------------------------------------+\n'''
+    for nnP in numneuron_vals:
+        policymodel = PolicyModel(num_actions = 3, num_hiddenlayers=netd_bestPol,num_neurons=nnP,activationlayer=act_bestPol)
+        agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)       
+        totreward, testlen = traintest(agent, testenv, nstep_best)
+        _,valuemodel = resetPolVal()
+        res+="{}:\t{} reward over {} timesteps\n".format(nnP, totreward, testlen)
+        rewards.append(totreward)
+    #set nneur_bestPol
+    nneur_bestPol = numneuron_vals[np.argmax(rewards)]
+    rewards = []
+    res += "\nSelected Policy num neurons: {}\n".format(nneur_bestPol)
+    print();print("\n".join(res.splitlines()[-8:]))
+    res+='''+------------------------------------------+\n| Activation (Policy)                      |\n+------------------------------------------+\n'''
+    for idx,actP in enumerate(activations):
+        policymodel = PolicyModel(num_actions = 3, num_hiddenlayers=netd_bestPol,num_neurons=nneur_bestPol,activationlayer=actP)
+        agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)       
+        totreward, testlen = traintest(agent, testenv, nstep_best)
+        _,valuemodel = resetPolVal()
+        res+="{}:\t{} reward over {} timesteps\n".format(['relu','leaky relu','tanh'][idx], totreward, testlen)
+        rewards.append(totreward)
+    #set act_bestPol; 
+    act_bestPol = activations[np.argmax(rewards)]
+    res += "\nSelected Policy activation: {}\n".format(['relu','leaky relu','tanh'][np.argmax(rewards)])
+    rewards = []
+    policymodel = PolicyModel(num_actions = 3, num_hiddenlayers=netd_bestPol,num_neurons=nneur_bestPol,activationlayer=act_bestPol)
+    print();print("\n".join(res.splitlines()[-8:]))
+    res+='''+------------------------------------------+\n| Depth (Value)                            |\n+------------------------------------------+\n'''
+    for ndV in netdepths:
+        valuemodel = ValueModel(num_hiddenlayers=ndV,num_neurons=nneur_bestVal,activationlayer=act_bestVal)
+        agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)       
+        totreward, testlen = traintest(agent, testenv, nstep_best)
+        policymodel,_ = resetPolVal()
+        res+="{}:\t{} reward over {} timesteps\n".format(ndV, totreward, testlen)
+        rewards.append(totreward)
+    #set netd_bestVal
+    netd_bestVal = netdepths[np.argmax(rewards)]
+    rewards = []
+    res += "\nSelected Value depth: {}\n".format(netd_bestVal)
+    print();print("\n".join(res.splitlines()[-8:]))
+    res+='''+------------------------------------------+\n| Number of neurons in each layer (Value)  |\n+------------------------------------------+\n'''
+    for nnV in numneuron_vals:
+        valuemodel = ValueModel(num_hiddenlayers=netd_bestVal,num_neurons=nnV,activationlayer=act_bestVal)
+        agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)       
+        totreward, testlen = traintest(agent, testenv, nstep_best)
+        policymodel,_ = resetPolVal()
+        res+="{}:\t{} reward over {} timesteps\n".format(nnV, totreward, testlen)
+        rewards.append(totreward)
+    #set nneur_bestVal
+    nneur_bestVal = numneuron_vals[np.argmax(rewards)]
+    rewards = []
+    res += "\nSelected Value num neurons: {}\n".format(nneur_bestVal)
+    print();print("\n".join(res.splitlines()[-8:]))
+    res+='''+------------------------------------------+\n| Activation (Value)                       |\n+------------------------------------------+\n'''
+    for idx,actV in enumerate(activations):
+        valuemodel = ValueModel(num_hiddenlayers=netd_bestVal,num_neurons=nneur_bestVal,activationlayer=actV)
+        agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)       
+        totreward, testlen = traintest(agent, testenv, nstep_best)
+        policymodel,_ = resetPolVal()
+        res+="{}:\t{} reward over {} timesteps\n".format(['relu','leaky relu','tanh'][idx], totreward, testlen)
+        rewards.append(totreward)
+    #set act_bestVal; 
+    act_bestVal = activations[np.argmax(rewards)]
+    res += "\nSelected Valiue activation: {}\n".format(['relu','leaky relu','tanh'][np.argmax(rewards)])
+    rewards = []
+    ValueModel(num_hiddenlayers=netd_bestVal,num_neurons=nneur_bestVal,activationlayer=act_bestVal)
+    print();print("\n".join(res.splitlines()[-8:]))
+    res+='''+------------------------------------------+\n| State memory                             |\n+------------------------------------------+\n'''
+    for sm in statemem_vals:
+        testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward8,dt = .25,statemem=sm)
+        agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)       
+        totreward, testlen = traintest(agent, testenv, nstep_best)
+        policymodel,valuemodel = resetPolVal()
+        res+="{}:\t{} reward over {} timesteps\n".format(sm, totreward, testlen)
+        rewards.append(totreward)
+    #set sm_best
+    sm_best = statemem_vals[np.argmax(rewards)]
+    res += "\nSelected state memory: {}\n".format(sm_best)
+    print();print("\n".join(res.splitlines()[-8:]))
+      
+        
+        
+        
+        
+        
+        
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
