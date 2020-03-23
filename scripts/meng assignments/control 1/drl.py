@@ -236,15 +236,15 @@ class ACagent:
                 self.counter += 1
                 rewards.append(reward)
                 env.totloss += reward
-                if done:
+                if done or self.counter == timesteps:
                     eplenlist.append(self.counter)
                     rewardslist.append(sum(rewards))
                     if (run + 1 < nruns):
                         curstate = self.reset(env)
-                    rewards = []
+                        rewards = []
                     break
             run += 1
-        num_eps = len(eplenlist) if len(eplenlist) > 0 else 1
+        num_eps = len(eplenlist)
         env.totloss = np.sum(rewardslist) / num_eps
         return rewardslist, eplenlist
     
@@ -795,7 +795,7 @@ for i in range(3):
     act_bestVal = activations[np.argmax(rewards)]
     res += "\nSelected Valiue activation: {}\n".format(['relu','leaky relu','tanh'][np.argmax(rewards)])
     rewards = []
-    ValueModel(num_hiddenlayers=netd_bestVal,num_neurons=nneur_bestVal,activationlayer=act_bestVal)
+    valuemodel = ValueModel(num_hiddenlayers=netd_bestVal,num_neurons=nneur_bestVal,activationlayer=act_bestVal)
     print();print("\n".join(res.splitlines()[-8:]))
     res+='''+------------------------------------------+\n| State memory                             |\n+------------------------------------------+\n'''
     for sm in statemem_vals:
