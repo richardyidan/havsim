@@ -244,7 +244,7 @@ class ACagent:
                         rewards = []
                     break
             run += 1
-        num_eps = len(eplenlist)
+        num_eps = len(eplenlist) if len(eplenlist) > 0 else 1
         env.totloss = np.sum(rewardslist) / num_eps
         return rewardslist, eplenlist
     
