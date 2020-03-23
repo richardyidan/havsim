@@ -1,0 +1,176 @@
++------------------------------------------+
+| Iter: 0                                  |
++------------------------------------------+
+| Learning rate                            |
++------------------------------------------+
+0.0002:	392.18387959508874 reward over 1501 timesteps
+0.0003:	0.0 reward over 6001 timesteps
+0.0004:	452.84065604328936 reward over 1501 timesteps
+0.0005:	1835.501708984375 reward over 41 timesteps
+0.0006:	569.7820434570312 reward over 30 timesteps
+0.0007:	476.8611105159805 reward over 39 timesteps
+0.0008:	469.01410578157726 reward over 18 timesteps
+0.0009:	514.6567745835216 reward over 31 timesteps
+0.0010:	0.0 reward over 6001 timesteps
+
+Selected learning rate: 0.0005
++------------------------------------------+
+| Entropy                                  |
++------------------------------------------+
+1e-05:	0.0 reward over 6001 timesteps
+5e-05:	344.8285425021897 reward over 3001 timesteps
+0.0001:	672.5635375976562 reward over 4501 timesteps
+0.0005:	513.0281372906261 reward over 12 timesteps
+
+Selected entropy const: 0.0001
++------------------------------------------+
+| Nstep for TD errors                      |
++------------------------------------------+
+5:	529.3231302012958 reward over 17 timesteps
+10:	1229.1368469658914 reward over 47 timesteps
+20:	609.2783097145525 reward over 34 timesteps
+inf:	3381.253662109375 reward over 338 timesteps
+
+Selected nstep: inf
++------------------------------------------+
+| Depth (Policy)                           |
++------------------------------------------+
+2:	0.0 reward over 6001 timesteps
+3:	0.0 reward over 6001 timesteps
+4:	0.0 reward over 6001 timesteps
+
+Selected Policy depth: 2
++------------------------------------------+
+| Number of neurons in each layer (Policy) |
++------------------------------------------+
+32:	0.0 reward over 6001 timesteps
+64:	3451.6982421875 reward over 332 timesteps
+128:	838.6336669921875 reward over 4501 timesteps
+
+Selected Policy num neurons: 64
++------------------------------------------+
+| Activation (Policy)                      |
++------------------------------------------+
+relu:	615.5010986328125 reward over 3001 timesteps
+leaky relu:	0.0 reward over 6001 timesteps
+tanh:	0.0 reward over 6001 timesteps
+
+Selected Policy activation: relu
++------------------------------------------+
+| Depth (Value)                            |
++------------------------------------------+
+2:	0.0 reward over 6001 timesteps
+3:	0.0 reward over 6001 timesteps
+4:	516.9172570064234 reward over 30 timesteps
+
+Selected Value depth: 4
++------------------------------------------+
+| Number of neurons in each layer (Value)  |
++------------------------------------------+
+32:	743.4026692708334 reward over 1501 timesteps
+64:	484.51568366745107 reward over 3001 timesteps
+128:	0.0 reward over 6001 timesteps
+
+Selected Value num neurons: 32
++------------------------------------------+
+| Activation (Value)                       |
++------------------------------------------+
+relu:	0.0 reward over 6001 timesteps
+leaky relu:	0.0 reward over 6001 timesteps
+tanh:	409.9370137854461 reward over 3001 timesteps
+
+Selected Valiue activation: tanh
++------------------------------------------+
+| State memory                             |
++------------------------------------------+
+1:	0.0 reward over 6001 timesteps
+5:	1817.12353515625 reward over 26 timesteps
+10:	0.0 reward over 6001 timesteps
+
+Selected state memory: 5
++------------------------------------------+
+| Iter: 1                                  |
++------------------------------------------+
+| Learning rate                            |
++------------------------------------------+
+0.0002:	377.13429966029395 reward over 31 timesteps
+0.0003:	550.0816932914028 reward over 26 timesteps
+0.0004:	742.95654296875 reward over 4501 timesteps
+0.0005:	838.7250366210938 reward over 4501 timesteps
+0.0006:	0.0 reward over 6001 timesteps
+0.0007:	603.6029470026148 reward over 4501 timesteps
+0.0008:	0.0 reward over 6001 timesteps
+0.0009:	0.0 reward over 6001 timesteps
+0.0010:	0.0 reward over 6001 timesteps
+
+Selected learning rate: 0.0005
++------------------------------------------+
+| Entropy                                  |
++------------------------------------------+
+1e-05:	686.2828369140625 reward over 3001 timesteps
+5e-05:	0.0 reward over 6001 timesteps
+0.0001:	766.8075561523438 reward over 4501 timesteps
+0.0005:	0.0 reward over 6001 timesteps
+
+Selected entropy const: 0.0001
++------------------------------------------+
+| Nstep for TD errors                      |
++------------------------------------------+
+5:	342.66555177383844 reward over 4501 timesteps
+10:	603.738037109375 reward over 4501 timesteps
+20:	2383.16552734375 reward over 252 timesteps
+inf:	0.0 reward over 6001 timesteps
+
+Selected nstep: 20
++------------------------------------------+
+| Depth (Policy)                           |
++------------------------------------------+
+2:	527.450018905675 reward over 3001 timesteps
+3:	0.0 reward over 6001 timesteps
+4:	0.0 reward over 6001 timesteps
+
+Selected Policy depth: 2
++------------------------------------------+
+| Number of neurons in each layer (Policy) |
++------------------------------------------+
+32:	595.6113505427037 reward over 31 timesteps
+64:	755.2738037109375 reward over 3001 timesteps
+128:	0.0 reward over 6001 timesteps
+
+Selected Policy num neurons: 64
++------------------------------------------+
+| Activation (Policy)                      |
++------------------------------------------+
+relu:	0.0 reward over 6001 timesteps
+leaky relu:	684.3624877929688 reward over 3001 timesteps
+tanh:	48547.359375 reward over 4841 timesteps
+
+Selected Policy activation: tanh
++------------------------------------------+
+| Depth (Value)                            |
++------------------------------------------+
+2:	814.5001831054688 reward over 4501 timesteps
+3:	2715.952880859375 reward over 216 timesteps
+4:	2753.45556640625 reward over 198 timesteps
+
+Selected Value depth: 4
++------------------------------------------+
+| Number of neurons in each layer (Value)  |
++------------------------------------------+
+32:	0.0 reward over 6001 timesteps
+64:	3116.65625 reward over 285 timesteps
+128:	0.0 reward over 6001 timesteps
+
+Selected Value num neurons: 64
++------------------------------------------+
+| Activation (Value)                       |
++------------------------------------------+
+relu:	0.0 reward over 6001 timesteps
+leaky relu:	0.0 reward over 6001 timesteps
+tanh:	2837.32373046875 reward over 236 timesteps
+
+Selected Valiue activation: tanh
++------------------------------------------+
+| State memory                             |
++------------------------------------------+
+
