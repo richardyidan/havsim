@@ -260,10 +260,20 @@ def drl_reward8(nextstate, vavg, decay = .95, lowereql = 11, eql = 15, avid = 9)
     vavg = np.average(vlist)
     return 1+ np.interp(vavg, (lowereql, eql), (0, 5)) + vlist[avid], vavg #1 + np.interp(vavg, (lowereql, eql), (0, 1)) + vlist[avid],
 
+def drl_reward88(nextstate, vavg, decay = .95, lowereql = 11, eql = 15, avid = 9):
+    vlist = [i[1] for i in nextstate.values()]
+    vavg[avid] = vavg[avid]*decay + (1 - decay)*nextstate[avid][1] #update exponential average of velocity
+#    vavg = np.average(vlist)
+    #constant reward + strictly positive reward when going 15 + strictly positive reward for minimizing oscillations
+#    return 1 + (-(min([vlist[avid],30]) - 15)**2+15**2)/30 + (-(min([vavg[avid],30]) - 15)**2+15**2)/30, vavg
+    return 1 + (-(min([vlist[avid],30]) - 15)**2+15**2)/30, vavg
+#term to penalize oscillations? 
+#    return 1 + (-(min([vlist[avid],30]) - 15)**2+15**2)/30 + (-(vlist[avid] - vavg[avid])**2+15**2)/30, vavg
+
 def drl_reward7(nextstate, vavg, decay = .95, lowereql = 0, eql = 15, avid = 9):
 #    vlist = [i[1] for i in nextstate.values()]
 #    vavg[avid] =  = np.average(vlist)
-    return 1+1/15*nextstate[avid][1], vavg
+    return 1+1/5*nextstate[avid][1], vavg
         
 
 def drl_reward6(nextstate, vavg, decay = .95, penalty = 1):
