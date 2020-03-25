@@ -1290,23 +1290,24 @@ def plotvhd_v2(meas, sim, platooninfo, vehicle_id, show_sim=True, show_meas=True
     plt.xlabel('space headway (ft)')
     plt.ylabel('speed (ft/s)')
     plt.title('space-headway for vehicle ' + " ".join(list(map(str, (vehicle_id)))))
-    
+    ax = plt.gca()
+
     if sim is None:
         # If sim is None, plot meas for all vehicles in vehicle_id
         for my_id in vehicle_id:
-            plot_one_vehicle(plt, meas, sim, platooninfo, my_id, effective_headway, rp, h, datalen, end, delay)
-        plt.legend(vehicle_id)
+            plot_one_vehicle(plt, ax, meas, sim, platooninfo, my_id, effective_headway, rp, h, datalen, end, delay)
     else:
         # If both meas and sim are provided,
         # will plot both simulation and measurement data for the first vehicle in vehicle_id
         if len(vehicle_id) > 1: 
             print('plotting first vehicle '+str(vehicle_id[0])+' only')
-        plot_one_vehicle(plt, meas, sim, platooninfo, vehicle_id[0], effective_headway, rp, h, datalen, end, delay)
-        plt.legend(['Simulation', 'Measurements'])
+        plot_one_vehicle(plt, ax, meas, sim, platooninfo, vehicle_id[0], effective_headway, rp, h, datalen, end, delay)
+
+    organize_legends(plt)
     return
 
 
-def plot_one_vehicle(plt, meas, sim, platooninfo, my_id, effective_headway=False, rp=None, h=.1, datalen=9, end=None, delay=0):
+def plot_one_vehicle(plt, ax, meas, sim, platooninfo, my_id, effective_headway=False, rp=None, h=.1, datalen=9, end=None, delay=0):
     if effective_headway:
         leadinfo, folinfo, rinfo = helper.makeleadfolinfo([my_id], platooninfo, meas)
     else:
@@ -1325,15 +1326,48 @@ def plot_one_vehicle(plt, meas, sim, platooninfo, my_id, effective_headway=False
             
     frames = [t_n, T_nm1]
     relax, unused = r_constant(rinfo[0], frames, T_n, rp, False, h)  # get the relaxation amounts for the current vehicle; these depend on the parameter curp[-1] only.
+    meas_label = str(my_id)
 
     headway = None
     if sim is not None:
         headway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, sim, my_id, relax)
-        plt.plot(headway[:end + 1 - start], sim[my_id][start - t_nstar:end + 1 - t_nstar, 3])
+        sim_color = next(ax._get_lines.prop_cycler)['color']
+        meas_label = 'Measurements'
+        plot_one_vehicle_with_leader_change(plt, headway[:end + 1 - start], sim[my_id][start - t_nstar:end + 1 - t_nstar, 3], leadinfo, start, 'Simulation', sim_color)
         
     trueheadway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, meas, my_id, relax)
-    plt.plot(trueheadway[:end + 1 - start], meas[my_id][start - t_nstar:end + 1 - t_nstar, 3])
+    meas_color = next(ax._get_lines.prop_cycler)['color']
+    plot_one_vehicle_with_leader_change(plt, trueheadway[:end + 1 - start], meas[my_id][start - t_nstar:end + 1 - t_nstar, 3], leadinfo, start, meas_label, meas_color)
     return
+
+def plot_one_vehicle_with_leader_change(plt, x_coordinates, y_coordinates, leadinfo, start, label, color):
+    # If there is at least a leader change,
+    # we want to separate data into multiple sets otherwise there will be horizontal lines that have no meanings
+    # x_coordinates and y_coordinates will have the same length,
+    # and x_coordinates[0] and y_coordinates[0] have the same time frame == start
+    temp_start = 0
+    leader_id = leadinfo[0][0][0]
+
+    for index in range(0, len(x_coordinates)):
+        current_leader_id = find_current_leader(start + index, leadinfo[0])
+        if current_leader_id != leader_id:
+            # Detected a leader change, plot the previous set
+            leader_id = current_leader_id
+            plt.plot(x_coordinates[temp_start:index], y_coordinates[temp_start:index], label=label, color=color)
+            temp_start = index
+    # Plot the very last set, if there is one
+    plt.plot(x_coordinates[temp_start:], y_coordinates[temp_start:], label=label, color=color)
+    return
+
+def organize_legends(plt):
+    handles, labels = plt.gca().get_legend_handles_labels()
+    newLabels, newHandles = [], []
+    for handle, label in zip(handles, labels):
+        if label not in newLabels:
+            newLabels.append(label)
+            newHandles.append(handle)
+    plt.legend(newHandles, newLabels)
+
 ##################################
 
 
