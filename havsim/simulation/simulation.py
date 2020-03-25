@@ -761,20 +761,20 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
         #update opposite side for veh
         opsidefol = curaux[11][opside]
         if opsidefol != '':
-            auxinfo[curaux[11][opside]][20][lcside].remove(i) #old opposite side follower 
+            auxinfo[opsidefol][20][lcside].remove(i) #old opposite side follower 
         curaux[11][opside] = fol 
         folaux[20][lcside].add(i)
-        #update cur side follower for veh 
+        #update cur lc side follower for veh 
         lcfol = curaux[11][lcside]
         lcfolaux = auxinfo[lcfol]
-        lcfolaux[1] = i
+        lclead = lcfolaux[1]
+        lcfolaux[1] = i 
         lcfolaux[16][-1].append(timeind)
         lcfolaux[16].append([i, timeind + 1])
         lcfolaux[20][opside].remove(i)
         curaux[11][1] = lcfol
-        #update leader
-        lclead = auxinfo[lcfol][1]
-        curaux[1] = lclead
+        #update lc side leader
+        curaux[1] = lclead 
         curaux[16][-1].append(timeind)
         curaux[16].append([lclead, timeind + 1])
         curaux[18][-1].append(timeind)
@@ -802,7 +802,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
                 lcfolaux[20][lcside].remove(j)
                 if curdist > maxdist: 
                     maxdist = curdist
-                    minveh = j
+                    minveh = j #minveh is the closest new lc side follower 
         curaux[20][lcside] = newset
         #update new lcside 
         if lcsidelane == 0 or lcsidelane == roadinfo[road][0]: 
@@ -939,21 +939,26 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             #update vehicle
             curaux[11][0] = auxinfo[lfol][11][1]
             auxinfo[curaux[11][0]][20][2].add(i)
-            auxinfo[lfol][11][2] = i
             auxinfo[lfol][20][2].remove(i)
+            
+            auxinfo[lfol][11][2] = i
             curaux[20][0].add(lfol)
+            auxinfo[curaux[11][1]][20][0].remove(lfol)
+            
         if rfol == '' or type(rfol) == str:
             pass
         elif curstate[i][0] < curstate[rfol][0] and curaux[3] == auxinfo[rfol][3]: 
-            curaux[11][0] = auxinfo[rfol][11][1]
+            #left/right leaders dont seem to be updated for some reason
+            curaux[11][2] = auxinfo[rfol][11][1]
             auxinfo[curaux[11][2]][20][0].add(i)
-            auxinfo[rfol][11][0] = i
             auxinfo[rfol][20][0].remove(i)
-            curaux[20][2].add(rfol)
             
-
+            auxinfo[rfol][11][0] = i
+            curaux[20][2].add(rfol)
+            auxinfo[curaux[11][1]][20][2].remove(rfol)
             
     #check if roads change
+    dellist = []
     for i in curstate.keys():
         if curstate[i][0] > roadinfo[auxinfo[i][3]][2]: #roads change 
             curaux = auxinfo[i]
@@ -971,7 +976,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
                 auxinfo[fol][16].append([None,timeind+1])
                 curaux[17].append(timeind)
                 curaux[18].append(timeind)
-                del curstate[i]
+                dellist.append(i)
                 continue
 #            newroad, newlane = newroad[0], newroad[1]
             #update memory 
@@ -982,7 +987,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             #update states
             curstate[i][0] += -roadinfo[curaux[3]][2]
             curaux[2], curaux[3] = newlane, newroad
-            
+
             
 #            #update road's first vehicle 
 #            curfirst = roadinfo[newroad][6][newlane]
@@ -1023,7 +1028,9 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
 #                curaux[11][2] = ''
 #            elif curaux[11][2] is '': #new change on right side
 #                pass
-            
+                
+    for i in dellist: 
+        del curstate[i]
     
     #keep special vehicles updated
     for i in roadinfo.keys():
@@ -1126,7 +1133,7 @@ def increment_inflow(curstate, auxinfo, roadinfo, timeind, dt, defaultspeed = 10
                     curp[0] += np.random.rand()*20-10
                     curstate[newind] = [0, defaultspeed, hd]
                     auxinfo[newind] = [[None,False], lead, count, i, 3, curp, IDM_b3, std_CF, curLC, None, None, [None, None, None], 
-                            [], timeind+1, [], [], [], [], [], [], [None, None, None]]
+                            [], timeind+1, [], [], [], [], [], [], [set(), None, set()]]
                     
                     #update the followers of leader for [20]
                     if lead is not None: 
@@ -1138,8 +1145,8 @@ def increment_inflow(curstate, auxinfo, roadinfo, timeind, dt, defaultspeed = 10
                     
                     for k in auxinfo[anchor][20][2]: 
                         auxinfo[k][11][0] = newind
-                    auxinfo[newind][20][0] = auxinfo[anchor][20][0]
-                    auxinfo[anchor][20][0] = set()
+                    auxinfo[newind][20][2] = auxinfo[anchor][20][2]
+                    auxinfo[anchor][20][2] = set()
                     
                     auxinfo[anchor][1] = newind
                     auxinfo[anchor][16][-1].append(timeind)
@@ -1164,7 +1171,6 @@ def increment_inflow(curstate, auxinfo, roadinfo, timeind, dt, defaultspeed = 10
                     auxinfo[newind][16].append([lead, timeind+1])
                     auxinfo[newind][17].append([i, timeind+1])
                     auxinfo[newind][18].append([count, timeind+1])
-            
         
         
 def simulate_sn(curstate, auxinfo, roadinfo, modelinfo, timesteps = 1000, dt = .25, starttime = 0):

@@ -7,15 +7,15 @@ from havsim.calibration.helper import boundaryspeeds, getentryflows
 from havsim.calibration.algs import makeplatoonlist
 import pickle
 
-##get boundary conditions to use 
+#get boundary conditions to use 
 #with open('reconngsim.pkl','rb') as f: 
 #    data = pickle.load(f)[0]
-#    
+    
 #meas, platooninfo = makeplatoonlist(data, 1, False)
 #
-#entryflows, unused = getentryflows(meas, [3],.1,.25) #problem with the way the interpolate function works? 
+#entryflows, unused = getentryflows(meas, [3],.1,.25) 
 #
-#unused, unused, exitspeeds, unused = boundaryspeeds(meas, [], [3],.1,.25)
+#unused, unused, exitspeeds, unused = boundaryspeeds(meas, [], [3],.1,.1)
 
 #%%
 #simple  road with two lanes 
@@ -36,5 +36,4 @@ roadinfo[0][3] = [entryflows[0][:1000], entryflows[0][1000:2000]]
 roadinfo[0][4] = [exitspeeds[0][:1000], exitspeeds[0][1000:2000]]
 
 sim, curstate, auxinfo, roadinfo, endtime = simulate_sn(curstate, auxinfo, roadinfo, modelinfo, 1000, .25, 0)
-#error in line 960 possible logic error in lane changing code? 
 
