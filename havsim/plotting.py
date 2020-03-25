@@ -1354,9 +1354,11 @@ def plot_one_vehicle_with_leader_change(plt, x_coordinates, y_coordinates, leadi
             # Detected a leader change, plot the previous set
             leader_id = current_leader_id
             plt.plot(x_coordinates[temp_start:index], y_coordinates[temp_start:index], label=label, color=color)
+            plot_arrow_directions(x_coordinates[temp_start:index], y_coordinates[temp_start:index], color)
             temp_start = index
     # Plot the very last set, if there is one
     plt.plot(x_coordinates[temp_start:], y_coordinates[temp_start:], label=label, color=color)
+    plot_arrow_directions(x_coordinates[temp_start:], y_coordinates[temp_start:], color)
     return
 
 def organize_legends(plt):
@@ -1367,6 +1369,26 @@ def organize_legends(plt):
             newLabels.append(label)
             newHandles.append(handle)
     plt.legend(newHandles, newLabels)
+
+def plot_arrow_directions(x_coordinates, y_coordinates, color, arrowinterval=3, arrlen=1):
+    counter = 0
+    arroffset = 1 * math.pi / 32
+    for i in range(len(x_coordinates) - 1):
+        dx = x_coordinates[i + 1] - x_coordinates[i]
+        dy = y_coordinates[i + 1] - y_coordinates[i]
+
+        counter = counter + (dy ** 2 + dx ** 2) ** .5  # keep track of length traveled
+        if counter > arrowinterval:  # if its time to draw another arrow
+            counter -= arrowinterval
+            theta = math.atan2(dy, dx)  # angle at which arrow will point
+            arr1dx = arrlen * math.cos(theta - arroffset)
+            arr2dx = arrlen * math.cos(theta + arroffset)
+            arr1dy = arrlen * math.sin(theta - arroffset)
+            arr2dy = arrlen * math.sin(theta + arroffset)
+            plt.plot([x_coordinates[i], x_coordinates[i] + arr1dx], [y_coordinates[i], y_coordinates[i] + arr1dy], 'k-', color=color)
+            plt.plot([x_coordinates[i], x_coordinates[i] + arr2dx], [y_coordinates[i], y_coordinates[i] + arr2dy], 'k-', color=color)
+
+    return
 
 ##################################
 
