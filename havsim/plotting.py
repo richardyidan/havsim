@@ -1371,6 +1371,9 @@ def organize_legends(plt):
     plt.legend(newHandles, newLabels)
 
 def plot_arrow_directions(x_coordinates, y_coordinates, color, arrowinterval=3, arrlen=1):
+    # Reverse the list so the arrows are pointing at the correct direction
+    x_coordinates = list(reversed(x_coordinates))
+    y_coordinates = list(reversed(y_coordinates))
     counter = 0
     arroffset = 1 * math.pi / 32
     for i in range(len(x_coordinates) - 1):
