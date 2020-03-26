@@ -15,25 +15,26 @@ import havsim
 
 
 
-def create_input(statemem, j, vel_sub_v1, headway):
+def create_input(statemem, j, lead, headway, curmeas):
     if j+1 < statemem:
-        vehv = np.append(np.tile(vel_sub_v1[0],statemem-j-1),vel_sub_v1[:j+1])
+        leadv = np.append(np.tile(lead[0,1],statemem-j-1),lead[:j+1,1])
         hd = np.append(np.tile(headway[0],statemem-j-1),headway[:j+1])
     else:
-        vehv = vel_sub_v1[j+1-statemem:j+1]
+        leadv = lead[j+1-statemem:j+1,1]
         hd = headway[j+1-statemem:j+1]
 
-    if len(vehv) < 5:
-        vehv = np.append(vehv, [vehv[-1]])
-    curx = list(vehv)
+    curx = list(leadv)
     curx.extend(list(hd))
-    return curx
+    if j + 1 < len(headway):
+        cury = [headway[j+1]]
+    else:
+        cury = None
+    return curx, cury
 
-def create_deltat(traj):
-    x1 = np.append(traj[:,0], [0])
-    x2 = np.append([0], traj[:,0])
-    vel_sub_v1 = (np.subtract(x1, x2))[1:-1]
-    return vel_sub_v1
+def normalization_input(xinput, maxheadway, maxvelocity, statemem):
+    xinput[:,:statemem] = xinput[:,:statemem]/maxvelocity
+    xinput[:,statemem:statemem*2] = xinput[:,statemem:statemem*2]/maxheadway
+    return xinput
 
 
 #comment out and replace with path to pickle files on your computer
@@ -65,7 +66,7 @@ maxvelocity = 0
 #get headways for all vehicles
 maxheadway = 0
 #define how the state should look
-statemem = 5
+statemem = 25
 
 xtrain, ytrain, xtest, ytest = [], [], [], []
 for count, i in enumerate(meas.keys()):
@@ -86,26 +87,26 @@ for count, i in enumerate(meas.keys()):
     curmeas = meas[i][t_n-t_nstar:T_nm1+1-t_nstar,[2,3,8]] #columns are position, speed, acceleration
     headway = lead[:,0] - curmeas[:,0] - lead[:,2] #headway is distance between front bumper to rear bumper of leader
 
-    vel_sub_v1 = create_deltat(lead)
 
-    vel_sub_v = create_deltat(curmeas)
+
+
 
     if train_or_test[count]: #supposed to normalize assuming you have only train data
         temp = max(headway)
         if temp > maxheadway:
             maxheadway = temp
-        temp = max(vel_sub_v1)
+        temp = max(lead[:,1])
         if temp > maxvelocity:
             maxvelocity = temp
-    maxvelocity = maxvelocity * 0.1
 
     #form samples for the current vehicle
     for j in range(T_nm1+1-t_n):
         if j == 0:
             continue
-        curx = create_input(statemem, j, vel_sub_v1, headway)
+        curx, cury = create_input(statemem, j, lead, headway, curmeas)
         #new output for model
-        cury = [vel_sub_v[j-1]]
+        if cury == None:
+            continue
         if train_or_test[count]:
             xtrain.append(curx)
             ytrain.append(cury)
@@ -123,27 +124,26 @@ maxoutput = max(ytrain[:,0])
 minoutput = min(ytrain[:,0])
 ytrain = (ytrain + minoutput)/(maxoutput-minoutput)
 ytest = (ytest + minoutput)/(maxoutput-minoutput)
-xtrain[:,:statemem] = xtrain[:,:statemem]/maxvelocity
-xtrain[:,statemem:statemem*2] = xtrain[:,statemem:statemem*2]/maxheadway
-xtest[:,:statemem] = xtest[:,:statemem]/maxvelocity
-xtest[:,statemem:statemem*2] = xtest[:,statemem:statemem*2]/maxheadway
+xtrain = normalization_input(xtrain, maxheadway, maxvelocity, statemem)
+xtest = normalization_input(xtest, maxheadway, maxvelocity, statemem)
+
 
  #you'll probably want to save the train_or_test, xtrain, ... ytest in a pickle
 
 xtrain, ytrain, xtest, ytest = tf.convert_to_tensor(xtrain,tf.float32), tf.convert_to_tensor(ytrain,tf.float32), tf.convert_to_tensor(xtest,tf.float32), tf.convert_to_tensor(ytest,tf.float32)
 
 train_ds = tf.data.Dataset.from_tensor_slices(
-        (xtrain,ytrain)).shuffle(100000).batch(128)
+        (xtrain,ytrain)).shuffle(100000).batch(64)
 
 test_ds = tf.data.Dataset.from_tensor_slices(
-        (xtest,ytest)).shuffle(100000).batch(128)
+        (xtest,ytest)).shuffle(100000).batch(64)
 #%%
 class Model(tf.keras.Model):
     def __init__(self):
         super().__init__('simple_mlp')
         self.hidden1 = kls.Dense(32, activation = 'relu')
         self.hidden2 = kls.Dense(32,activation = 'relu')
-        self.hidden3 = kls.Dense(8)
+        self.hidden3 = kls.Dense(32)
         self.out = kls.Dense(1)
 
     def call(self,x):
@@ -157,7 +157,7 @@ model = Model()
 #%% Set up training
 #x = input, y = output, yhat = labels (true values)
 
-optimizer = tf.keras.optimizers.RMSprop(learning_rate=2e-5)
+optimizer = tf.keras.optimizers.RMSprop(learning_rate=9e-4)
 
 loss_fn = tf.keras.losses.MeanSquaredError(name='train_test_loss')
 def mytestmetric(y,yhat):
@@ -193,7 +193,7 @@ def test1(dataset, minacc, maxacc):
         mse.append(m)
     return (tf.math.reduce_mean(mse)**.5)*(maxacc-minacc)-minacc, predicted_output
 
-def create_output(xtest, ytest, minoutput, maxoutput, maxvelocity, maxheadway, simulated_trajectory_lst, headway):
+def create_output(xtest, ytest, minoutput, maxoutput, maxvelocity, maxheadway, simulated_trajectory_lst, headway, lead, j):
     xtest[-1][:statemem] = xtest[-1][:statemem]/maxvelocity
     xtest[-1][statemem:statemem*2] = xtest[-1][statemem:statemem*2]/maxheadway
     #vector to put into NN
@@ -207,19 +207,20 @@ def create_output(xtest, ytest, minoutput, maxoutput, maxvelocity, maxheadway, s
 
 
     output, predicted_acc = test1(test_ds,minoutput,maxoutput)
-    unormalized_val = (predicted_acc[0].numpy()[0][0]) * (maxoutput - minoutput) - minoutput
-    curr_speed = unormalized_val/0.1
-    new_traj = simulated_trajectory_lst[-1] + unormalized_val
-    simulated_headway = lead[j,0] - lead[j,2] - new_traj
-    if j + 1 < len(curmeas):
+    simulated_headway = (predicted_acc[0].numpy()[0][0]) * (maxoutput - minoutput) - minoutput
+    if j + 1 < len(lead):
+        simulated_trajectory = lead[j+1,0] - lead[j+1,2] - simulated_headway
         headway[j+1] = simulated_headway
+    else:
+        simulated_trajectory = lead[j,0] - lead[j,2] - simulated_headway
+    curr_trajectory = simulated_trajectory
 
-    return new_traj
+    return curr_trajectory
 
 
 def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutput, minaoutput, maxvelocity, maxheadway, previous_sim_traj):
     #how many samples we should look back
-    statemem = 5
+    statemem = 25
 
     #obtain leadinfo for vehicle_id
     leadinfo, unused, unused = havsim.calibration.helper.makeleadfolinfo([vehicle_id], input_platooninfo, input_meas)
@@ -242,9 +243,6 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutp
     curmeas = meas[vehicle_id][t_n-t_nstar:T_nm1+1-t_nstar,[2,3,8]] #columns are position, speed, acceleration
     headway = lead[:,0] - curmeas[:,0] - lead[:,2] #headway is distance between front bumper to rear bumper of leader
 
-    vel_sub_v1 = create_deltat(lead)
-
-
 
     curr_trajectory = curmeas[0,0]
     simulated_trajectory_lst = [curr_trajectory]
@@ -254,17 +252,10 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutp
             continue
         xtest = []
         ytest = []
-
-        curx = create_input(statemem, j, vel_sub_v1, headway)
-
-
+        curx, cury = create_input(statemem, j, lead, headway, curmeas)
         xtest.append(curx)
-
-        new_traj = create_output(xtest, ytest, minoutput, maxoutput, maxvelocity, maxheadway, simulated_trajectory_lst, headway)
+        new_traj = create_output(xtest, ytest, minoutput, maxoutput, maxvelocity, maxheadway, simulated_trajectory_lst, headway, lead, j)
         simulated_trajectory_lst.append(new_traj)
-
-
-
     x = (simulated_trajectory_lst)
     x_hat = (meas[vehicle_id][t_n-t_nstar:T_nm1+1-t_nstar,2])
     error = (tf.sqrt(tf.losses.mean_squared_error(x, x_hat)))
@@ -385,7 +376,7 @@ m = test(test_ds,minoutput,maxoutput)
 m2 = test(train_ds, minoutput,maxoutput)
 print('before training rmse on test dataset is '+str(tf.cast(m,tf.float32))+' rmse on train dataset is '+str(m2))
 
-for epoch in range(6):
+for epoch in range(8):
     for x, yhat in train_ds:
         train_step(x,yhat,loss_fn, optimizer)
     m = test(test_ds,minoutput,maxoutput)
@@ -399,8 +390,6 @@ for epoch in range(6):
 total_error = 0
 total_count = 0
 for count, i in enumerate(meas.keys()):
-    if count > 450:
-        break
     if i == 0:
         continue
     if len(platooninfo[i][4]) != 1:
