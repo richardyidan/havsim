@@ -1370,12 +1370,12 @@ def organize_legends(plt):
             newHandles.append(handle)
     plt.legend(newHandles, newLabels)
 
-def plot_arrow_directions(x_coordinates, y_coordinates, color, arrowinterval=3, arrlen=1):
+def plot_arrow_directions(x_coordinates, y_coordinates, color, arrowinterval=15, arrlen=3):
     # Reverse the list so the arrows are pointing at the correct direction
     x_coordinates = list(reversed(x_coordinates))
     y_coordinates = list(reversed(y_coordinates))
     counter = 0
-    arroffset = 1 * math.pi / 32
+    arroffset = 2 * math.pi / 32
     for i in range(len(x_coordinates) - 1):
         dx = x_coordinates[i + 1] - x_coordinates[i]
         dy = y_coordinates[i + 1] - y_coordinates[i]
@@ -1383,13 +1383,24 @@ def plot_arrow_directions(x_coordinates, y_coordinates, color, arrowinterval=3, 
         counter = counter + (dy ** 2 + dx ** 2) ** .5  # keep track of length traveled
         if counter > arrowinterval:  # if its time to draw another arrow
             counter -= arrowinterval
-            theta = math.atan2(dy, dx)  # angle at which arrow will point
-            arr1dx = arrlen * math.cos(theta - arroffset)
-            arr2dx = arrlen * math.cos(theta + arroffset)
-            arr1dy = arrlen * math.sin(theta - arroffset)
-            arr2dy = arrlen * math.sin(theta + arroffset)
-            plt.plot([x_coordinates[i], x_coordinates[i] + arr1dx], [y_coordinates[i], y_coordinates[i] + arr1dy], 'k-', color=color)
-            plt.plot([x_coordinates[i], x_coordinates[i] + arr2dx], [y_coordinates[i], y_coordinates[i] + arr2dy], 'k-', color=color)
+#            theta = math.atan2(dy, dx)  # angle at which arrow will point
+#            curdx = arrlen*math.cos(theta)
+#            curdy = arrlen*math.sin(theta)
+            curdx = dx*arrlen/(dy ** 2 + dx ** 2) ** .5
+            curdy = dy*arrlen/(dy ** 2 + dx ** 2) ** .5
+            arr1dx = curdx*math.cos(arroffset) - curdy*math.sin(arroffset)
+            arr2dx = curdx*math.cos(arroffset) + curdy*math.sin(arroffset)
+            arr1dy = curdx*math.sin(arroffset) + curdy*math.cos(arroffset)
+            arr2dy = -curdx*math.sin(arroffset) + curdy*math.cos(arroffset)
+            
+            
+            
+#            arr1dx = arrlen * math.cos(theta - arroffset)
+#            arr2dx = arrlen * math.cos(theta + arroffset)
+#            arr1dy = arrlen * math.sin(theta - arroffset)
+#            arr2dy = arrlen * math.sin(theta + arroffset)
+            plt.plot([x_coordinates[i], x_coordinates[i] + arr1dx], [y_coordinates[i], y_coordinates[i] + 1/2*arr1dy], 'k-')
+            plt.plot([x_coordinates[i], x_coordinates[i] + arr2dx], [y_coordinates[i], y_coordinates[i] + 1/2*arr2dy], 'k-')
 
     return
 

@@ -50,14 +50,12 @@ platoonplot(meas, sim, platooninfo, platoon = testplatoon[0:2], colorcode = Fals
 
 
 #%% plotvhd and animatevhd\_list
-#plotvhd_v2(meas,sim,platooninfo,[967])
 #plotvhd_v2(meas,None,platooninfo,[928, 931, 967])
 
-#print(platooninfo[928.0])
 
-#ani = animatevhd_list(meas,None,platooninfo,testplatoon[1], show_meas=True, usestart = 2850,useend = 2950)
-#ani2 = animatevhd_list_v2(meas, None, platooninfo, testplatoon[1])
-animatevhd(meas, None, platooninfo, [928, 931, 967])
+#animatevhd(meas, None, platooninfo, [928, 931, 967])
+
+animatetraj(meas, platooninfo, platoon = testplatoon[0])
 
 #%%
 
