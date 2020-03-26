@@ -281,19 +281,39 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     a = {}
     lca = {}
     
+    for i in curstate.keys(): 
+        if auxinfo[i][1] is not None and auxinfo[auxinfo[i][1]][2] != auxinfo[i][2]:
+            print('hello!')
+    
     #get actions in latitudinal movement 
     for i in curstate.keys():
         a[i] = auxinfo[i][7](i, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, auxinfo[i][0][1]) #wrapper function for model call 
         
+    for i in curstate.keys(): 
+        if auxinfo[i][1] is not None and auxinfo[auxinfo[i][1]][2] != auxinfo[i][2]:
+            print('hello!')
+        
     #get actions in latitudinal movement (from LC model)
     for i in curstate.keys(): 
         std_LC(i, lca, a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt)
+        
+    for i in curstate.keys(): 
+        if auxinfo[i][1] is not None and auxinfo[auxinfo[i][1]][2] != auxinfo[i][2]:
+            print('hello!')
     
     #update current state 
     updatefun(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt) #updates curstate, auxinfo, roadinfo in place 
     
+    for i in curstate.keys(): 
+        if auxinfo[i][1] is not None and auxinfo[auxinfo[i][1]][2] != auxinfo[i][2]:
+            print('hello!')
+    
     #update inflow
     increment_inflow(curstate, auxinfo, roadinfo, timeind, dt) #adds vehicle with default parameters 
+    
+    for i in curstate.keys(): 
+        if auxinfo[i][1] is not None and auxinfo[auxinfo[i][1]][2] != auxinfo[i][2]:
+            print('hello!')
     
     return curstate, auxinfo, roadinfo
 
@@ -321,11 +341,13 @@ def std_CF(veh, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, relax):
             out = vehaux[6](vehaux[5], curstate[veh], curstate[vehaux[1]], dt) 
             
     if out[0] + dt*out[1] < 0: 
-        print('hello!')
+#        print('hello!') #believe bug is caused by negative headways 
+        pass
     
     if vehaux[1] is not None: 
         if auxinfo[vehaux[1]][2] != vehaux[2]: 
-            print('hello!')
+            print('hello!') #caused by anchor vehicles not being updated correctly 
+            pass
     return out 
     
 def get_headway(curstate, auxinfo, roadinfo, fol, lead):
@@ -954,8 +976,8 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             try: 
                 auxinfo[curaux[11][1]][20][0].remove(lfol)
             except: 
-                print('hello!')
-            
+#                print('hello!') #caused by very large negative speeds which are caused by negative headways which are caused by anchor vehicles being updated wrong 
+                pass
         if rfol == '' or type(rfol) == str:
             pass
         elif curstate[i][0] < curstate[rfol][0] and curaux[3] == auxinfo[rfol][3]: 
@@ -968,7 +990,8 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             try:
                 auxinfo[curaux[11][1]][20][2].remove(rfol)
             except: 
-                print('hello!')
+#                print('hello!')
+                pass
             
     #check if roads change
     dellist = []

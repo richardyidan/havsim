@@ -282,8 +282,8 @@ def noloss(*args):
 
 def dboundary(speed, veh, dt):
     acc = (speed - veh[1])/dt
-    if acc > 2:
-        acc = 2
-    elif acc < -5:
-        acc = -5
+    if acc > 3:
+        acc = 3
+    elif acc < -7:
+        acc = -7
     return [veh[1],acc]
