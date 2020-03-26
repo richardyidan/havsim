@@ -257,11 +257,57 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutp
 
         curx = create_input(statemem, j, vel_sub_v1, headway)
 
+<<<<<<< HEAD
 
         xtest.append(curx)
 
         new_traj = create_output(xtest, ytest, minoutput, maxoutput, maxvelocity, maxheadway, simulated_trajectory_lst, headway)
         simulated_trajectory_lst.append(new_traj)
+=======
+        curx = list(vehv)
+        curx.extend(list(hd))
+        xtest.append(curx)
+        #normalizing
+        xtest[0][:statemem] = xtest[0][:statemem]/maxvelocity
+        xtest[0][statemem:statemem*2] = xtest[0][statemem:statemem*2]/maxheadway
+        #vector to put into NN
+        xtest = np.asarray(xtest, np.float32)
+#        cury = [0]
+#        ytest.append(cury)
+#        ytest = (ytest + minoutput)/(maxoutput-minoutput)
+#        ytest = tf.convert_to_tensor(ytest,tf.float32)
+#        test_ds = tf.data.Dataset.from_tensor_slices(
+#                (xtest,ytest)).shuffle(100000).batch(32)
+#
+#
+#        output, predicted_acc = test1(test_ds,minoutput,maxoutput)
+        predicted_acc = model.call(xtest)
+        unormalized_val = (predicted_acc[0].numpy()[0][0]) * (maxoutput - minoutput) - minoutput
+        curr_speed = unormalized_val/0.1
+        new_traj = simulated_trajectory_lst[-1] + unormalized_val
+        simulated_trajectory_lst.append(new_traj)
+        simulated_headway = lead[j+1,0] - lead[j+1,2] - new_traj
+        #append speed
+        if j + 1 < len(curmeas):
+            headway[j+1] = simulated_headway
+
+
+
+
+        # simulated_trajectory = 0
+        # if j + 1 < len(curmeas):
+        #     if previous_sim_traj == None:
+        #         simulated_trajectory = lead[j+1,0] - lead[j+1,2] - simulated_headway
+        #     else:
+        #         simulated_trajectory = previous_sim_traj[j+1] - lead[j+1,2] - simulated_headway
+        #     headway[j+1] = simulated_headway
+        # else:
+        #     if previous_sim_traj == None:
+        #         simulated_trajectory = lead[j,0] - lead[j,2] - simulated_headway
+        #     else:
+        #         simulated_trajectory = previous_sim_traj[j] - lead[j,2] - simulated_headway
+
+>>>>>>> 2f8f6e2f6755f7738868acade23860f5370238bf
 
 
 
