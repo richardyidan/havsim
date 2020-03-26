@@ -30,7 +30,10 @@ def IDM_b3(p, veh, lead, *args,dt=.1):
     #IDM with bounded velocity for circular road
 
     outdx = veh[1]
-    outddx = p[3]*(1-(veh[1]/p[0])**4-((p[2]+veh[1]*p[1]+(veh[1]*(veh[1]-lead[1]))/(2*(p[3]*p[4])**(1/2)))/(veh[2]))**2)
+    try:
+        outddx = p[3]*(1-(veh[1]/p[0])**4-((p[2]+veh[1]*p[1]+(veh[1]*(veh[1]-lead[1]))/(2*(p[3]*p[4])**(1/2)))/(veh[2]))**2)
+    except: 
+        print('hello!')
     
     if veh[1]+dt*outddx < 0:
         outddx = -veh[1]/dt
@@ -42,7 +45,10 @@ def IDM_b3_b(p, veh, lead, *args,dt=.1):
     #IDM with bounded velocity and acceleration
 
     outdx = veh[1]
-    outddx = p[3]*(1-(veh[1]/p[0])**4-((p[2]+veh[1]*p[1]+(veh[1]*(veh[1]-lead[1]))/(2*(p[3]*p[4])**(1/2)))/(veh[2]))**2)
+    try:
+        outddx = p[3]*(1-(veh[1]/p[0])**4-((p[2]+veh[1]*p[1]+(veh[1]*(veh[1]-lead[1]))/(2*(p[3]*p[4])**(1/2)))/(veh[2]))**2)
+    except: 
+        print('hello!')
     
     #bounded acceleration in m/s/s units
     if outddx > 3:
@@ -52,6 +58,8 @@ def IDM_b3_b(p, veh, lead, *args,dt=.1):
     
     if veh[1]+dt*outddx < 0:
         outddx = -veh[1]/dt
+        
+    
     
     
     return [outdx, outddx]

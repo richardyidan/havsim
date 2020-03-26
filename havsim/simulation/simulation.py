@@ -6,7 +6,7 @@ houses the main code for running simulations
     
 """
 
-from havsim.simulation.models import dboundary, IDM_b3
+from havsim.simulation.models import dboundary, IDM_b3, IDM_b3_b
 import numpy as np 
 import math 
 
@@ -319,6 +319,13 @@ def std_CF(veh, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, relax):
             out = dboundary(dbc, curstate[veh], dt)
         else:  #standard CF call 
             out = vehaux[6](vehaux[5], curstate[veh], curstate[vehaux[1]], dt) 
+            
+    if out[0] + dt*out[1] < 0: 
+        print('hello!')
+    
+    if vehaux[1] is not None: 
+        if auxinfo[vehaux[1]][2] != vehaux[2]: 
+            print('hello!')
     return out 
     
 def get_headway(curstate, auxinfo, roadinfo, fol, lead):
@@ -759,7 +766,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
         
         #update vehicle 
         #update opposite side for veh
-        opsidefol = curaux[11][opside]
+        opsidefol = curaux[11][opside] 
         if opsidefol != '':
             auxinfo[opsidefol][20][lcside].remove(i) #old opposite side follower 
         curaux[11][opside] = fol 
@@ -779,6 +786,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
         curaux[16].append([lclead, timeind + 1])
         curaux[18][-1].append(timeind)
         curaux[18].append([lcsidelane, timeind+1])
+        curaux[2] = lcsidelane
         if lclead is not None: 
             auxinfo[lclead][11][1] = i
         #update for new left/right leaders
@@ -805,8 +813,8 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
                     minveh = j #minveh is the closest new lc side follower 
         curaux[20][lcside] = newset
         #update new lcside 
-        if lcsidelane == 0 or lcsidelane == roadinfo[road][0]: 
-            pass
+        if lcsidelane == 0 or lcsidelane == roadinfo[road][0]-1: 
+            curaux[11][lcside] = ''
         else: 
             if minveh is not None: 
                 curaux[11][lcside] = auxinfo[minveh][11][1]
@@ -943,19 +951,24 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             
             auxinfo[lfol][11][2] = i
             curaux[20][0].add(lfol)
-            auxinfo[curaux[11][1]][20][0].remove(lfol)
+            try: 
+                auxinfo[curaux[11][1]][20][0].remove(lfol)
+            except: 
+                print('hello!')
             
         if rfol == '' or type(rfol) == str:
             pass
         elif curstate[i][0] < curstate[rfol][0] and curaux[3] == auxinfo[rfol][3]: 
-            #left/right leaders dont seem to be updated for some reason
             curaux[11][2] = auxinfo[rfol][11][1]
             auxinfo[curaux[11][2]][20][0].add(i)
             auxinfo[rfol][20][0].remove(i)
             
             auxinfo[rfol][11][0] = i
             curaux[20][2].add(rfol)
-            auxinfo[curaux[11][1]][20][2].remove(rfol)
+            try:
+                auxinfo[curaux[11][1]][20][2].remove(rfol)
+            except: 
+                print('hello!')
             
     #check if roads change
     dellist = []
@@ -965,24 +978,24 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             newroad, newlane = roadinfo[curaux[3]][1][curaux[2]]
             if newroad == None: #vehicle reaches end - remove from simulation
                 #update follower's lead
-                lfol, fol, rfol = auxinfo[i][11][:]
+                lfol, fol, rfol = auxinfo[i][11][:] #getting key error? some things not being removed right? 
                 if lfol is not '': 
                     auxinfo[lfol][20][2].remove(i)
                 if rfol is not '':
                     auxinfo[rfol][20][0].remove(i)
                 auxinfo[fol][1] = None
                 #update memory
-                auxinfo[fol][16].append(timeind)
+                auxinfo[fol][16][-1].append(timeind)
                 auxinfo[fol][16].append([None,timeind+1])
-                curaux[17].append(timeind)
-                curaux[18].append(timeind)
+                curaux[17][-1].append(timeind)
+                curaux[18][-1].append(timeind)
                 dellist.append(i)
                 continue
 #            newroad, newlane = newroad[0], newroad[1]
             #update memory 
-            curaux[17].append(timeind)
+            curaux[17][-1].append(timeind)
             curaux[17].append([newroad, timeind+1])
-            curaux[18].append(timeind)
+            curaux[18][-1].append(timeind)
             curaux[18].append([newlane, timeind+1])
             #update states
             curstate[i][0] += -roadinfo[curaux[3]][2]
@@ -1103,7 +1116,7 @@ def leadfol_find(curstate, auxinfo, roadinfo, veh, guess):
         
             return guess, nextguess
         
-def increment_inflow(curstate, auxinfo, roadinfo, timeind, dt, defaultspeed = 10, chkhd = 15):
+def increment_inflow(curstate, auxinfo, roadinfo, timeind, dt, defaultspeed = 5, chkhd = 15):
     #hacky solution for now - refer to notes BC3- 1. 
     #defaultspeed and chkhd magic numbers 
     for i in roadinfo.keys(): 
@@ -1129,10 +1142,10 @@ def increment_inflow(curstate, auxinfo, roadinfo, timeind, dt, defaultspeed = 10
                     newind = list(curstate.keys())
                     newind = newind[-1]+1 if len(newind)>0 else 0
                     curp = [23, 1.2, 2, 1.1, 1.5]
-                    curLC = [2, .1, .2, .2, .2, .2]
+                    curLC = [-2, .1, .2, .2, .2, 0]
                     curp[0] += np.random.rand()*20-10
                     curstate[newind] = [0, defaultspeed, hd]
-                    auxinfo[newind] = [[None,False], lead, count, i, 3, curp, IDM_b3, std_CF, curLC, None, None, [None, None, None], 
+                    auxinfo[newind] = [[None,False], lead, count, i, 3, curp, IDM_b3_b, std_CF, curLC, None, None, [None, None, None], 
                             [], timeind+1, [], [], [], [], [], [], [set(), None, set()]]
                     
                     #update the followers of leader for [20]
@@ -1184,9 +1197,9 @@ def simulate_sn(curstate, auxinfo, roadinfo, modelinfo, timesteps = 1000, dt = .
         
         for i in curstate.keys(): 
             if i in sim.keys(): 
-                sim[i].append(curstate[i])
+                sim[i].append(curstate[i].copy())
             else: 
-                sim[i] = [curstate[i]]
+                sim[i] = [curstate[i].copy()]
     
     return sim, curstate, auxinfo, roadinfo, starttime + j+1
 
