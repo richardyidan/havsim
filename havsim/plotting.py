@@ -24,9 +24,9 @@ import matplotlib.transforms as mtransforms
 import palettable
 
 from .calibration import helper
-from .calibration.opt import r_constant
 from .calibration.helper import sequential, indtotimes
 from havsim.calibration.algs import makeplatoonlist, sortveh3
+from havsim.calibration.opt import r_constant
 
 
 def optimalvelocity(s, p):
@@ -657,6 +657,247 @@ def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C
 
     return
 
+#########################################
+def platoonplot_v2(meas, sim, platooninfo, platoon=[], newfig=True, clr=['C0', 'C1'],
+                fulltraj=True, lane=None, opacity=.4, colorcode=True, speed_limit=[], timerange=[None, None]):  # plot platoon in space-time
+    # CURRENT DOCUMENTATION 11/11
+    # meas - measurements in np array, rows are observations
+    # sim - simulation in same format as meas. can pass in None and only meas will be shown, or can pass in the data and they will be plotted together
+    # in different colors.
+    # platooninfo (platooninfo) - dictionary containing information on each vehicle ID
+    # platoon - default is [], in which case all keys of platooninfo are plotted. If passed in as a platoon (list of vehicle ID as [1:] so first entry not included)
+    # only those vehicles will be plotted.
+
+    # newfig = True - if True will create a new figure, otherwise it will use the current figure
+    # clr = 'C0', assuming Colors = False, clr will control what colors will be used. Default is ['C0','C1'] which are the default matplotlib colors
+    # this is used is sim is not None and colorcode = False
+    # fulltraj = True controls how much of each trajectory to plot
+
+    # lane = None - If passed in as a laneID, the parts of trajectories not in the lane ID given will be made opaque
+    # colorcode = True - if colorcode is True, sim must be None, and we will plot the trajectories
+    # colorcoded based on their speeds. It looks nice!
+    # speed_limit = [] - only used when colorcode is True, if empty we will find the minimum and maximum speeds
+    # and colorcode based on those speeds. Otherwise you can specify the min/max, and anything below/above
+    # those limits will be colorcoded according to the limits
+    # timerange = [None, None] - If fulltraj is True, this parameter is ingored
+    # Otherwise, if values are passed in, only plot the trajectories in the provided time range
+
+    # plots a platoon of vehicles in space-time plot.
+    # features - can click on vehicles to display their IDs. Can compare meas and sim when colorcode is False.
+    # can specify a lane, and make trajectories outside of that lane opaque.
+    # can colorcode trajectories based on their speeds to easily see shockwaves and other structures.
+
+    if sim is not None:
+        colorcode = False
+    
+    ind = 2
+    artist2veh = []
+
+    if platoon != []:
+        platooninfo = helper.platoononly(platooninfo, platoon)
+    followerlist = list(platooninfo.keys())  # list of vehicle ID
+    if lane is not None: 
+        for i in followerlist.copy(): 
+            if lane not in np.unique(meas[i][:,7]):
+                followerlist.remove(i)
+    if newfig:
+        fig = plt.figure()
+
+
+    counter = 0
+    mymin = 1e10
+    mymax = 0
+    for i in followerlist:
+        curmin = min(meas[i][:, 3])
+        curmax = max(meas[i][:, 3])
+        if mymin > curmin:
+            mymin = curmin
+        if mymax < curmax:
+            mymax = curmax
+
+    if not speed_limit:
+        speed_limit = [mymin, mymax]
+
+    for i in followerlist:  # iterate over each vehicle
+        veh = meas[i]        
+        veh = extract_relevant_data(veh, i, platooninfo, fulltraj, timerange)
+        
+        # If current vehicle's data is irrelavant to given time range, move on to the next one
+        if veh is None:
+            continue
+        
+        x = veh[:, 1]
+        y = veh[:, ind]
+        speed_list = veh[:, 3]
+
+        LCind = generate_LCind(veh, lane)
+
+        for j in range(len(LCind) - 1):
+            kwargs = {}
+            if veh[LCind[j], 7] != lane and lane is not None:
+                kwargs = {'linestyle': '--', 'alpha': opacity}  # dashed line .4 opacity (60% see through)
+                plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[0], **kwargs)
+                artist2veh.append(counter)
+            else:
+
+                X = x[LCind[j]:LCind[j + 1]]
+                Y = y[LCind[j]:LCind[j + 1]]
+                SPEED = speed_list[LCind[j]:LCind[j + 1]]
+                if colorcode:
+                    line = plotColorLines(X, Y, SPEED, speed_limit=speed_limit)
+
+                else:
+                    plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[0], picker=5, **kwargs)
+                    artist2veh.append(counter)
+
+        counter += 1
+
+
+    if sim is not None:
+        counter = 0
+        for i in followerlist:  # iterate over each vehicle
+            veh = sim[i]
+            veh = extract_relevant_data(veh, i, platooninfo, fulltraj, timerange)
+            
+            if veh is None:
+                continue
+            
+            x = veh[:, 1]
+            y = veh[:, ind]
+
+            LCind = generate_LCind(veh, lane)
+
+            for j in range(len(LCind) - 1):
+                kwargs = {}
+                if veh[LCind[j], 7] != lane and lane is not None:
+                    kwargs = {'linestyle': '--', 'alpha': .4}  # dashed line .4 opacity (60% see through)
+                plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[1], **kwargs)
+
+            counter += 1
+
+    find_artists = []
+    nartists = len(artist2veh)
+    
+    def on_pick(event):
+        nonlocal find_artists
+        ax = event.artist.axes
+        curind = ax.lines.index(event.artist)  # artist index
+
+        if event.mouseevent.button == 1:  # left click selects vehicle
+            # deselect old vehicle
+            for j in find_artists:
+                ax.lines[j].set_color('C0')
+                if sim is not None: 
+                    ax.lines[j+nartists].set_color('C1')
+
+            # select new vehicle
+            vehind = artist2veh[curind]  # convert from artist to vehicle index
+            find_artists = np.asarray(artist2veh)
+            find_artists = np.nonzero(find_artists == vehind)[0]  # all artist indices which are associated with vehicle
+
+            for j in find_artists:
+                ax.lines[j].set_color('C3')
+                if sim is not None:
+                    ax.lines[j+nartists].set_color('C3')
+            plt.title('Vehicle ID ' + str(list(followerlist)[vehind]))
+            plt.draw()
+        plt.draw()
+
+    # recolor the selected artist and all other artists associated with the vehicle ID so you can see what line you clicked on
+    # change the title to say what vehicle you selected.
+
+    fig.canvas.callbacks.connect('pick_event', on_pick)
+    axs = plt.gca()
+
+    plt.xlabel('time (frameID )')
+    plt.ylabel('space (ft)')
+
+    if colorcode:
+        fig.colorbar(line, ax=axs)
+
+    axs.autoscale(axis='x')
+    axs.autoscale(axis='y')
+
+    return
+
+def extract_relevant_data(veh, i, platooninfo, fulltraj, timerange):
+    #if fulltraj is True, plot between t_nstar - T_n; plot between t_n and T_nm1 otherwise
+    #trajectories additionally must be between timerange if possible
+    t_nstar, t_n, T_nm1, T_n = platooninfo[i][0:4]
+        
+    if fulltraj:  # entire trajectory including pre simulation and shifted end
+        start = t_nstar
+        end = T_n
+    else:  # only show trajectory which is simulated
+        start = t_n
+        end = T_nm1
+        
+    if timerange[0] is not None:
+        if timerange[0] <= end:
+            if start > timerange[0]:
+                pass
+            else:
+                start = timerange[0]
+        else:
+            start = None
+    
+    if timerange[1] is not None: 
+        if end < timerange[1]:
+            pass
+        else: 
+            end = timerange[1]
+    
+    if start is None: 
+        return None
+    return veh[start-t_nstar:end-t_nstar, :]
+
+
+def generate_LCind(veh, lane):
+    if lane is not None:
+        # LCind is a list of indices where the lane the vehicle is in changes. Note that it includes the first and last index.
+        LCind = np.diff(veh[:, 7])
+        LCind = np.nonzero(LCind)[0] + 1
+        LCind = list(LCind)
+        LCind.insert(0, 0)
+        LCind.append(len(veh[:, 7]))
+            
+    else: 
+        LCind = [0, len(veh[:,1])]
+        
+    return LCind
+
+def overlap(interval1, interval2):
+    #given two tuples of start - end times, computes overlap between them
+    #can pass None as either of values in interval2 to get better data 
+    outint = interval1.copy()
+    if interval2[0] is not None: 
+        if interval2[0] <= interval1[1]:
+            if interval2[0] > interval1[0]: 
+                outint[0] = interval2[0]
+        else:
+            return None
+    if interval2[1] is not None: 
+        if interval2[1] < interval1[1]: 
+            outint[1] = interval2[1]
+    
+    return outint
+
+def generate_changetimes(veh, col_index):
+    #returns list of indices [ind] (from 0 index of whatever is passed in) where
+    #veh[ind, col_index] is different from veh[ind-1, col_index]. Then to slice the different blocks, 
+    #you can use veh[ind[0]:ind[1], col_index] where blocks have the same value repeated. 
+    
+    #this is a generalization of generate_LCind
+    ind = np.diff(veh[:, col_index])
+    ind = np.nonzero(ind)[0] + 1
+    ind = list(ind)
+    ind.insert(0, 0)
+    ind.append(len(veh[:, col_index]))
+    
+    return ind
+#########################################
+
+
 
 # def calculateflows(meas, spacea, timea, agg):
 # 	q = [[] for i in spacea]
@@ -1036,91 +1277,207 @@ def plotvhd(meas, sim, platooninfo, my_id, show_sim=True, show_meas=True, effect
 
     return
 
+##################################
+def plotvhd_v2(meas, sim, platooninfo, vehicle_id, show_sim=True, show_meas=True, effective_headway=False, rp=None, h=.1,
+            datalen=9, end=None, delay=0, newfig=True):
+    # plot in the velocity headway plane.
+    # would like to make this so that you can pass in rinfo and it will automatically not connect the lines between before/after the lane changes so you don't get the annoying horizontal lines
+    # in the plot (which occur because of lane changing)
+        
+    ####plotting
+    if newfig:
+        plt.figure()
+    plt.xlabel('space headway (ft)')
+    plt.ylabel('speed (ft/s)')
+    plt.title('space-headway for vehicle ' + " ".join(list(map(str, (vehicle_id)))))
+    ax = plt.gca()
 
-def animatevhd(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, show_meas=True, effective_headway=False,
-               rp=None, h=.1, datalen=9, end=None, delay=0):
-    #plot a single vehicle in phase space (speed v headway)
-    # my_id - id of the vehicle to plot
-    # lentail = 20 - number of observations to show in the past
-    # show_sim  = True - whether or not to show sim
-    # show_meas = True - whether or not to show meas
-    # effective_headway = False - if True, computes the relaxation amounts using rp, and then uses the headway + relaxation amount to plot instead of just the headway
-    # rp = None - effective headway is true, rp is a float which is the parameter for the relaxation amount
-    # h = .1 - data discretization
-    # datalen = 9
-    # end = None - last time to show animation
-    # delay = 0 - gets starting time for newell model
+    if sim is None:
+        # If sim is None, plot meas for all vehicles in vehicle_id
+        for my_id in vehicle_id:
+            plot_one_vehicle(plt, ax, meas, sim, platooninfo, my_id, effective_headway, rp, h, datalen, end, delay)
+    else:
+        # If both meas and sim are provided,
+        # will plot both simulation and measurement data for the first vehicle in vehicle_id
+        if len(vehicle_id) > 1: 
+            print('plotting first vehicle '+str(vehicle_id[0])+' only')
+        plot_one_vehicle(plt, ax, meas, sim, platooninfo, vehicle_id[0], effective_headway, rp, h, datalen, end, delay)
 
+    organize_legends(plt)
+    return
+
+
+def plot_one_vehicle(plt, ax, meas, sim, platooninfo, my_id, effective_headway=False, rp=None, h=.1, datalen=9, end=None, delay=0):
+    if effective_headway:
+        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([my_id], platooninfo, meas)
+    else:
+        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([my_id], platooninfo, meas, relaxtype = 'none')
+    
     t_nstar, t_n, T_nm1, T_n = platooninfo[my_id][0:4]
+    
     if delay != 0:
         offset = math.ceil(delay / h)
         start = t_n + offset
     else:
         start = t_n
 
-    # animation in the velocity headway plane
-    if effective_headway:
-        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([ my_id], platooninfo, meas, relaxtype = 'both')
-    else:
-        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([ my_id], platooninfo, meas, relaxtype = 'both')
-
     if end == None:
         end = T_nm1
+            
     frames = [t_n, T_nm1]
-    relax, unused = r_constant(rinfo[0], frames, T_n, rp, False,
-                               h)  # get the relaxation amounts for the current vehicle; these depend on the parameter curp[-1] only.
+    relax, unused = r_constant(rinfo[0], frames, T_n, rp, False, h)  # get the relaxation amounts for the current vehicle; these depend on the parameter curp[-1] only.
+    meas_label = str(my_id)
 
+    headway = None
     if sim is not None:
-        lead = np.zeros((T_n + 1 - t_n, datalen))  # initialize the lead vehicle trajectory
-        for j in leadinfo[0]:
-            curleadid = j[0]  # current leader ID
-            leadt_nstar = int(sim[curleadid][0, 1])  # t_nstar for the current lead, put into int
-            lead[j[1] - t_n:j[2] + 1 - t_n, :] = sim[curleadid][j[1] - leadt_nstar:j[2] + 1 - leadt_nstar,
-                                                 :]  # get the lead trajectory from simulation
-        headway = lead[start - t_n:, 2] - sim[my_id][start - t_nstar:, 2] - lead[start - t_n:, 6] + relax[start - t_n:]
+        headway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, sim, my_id, relax)
+        sim_color = next(ax._get_lines.prop_cycler)['color']
+        meas_label = 'Measurements'
+        plot_one_vehicle_with_leader_change(plt, headway[:end + 1 - start], sim[my_id][start - t_nstar:end + 1 - t_nstar, 3], leadinfo, start, 'Simulation', sim_color)
+        
+    trueheadway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, meas, my_id, relax)
+    meas_color = next(ax._get_lines.prop_cycler)['color']
+    plot_one_vehicle_with_leader_change(plt, trueheadway[:end + 1 - start], meas[my_id][start - t_nstar:end + 1 - t_nstar, 3], leadinfo, start, meas_label, meas_color)
+    return
 
-    truelead = np.zeros((T_n + 1 - t_n, datalen))  # initialize the lead vehicle trajectory
-    for j in leadinfo[0]:
-        curleadid = j[0]  # current leader ID
-        leadt_nstar = int(meas[curleadid][0, 1])  # t_nstar for the current lead, put into int
-        truelead[j[1] - t_n:j[2] + 1 - t_n, :] = meas[curleadid][j[1] - leadt_nstar:j[2] + 1 - leadt_nstar,
-                                                 :]  # get the lead trajectory from simulation
-    trueheadway = truelead[start - t_n:, 2] - meas[my_id][start - t_nstar:, 2] - truelead[start - t_n:, 6] + relax[
-                                                                                                             start - t_n:]
-    ####plotting
-    fig = plt.figure()
-    plt.xlabel('space headway (ft)')
-    plt.ylabel('speed (ft/s)')
-    plt.title('space-headway for vehicle ' + str(my_id))
+def plot_one_vehicle_with_leader_change(plt, x_coordinates, y_coordinates, leadinfo, start, label, color):
+    # If there is at least a leader change,
+    # we want to separate data into multiple sets otherwise there will be horizontal lines that have no meanings
+    # x_coordinates and y_coordinates will have the same length,
+    # and x_coordinates[0] and y_coordinates[0] have the same time frame == start
+    temp_start = 0
+    leader_id = leadinfo[0][0][0]
 
-    ims = []
+    for index in range(0, len(x_coordinates)):
+        current_leader_id = find_current_leader(start + index, leadinfo[0])
+        if current_leader_id != leader_id:
+            # Detected a leader change, plot the previous set
+            leader_id = current_leader_id
+            plt.plot(x_coordinates[temp_start:index], y_coordinates[temp_start:index], label=label, color=color)
+            plot_arrow_directions(x_coordinates[temp_start:index], y_coordinates[temp_start:index], color)
+            temp_start = index
+    # Plot the very last set, if there is one
+    plt.plot(x_coordinates[temp_start:], y_coordinates[temp_start:], label=label, color=color)
+    plot_arrow_directions(x_coordinates[temp_start:], y_coordinates[temp_start:], color)
+    return
 
-    if show_sim and show_meas:
-        for i in range(len(headway) - lentail - (T_n - end)):
-            t_n = start
-            im = plt.plot(headway[i:i + lentail], sim[my_id][t_n - t_nstar + i:t_n - t_nstar + i + lentail, 3], 'C0',
-                          trueheadway[i:i + lentail], meas[my_id][t_n - t_nstar + i:t_n - t_nstar + i + lentail, 3],
-                          'C1', headway[i + lentail], sim[my_id][t_n - t_nstar + i + lentail, 3], 'ko',
-                          trueheadway[i + lentail], meas[my_id][t_n - t_nstar + i + lentail, 3], 'ko')
-            ims.append(im)
-    #        plt.legend(['Simulation','Measurements']) #for some reason this makes things very slow
+def organize_legends(plt):
+    handles, labels = plt.gca().get_legend_handles_labels()
+    newLabels, newHandles = [], []
+    for handle, label in zip(handles, labels):
+        if label not in newLabels:
+            newLabels.append(label)
+            newHandles.append(handle)
+    plt.legend(newHandles, newLabels)
 
-    elif show_sim:
-        for i in range(len(headway) - lentail - (T_n - end)):
-            t_n = start
-            im = plt.plot(headway[i:i + lentail], sim[my_id][t_n - t_nstar + i:t_n - t_nstar + i + lentail, 3], 'C0',
-                          headway[i + lentail], sim[my_id][t_n - t_nstar + i + lentail, 3], 'ko')
-            ims.append(im)
-    elif show_meas:
-        for i in range(len(trueheadway) - lentail - (T_n - end)):
-            t_n = start
-            im = plt.plot(trueheadway[i:i + lentail], meas[my_id][t_n - t_nstar + i:t_n - t_nstar + i + lentail, 3],
-                          'C0', trueheadway[i + lentail], meas[my_id][t_n - t_nstar + i + lentail, 3], 'ko')
-            ims.append(im)
+def plot_arrow_directions(x_coordinates, y_coordinates, color, arrowinterval=3, arrlen=1):
+    counter = 0
+    arroffset = 1 * math.pi / 32
+    for i in range(len(x_coordinates) - 1):
+        dx = x_coordinates[i + 1] - x_coordinates[i]
+        dy = y_coordinates[i + 1] - y_coordinates[i]
 
-    im_ani = animation.ArtistAnimation(fig, ims, interval=0)
+        counter = counter + (dy ** 2 + dx ** 2) ** .5  # keep track of length traveled
+        if counter > arrowinterval:  # if its time to draw another arrow
+            counter -= arrowinterval
+            theta = math.atan2(dy, dx)  # angle at which arrow will point
+            arr1dx = arrlen * math.cos(theta - arroffset)
+            arr2dx = arrlen * math.cos(theta + arroffset)
+            arr1dy = arrlen * math.sin(theta - arroffset)
+            arr2dy = arrlen * math.sin(theta + arroffset)
+            plt.plot([x_coordinates[i], x_coordinates[i] + arr1dx], [y_coordinates[i], y_coordinates[i] + arr1dy], 'k-', color=color)
+            plt.plot([x_coordinates[i], x_coordinates[i] + arr2dx], [y_coordinates[i], y_coordinates[i] + arr2dy], 'k-', color=color)
 
-    return im_ani
+    return
+
+##################################
+
+
+
+#def animatevhd(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, show_meas=True, effective_headway=False,
+#               rp=None, h=.1, datalen=9, end=None, delay=0):
+#    #plot a single vehicle in phase space (speed v headway)
+#    # my_id - id of the vehicle to plot
+#    # lentail = 20 - number of observations to show in the past
+#    # show_sim  = True - whether or not to show sim
+#    # show_meas = True - whether or not to show meas
+#    # effective_headway = False - if True, computes the relaxation amounts using rp, and then uses the headway + relaxation amount to plot instead of just the headway
+#    # rp = None - effective headway is true, rp is a float which is the parameter for the relaxation amount
+#    # h = .1 - data discretization
+#    # datalen = 9
+#    # end = None - last time to show animation
+#    # delay = 0 - gets starting time for newell model
+#
+#    t_nstar, t_n, T_nm1, T_n = platooninfo[my_id][0:4]
+#    if delay != 0:
+#        offset = math.ceil(delay / h)
+#        start = t_n + offset
+#    else:
+#        start = t_n
+#
+#    # animation in the velocity headway plane
+#    if effective_headway:
+#        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([ my_id], platooninfo, meas, relaxtype = 'both')
+#    else:
+#        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([ my_id], platooninfo, meas, relaxtype = 'both')
+#
+#    if end == None:
+#        end = T_nm1
+#    frames = [t_n, T_nm1]
+#    relax, unused = r_constant(rinfo[0], frames, T_n, rp, False,
+#                               h)  # get the relaxation amounts for the current vehicle; these depend on the parameter curp[-1] only.
+#
+#    if sim is not None:
+#        lead = np.zeros((T_n + 1 - t_n, datalen))  # initialize the lead vehicle trajectory
+#        for j in leadinfo[0]:
+#            curleadid = j[0]  # current leader ID
+#            leadt_nstar = int(sim[curleadid][0, 1])  # t_nstar for the current lead, put into int
+#            lead[j[1] - t_n:j[2] + 1 - t_n, :] = sim[curleadid][j[1] - leadt_nstar:j[2] + 1 - leadt_nstar,
+#                                                 :]  # get the lead trajectory from simulation
+#        headway = lead[start - t_n:, 2] - sim[my_id][start - t_nstar:, 2] - lead[start - t_n:, 6] + relax[start - t_n:]
+#
+#    truelead = np.zeros((T_n + 1 - t_n, datalen))  # initialize the lead vehicle trajectory
+#    for j in leadinfo[0]:
+#        curleadid = j[0]  # current leader ID
+#        leadt_nstar = int(meas[curleadid][0, 1])  # t_nstar for the current lead, put into int
+#        truelead[j[1] - t_n:j[2] + 1 - t_n, :] = meas[curleadid][j[1] - leadt_nstar:j[2] + 1 - leadt_nstar,
+#                                                 :]  # get the lead trajectory from simulation
+#    trueheadway = truelead[start - t_n:, 2] - meas[my_id][start - t_nstar:, 2] - truelead[start - t_n:, 6] + relax[
+#                                                                                                             start - t_n:]
+#    ####plotting
+#    fig = plt.figure()
+#    plt.xlabel('space headway (ft)')
+#    plt.ylabel('speed (ft/s)')
+#    plt.title('space-headway for vehicle ' + str(my_id))
+#
+#    ims = []
+#
+#    if show_sim and show_meas:
+#        for i in range(len(headway) - lentail - (T_n - end)):
+#            t_n = start
+#            im = plt.plot(headway[i:i + lentail], sim[my_id][t_n - t_nstar + i:t_n - t_nstar + i + lentail, 3], 'C0',
+#                          trueheadway[i:i + lentail], meas[my_id][t_n - t_nstar + i:t_n - t_nstar + i + lentail, 3],
+#                          'C1', headway[i + lentail], sim[my_id][t_n - t_nstar + i + lentail, 3], 'ko',
+#                          trueheadway[i + lentail], meas[my_id][t_n - t_nstar + i + lentail, 3], 'ko')
+#            ims.append(im)
+#    #        plt.legend(['Simulation','Measurements']) #for some reason this makes things very slow
+#
+#    elif show_sim:
+#        for i in range(len(headway) - lentail - (T_n - end)):
+#            t_n = start
+#            im = plt.plot(headway[i:i + lentail], sim[my_id][t_n - t_nstar + i:t_n - t_nstar + i + lentail, 3], 'C0',
+#                          headway[i + lentail], sim[my_id][t_n - t_nstar + i + lentail, 3], 'ko')
+#            ims.append(im)
+#    elif show_meas:
+#        for i in range(len(trueheadway) - lentail - (T_n - end)):
+#            t_n = start
+#            im = plt.plot(trueheadway[i:i + lentail], meas[my_id][t_n - t_nstar + i:t_n - t_nstar + i + lentail, 3],
+#                          'C0', trueheadway[i + lentail], meas[my_id][t_n - t_nstar + i + lentail, 3], 'ko')
+#            ims.append(im)
+#
+#    im_ani = animation.ArtistAnimation(fig, ims, interval=0)
+#
+#    return im_ani
 
 
 def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, show_meas=True, effective_headway=False,
@@ -1161,6 +1518,9 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
         else:
             leadinfo, folinfo, rinfo = helper.makeleadfolinfo([ id], platooninfo, meas, relaxtype = 'none')
 
+        print(id)
+        print(leadinfo)
+        
         if useend is None:
             end = T_nm1
         else:
@@ -1168,7 +1528,9 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
         frames = [t_n, T_nm1]
         relax, unused = r_constant(rinfo[0], frames, T_n, rp, False,
                                    h)  # get the relaxation amounts for the current vehicle; these depend on the parameter curp[-1] only.
-
+        x_lim = 0.0
+        y_lim = 0.0
+        
         truelead = np.zeros((T_n + 1 - t_n, datalen))  # initialize the lead vehicle trajectory
         if sim is not None:
             lead = np.zeros((T_n + 1 - t_n, datalen))  # initialize the lead vehicle trajectory
@@ -1185,6 +1547,9 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
                                                          :]  # get the lead trajectory from simulation
             trueheadway = truelead[start - t_n:, 2] - meas[id][start - t_nstar:, 2] - truelead[start - t_n:, 6] + relax[
                                                                                                                   start - t_n:]
+            
+            
+            
             index = start - t_n
             for i in range(len(headway) - lentail - (T_n - end)):
                 line1 = (headway[i:i + lentail], sim[id][t_n - t_nstar + i:t_n - t_nstar + i + lentail, 3])
@@ -1204,11 +1569,17 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
                                                          :]  # get the lead trajectory from simulation
             trueheadway = truelead[start - t_n:, 2] - meas[id][start - t_nstar:, 2] - truelead[start - t_n:, 6] + relax[
                                                                                                                   start - t_n:]
+                
+            
+            
+            
             index = start - t_n
             for i in range(len(trueheadway) - lentail - (T_n - end)):
                 # line1 = (headway[i:i + lentail], sim[id][t_n - t_nstar + i:t_n - t_nstar + i + lentail, 3])
                 line1 = None
                 line2 = (trueheadway[i:i + lentail], meas[id][t_n - t_nstar + i:t_n - t_nstar + i + lentail, 3])
+                x_lim = max(x_lim, max(trueheadway[i:i + lentail]))
+                y_lim = max(y_lim, max(meas[id][t_n - t_nstar + i:t_n - t_nstar + i + lentail, 3]))
                 # line3 = (headway[i + lentail], sim[id][t_n - t_nstar + i + lentail, 3])
                 line3 = None
                 line4 = (trueheadway[i + lentail], meas[id][t_n - t_nstar + i + lentail, 3])
@@ -1225,6 +1596,8 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
                                                      :]  # get the lead trajectory from simulation
         trueheadway = truelead[start - t_n:, 2] - meas[id][start - t_nstar:, 2] - truelead[start - t_n:, 6] + relax[
                                                                                                               start - t_n:]
+        #print(id, x_lim)
+        #print(id, y_lim)
     ####plotting
 
     ims = []
@@ -1257,6 +1630,8 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
     # line2, = ax.plot(trueheadway[i:i + lentail], meas[id][t_n - t_nstar + i:t_n - t_nstar + i + lentail, 3], 'C1')
     # line3, = ax.plot(headway[i + lentail],sim[id][t_n - t_nstar + i + lentail, 3], 'ko' )
     # line4, = ax.plot(trueheadway[i + lentail], meas[id][t_n - t_nstar + i + lentail, 3], 'ko')
+    
+    # x, y limits has to be set after the maximum headway encountered
     ax.set_xlim(0, 80)
     ax.set_ylim(0, 60)
     sortedKeys = list(sorted(line_data.keys()))
@@ -1346,6 +1721,395 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
     plt.show()
     return im_ani
 
+def animatevhd(meas, sim, platooninfo, platoon, lentail=20, timerange=[None, None], lane = None, opacity = .2, rp = None, h=.1, delay=0):
+    # plot multiple vehicles in phase space (speed v headway)
+    #meas, sim - data in key = ID, value = numpy array format, pass sim = None to plot one set of data 
+    #platooninfo
+    # platoon - list of vehicles to plot
+    # lentail = 20 - number of observations to show in the past
+    # timerange = [usestart, useend]
+    # rp = None - can add relaxation to the headway, if you pass a number this is used as relaxation amount 
+    # h = .1 - data discretization, deprecated 
+    # delay = 0 - gets starting time for newell model, deprecated
+    #lane = None - can specify a lane to make trajectories opaque if not in desired lane 
+    #opacity = .2 - controls opacity (set = 0 to not show, if 1 its equivalent to lane = None)
+    
+    #I think this function has good general design for how a animation for traffic simulation should be structured in python
+    #each vehicle has a dictionary, which contains relevant plotting data and any extra information (keyword args, start/end times, etc)
+    #create a sorted list with tuples of the (times, dictionary, 'add' or 'remove') which represent when artists (vehicles)
+    #will enter or leave animation. THen in animation, in each frame check if there are any artists to add or remove; 
+    #if you add a vehicle, create an artist (or potentially multiple artists) and add its reference to the dictionary
+    #keep a list of all active dictionaries (vehicles) during animation - update artists so you can use blitting and 
+    #dont have to keep redrawing - its faster and animation is smoother this way. 
+    fig = plt.figure()
+    plt.xlabel('space headway (ft)')
+    plt.ylabel('speed (ft/s)')
+    plt.title('space-headway for vehicle ' + " ".join(list(map(str, (platoon)))))
+    plotsim = False if sim is None else True
+    xmin, xmax, ymin, ymax = math.inf, -math.inf, math.inf, -math.inf
+    
+    startendtimelist = []
+    
+    for veh in platoon: 
+        t_nstar, t_n, T_nm1, T_n = platooninfo[veh][:4]
+        #heuristic will speed up plotting if a large dataset is passed in
+        if timerange[0] is not None: 
+            if T_nm1 < timerange[0]: 
+                continue
+        if timerange[1] is not None: 
+            if t_n > timerange[1]:
+                continue
+            
+        #compute headway, speed between t_n and T_nm1
+        headway = compute_headway2(veh, meas, platooninfo, rp, h)
+        speed = meas[veh][t_n-t_nstar:T_nm1-t_nstar+1,3]
+        if plotsim: 
+            simheadway = compute_headway2(veh, sim, platooninfo, rp, h)
+            simspeed = sim[veh][t_n-t_nstar:T_nm1-t_nstar,3]
+        
+        curxmin, curxmax, curymin, curymax = min(headway), max(headway), min(speed), max(speed)
+        xmin, xmax, ymin, ymax = min([xmin, curxmin]), max([xmax, curxmax]), min([ymin, curymin]), max([ymax, curymax])
+    
+        #split up headway/speed into sections based on having a continuous leader
+        #assume that sim and measurements have same leaders in this code 
+        ind = generate_changetimes(meas[veh][t_n-t_nstar:T_nm1-t_nstar+1,:], 4) 
+        for i in range(len(ind)-1):
+            #each section has the relevant speed, headway, start and end times, and opaque. 
+            newsection = {}
+            
+            #start and end times are in real time (not slices indexing).
+            start = ind[i] + t_n
+            end = ind[i+1]-1 + t_n
+            curlane = meas[veh][start - t_nstar, 7]
+            times = overlap([start, end], timerange) #times of section to use, in real time 
+            if times == None: 
+                continue
+            newsection['hd'] = headway[times[0] - t_n:times[1]+1-t_n ]
+            newsection['spd'] = speed[times[0] - t_n:times[1]+1-t_n ]
+            newsection['start'] = times[0]
+            newsection['end'] = times[1]
+            kwargs = {'color': 'C0'}
+            if lane != None and curlane != lane: 
+                kwargs['alpha'] = opacity
+            newsection['kwargs'] = kwargs
+            newsection['veh'] = str(int(veh))
+            
+            if plotsim: 
+                #literally the same thing repeated 
+                newsimsection = {}
+                newsimsection['hd'] = simheadway[times[0] - t_n:times[1]+1-t_n ]
+                newsimsection['spd'] = simspeed[times[0] - t_n:times[1]+1-t_n ]
+                newsimsection['start'] = times[0]
+                newsimsection['end'] = times[1]
+                kwargs = {'color': 'C1'}
+                if lane != None and curlane != lane: 
+                    kwargs['alpha'] = opacity
+                newsimsection['kwargs'] = kwargs
+                newsimsection['veh'] = str(int(veh))
+                
+            startendtimelist.append((times[0], newsection, 'add'))
+            startendtimelist.append((times[1]+lentail+1, newsection, 'remove'))
+            if plotsim:
+                startendtimelist.append((times[0], newsimsection, 'add'))
+                startendtimelist.append((times[1]+lentail+1, newsimsection, 'remove'))
+           
+    #sort timelist
+    startendtimelist.sort(key = lambda x: x[0]) #sort according to times
+    ax = plt.gca()
+    ax.set_xlim(xmin - 5, xmax + 5)
+    ax.set_ylim(ymin - 5, ymax + 5)
+    seclist = []
+    times = [startendtimelist[0][0], startendtimelist[-1][0]]
+    frames = list(range(times[0], times[1]+1))
+    usetimelist = None
+    
+    def init():
+        nonlocal usetimelist
+        nonlocal seclist
+        artists = []
+        for sec in seclist: 
+            sec['traj'].remove()
+            sec['label'].remove()
+            artists.append(sec['traj'])
+            artists.append(sec['label'])
+        seclist = []
+        usetimelist = startendtimelist.copy()
+        return artists
+    def anifunc(frame):
+        nonlocal seclist
+        nonlocal usetimelist
+        artists = []
+        #add or remove vehicles as needed
+        while len(usetimelist) > 0: 
+            nexttime = usetimelist[0][0]
+            if nexttime == frame: 
+                time, sec, task = usetimelist.pop(0)
+                if task == 'add':
+                    #create artists and keep reference to it in the dictionary - keep dictionary in seclist - all active trajectories
+                    traj = ax.plot([xmin,xmax],[ymin,ymax], **sec['kwargs'])[0]
+                    label = ax.annotate(sec['veh'], (xmin,ymin), fontsize = 7)
+                    sec['traj']  = traj
+                    sec['label'] = label
+                    seclist.append(sec)
+                elif task == 'remove': 
+                    #remove artists
+                    seclist.remove(sec)
+                    sec['traj'].remove()
+                    sec['label'].remove()
+                    
+                    artists.append(sec['traj'])
+                    artists.append(sec['label'])
+            else:
+                break
+        
+        for sec in seclist: 
+            #do updating here
+            animatevhdhelper(sec, frame, lentail)
+            artists.append(sec['traj'])
+            artists.append(sec['label'])
+            
+            
+        return artists
+    
+    ani = animation.FuncAnimation(fig, anifunc, init_func = init, frames = frames, blit = True, interval = 10)
+    
+    return ani
+            
+
+def animatevhdhelper(sec, time, lentail):      
+    starttime = sec['start']
+    endtime = sec['end']
+    if time > endtime:
+        end = endtime
+    else: 
+        end = time
+    
+    if time < starttime + lentail+1:
+        start = starttime
+    else: 
+        start = time - lentail
+    
+    sec['traj'].set_data(sec['hd'][start - starttime: end - starttime+1], sec['spd'][start - starttime:end - starttime+1])
+    sec['label'].set_position((sec['hd'][end - starttime], sec['spd'][end - starttime]))
+    return
+
+###########################
+def animatevhd_list_v2(meas, sim, platooninfo, my_id, lentail=20, h=.1, datalen=9, timerange=[None, None], delay=0):
+    # plot multiple vehicles in phase space (speed v headway)
+    # my_id - id of the vehicle to plot
+    # lentail = 20 number of observations to show in the past
+    # h = .1 - data discretization
+    # datalen = 9
+    # timerange = [usestart, useend]
+    # delay = 0 - gets starting time for newell model
+    fig = plt.figure()
+    plt.xlabel('space headway (ft)')
+    plt.ylabel('speed (ft/s)')
+    plt.title('space-headway for vehicle ' + " ".join(list(map(str, (my_id)))))
+    line_data = {}
+    id2Line = {}
+    
+    # If sim is None, only plot one set of data
+    plotOne = False
+    if sim is None:
+        plotOne = True
+        
+    x_min_lim = 1e10
+    y_min_lim = 1e10
+    x_max_lim = 0
+    y_max_lim = 0
+    
+    # 0: tnstar, 1: tn, 2: t
+    for veh_id in my_id:
+
+        t_nstar, t_n, T_nm1, T_n = platooninfo[veh_id][0:4]
+        
+        # Compute and validate start and end time
+        start, end = compute_validate_time(timerange, t_n, T_nm1, h=.1, delay=0)
+        
+        # animation in the velocity headway plane
+        leadinfo, folinfo, rinfo = helper.makeleadfolinfo([veh_id], platooninfo, meas, relaxtype = 'none')
+                
+        frames = [t_n, T_nm1]
+        relax, unused = r_constant(rinfo[0], frames, T_n, None, False, h)  # get the relaxation amounts for the current vehicle; these depend on the parameter curp[-1] only.
+
+        trueheadway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, meas, veh_id, relax)
+#        index = start - t_n
+        if not plotOne: 
+            headway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, sim, veh_id, relax)
+        
+        for i in range(len(trueheadway) - lentail - (T_n - end)):
+            if plotOne:
+                sim_line = None
+                sim_label = None
+            else:
+                sim_line, sim_label, sim_x_min, sim_y_min, sim_x_max, sim_y_max = compute_line_data(headway, i, lentail, sim, veh_id, t_n - t_nstar)
+                x_min_lim = min(x_min_lim, sim_x_min)
+                y_min_lim = min(y_min_lim, sim_y_min)
+                x_max_lim = max(x_max_lim, sim_x_max)
+                y_max_lim = max(y_max_lim, sim_y_max)
+            
+            meas_line, meas_label, meas_x_min, meas_y_min, meas_x_max, meas_y_max = compute_line_data(trueheadway, i, lentail, meas, veh_id, t_n - t_nstar)
+            x_min_lim = min(x_min_lim, meas_x_min)
+            y_min_lim = min(y_min_lim, meas_y_min)
+            x_max_lim = max(x_max_lim, meas_x_max)
+            y_max_lim = max(y_max_lim, meas_y_max)
+            
+#            if i + index in line_data.keys():
+#                line_data[i + index].append((sim_line, meas_line, sim_label, meas_label, veh_id))
+#            else:
+#                line_data[i + index] = [(sim_line, meas_line, sim_label, meas_label, veh_id)]
+
+            if i + start in line_data.keys():
+                line_data[i + start].append((sim_line, meas_line, sim_label, meas_label, veh_id))
+            else:
+                line_data[i + start] = [(sim_line, meas_line, sim_label, meas_label, veh_id)]
+    
+    ####plotting
+
+    ax = plt.gca()    
+    ax.set_xlim(x_min_lim - 10, x_max_lim + 10)
+    ax.set_ylim(y_min_lim - 10, y_max_lim + 10)
+    sortedKeys = list(sorted(line_data.keys()))
+    curLines = []
+
+    def init():
+        # Clean up, takes in effect when the animation starts to repeat
+        for veh_id in id2Line:
+            sim_line, meas_line, sim_annotation, meas_annotation, vehicle_id = id2Line[veh_id]
+            if not plotOne:
+                sim_line.set_data([],[])
+                sim_annotation.set_text("")
+            meas_line.set_data([],[])
+            meas_annotation.set_text("")
+            curLines.remove(vehicle_id)
+            del id2Line[vehicle_id]
+        return
+    
+    def aniFunc(frame):
+        allLines = line_data[sortedKeys[frame]]
+
+        for line in allLines:
+            veh_id = line[4]
+            # Check if veh_id has already been plotted in the last frame
+            if veh_id in curLines:
+                # If yes, fetch existing lines and annotations and modify
+                sim_line, meas_line, sim_annotation, meas_annotation, vehicle_id = id2Line[veh_id]
+
+                # In order to remove horizontal lines when the leader changes,
+                # need to detect leader change here and separate data into two groups
+                # Need to create new line and annotation for the new group
+                # We'll call a function that processes (line[0][0], line[0][1]) and (line[1][0], line[1][1])
+                # which returns a list of xy-coordinates
+                # The size of the list determines how many groups of data it got separated
+                # Essentially, if the list size > 1, there is a leader change
+
+                if not plotOne:
+                    sim_line.set_data(line[0][0], line[0][1])
+                    sim_annotation.set_position((line[2][0], line[2][1]))
+
+                meas_line.set_data(line[1][0], line[1][1])
+                meas_annotation.set_position((line[3][0], line[3][1]))
+            else:
+                # If no, plot new lines and annotations
+                if plotOne:
+                    sim_line = None
+                    sim_annotation = None
+                else:
+                    sim_line, = ax.plot(line[0][0], line[1][1], 'C1')
+                    sim_annotation = ax.annotate(str(math.floor(veh_id)), (line[2][0], line[2][1]), fontsize=7)
+                
+                meas_line, = ax.plot(line[1][0], line[1][1], 'C0')
+                meas_annotation = ax.annotate(str(math.floor(veh_id)), (line[3][0], line[3][1]), fontsize=7)
+                
+                # Save lines and annotations
+                id2Line[veh_id] = (sim_line, meas_line, sim_annotation, meas_annotation, veh_id)
+                curLines.append(veh_id)
+        return
+
+    im_ani = animation.FuncAnimation(fig, aniFunc, init_func=init, frames=len(sortedKeys), interval=10)
+    plt.show()
+    return im_ani
+
+def find_current_leader(current_frame, leadinfo):
+    # leadinfo is already only about one vehicle id
+    # leadinfo is of the form [[leader, start_frame, end_frame], [new_leader, end_frame+1, another_end_frame]]
+    leader_id = leadinfo[0][0]
+    for k in range(len(leadinfo)):
+        if leadinfo[k][1] <= current_frame and current_frame <= leadinfo[k][2]:
+            leader_id = leadinfo[k][0]
+    # After validation of start and end frame, this function is guaranteed to return a valid result
+    return leader_id
+
+def compute_validate_time(timerange, t_n, T_nm1, h=.1, delay=0):
+    # start time validation
+    # If passed in as None, or any value outside [t_n, T_nm1], defaults to t_n
+    if timerange[0] is None or timerange[0] < t_n or timerange[0] >= T_nm1:
+        start = t_n
+        if delay != 0:
+            offset = math.ceil(delay / h)
+            start = t_n + offset
+    else:
+        start = timerange[0]
+        
+    # end time validation
+    # If passed in as None, or any value outside [t_n, T_nm1], or smaller than timerange[0], default to T_nm1
+    if timerange[1] is None or timerange[1] < timerange[0] or timerange[1] > T_nm1:
+        end = T_nm1
+    else:
+        end = timerange[1]
+    return start, end
+
+def compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, dataset, veh_id, relax):
+    lead = np.zeros((T_n + 1 - t_n, datalen))  # initialize the lead vehicle trajectory
+    for j in leadinfo[0]:
+        curleadid = j[0]  # current leader ID
+        leadt_nstar = int(dataset[curleadid][0, 1])  # t_nstar for the current lead, put into int
+        lead[j[1] - t_n:j[2] + 1 - t_n, :] = dataset[curleadid][j[1] - leadt_nstar:j[2] + 1 - leadt_nstar,:]  # get the lead trajectory from simulation
+    headway = lead[start - t_n:, 2] - dataset[veh_id][start - t_nstar:, 2] - lead[start - t_n:, 6] + relax[start - t_n:]
+    return headway
+
+def compute_headway2(veh, data, platooninfo, rp, h =.1):
+    #compute headways from data and platooninfo, possibly adding relaxation if desired
+    
+    relaxtype = 'both' if rp is not None else 'none'
+    leadinfo, unused, rinfo = helper.makeleadfolinfo([veh], platooninfo, data, relaxtype = relaxtype)
+    t_nstar, t_n, T_nm1, T_n = platooninfo[veh][:4]
+    relax, unused = r_constant(rinfo[0], [t_n, T_nm1], T_n, rp, False, h)
+    
+    lead = np.zeros((T_nm1 + 1 - t_n, 9))  # initialize the lead vehicle trajectory
+    for j in leadinfo[0]:
+        curleadid = j[0]  # current leader ID
+        leadt_nstar = int(data[curleadid][0, 1])  # t_nstar for the current lead, put into int
+        lead[j[1] - t_n:j[2] + 1 - t_n, :] = data[curleadid][j[1] - leadt_nstar:j[2] + 1 - leadt_nstar,:]  # get the lead trajectory from simulation
+    headway = lead[:, 2] - data[veh][t_n - t_nstar:T_nm1 - t_nstar+1, 2] - lead[:, 6] + relax[:T_nm1+1-t_n]
+    
+    return headway 
+    
+    
+    
+    
+
+def compute_line_data(headway, i, lentail, dataset, veh_id, time):
+    trajectory = (headway[i:i + lentail], dataset[veh_id][time + i:time + i + lentail, 3])
+    label = (headway[i + lentail], dataset[veh_id][time + i + lentail, 3])
+    
+    # Compute x_min, y_min, x_max and y_max for the given data and return
+    if lentail == 0:
+        x_min = 0
+        y_min = 0
+        x_max = 0
+        y_max = 0
+    else:
+        x_min = min(headway[i:i + lentail])
+        x_max = max(headway[i:i + lentail])
+        y_min = min(dataset[veh_id][time + i:time + i + lentail, 3])
+        y_max = max(dataset[veh_id][time + i:time + i + lentail, 3])
+    
+    return trajectory, label, x_min, y_min, x_max, y_max
+
+###########################
+
 
 def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsim=True, datalen=9, speed_limit = [] ):
     #plots vehicles platoon using data meas. 
@@ -1399,7 +2163,7 @@ def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsi
     # cax = divider.append_axes("right", size="25%", pad=0.2)
 
     fig.colorbar(scatter_pts, cmap=cm.get_cmap('RdYlBu'), norm=norm, shrink=0.7)
-
+    #would be better if you used blitting and didnt always redraw the annotations 
     def aniFunc(frame):
         ax = plt.gca()
         for i in annotionList:
