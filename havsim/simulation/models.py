@@ -36,7 +36,14 @@ def mobil(veh, newlfolhd, newlhf, newrfolhd, newrhd, newfolhd, timeind, dt,
     else: 
         cura = veh.acc 
     
-    fola, newfola = mobil_helper()
+#    lfola, newlfola = mobil_helper()
+#    userelax = userelax_new and veh.in_relax
+#    newla = veh.call_cf(llead, llane, timeind, dt, userelax)
+#    
+#    rfola, newrfola = mobil_helper()
+#    userelax = userelax_new and veh.in_relax
+    
+    
     
 def mobil_helper(fol, lead, veh, timeind, dt, userelax_cur, userelax_new):
     #fol is assumed to follower lead in the current configuration, in potential 

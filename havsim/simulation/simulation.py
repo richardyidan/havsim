@@ -1273,6 +1273,9 @@ def call_lc_helper(lfol, veh, lcsidelane):
     llead, llane = lfol.lead, lfol.lane
     if llead == None: 
         newlhd = lcsidelane.dist_to_end(veh)
+        #note in this case lfol will not have its headway updated - 
+        #for mobil this is OK but in general may need an extra headway calculation here 
+        #e.g. lfol.hd = llane.dist_to_end(lfol)
     else: 
         newlhd = lcsidelane.get_headway(veh, llead)
     if lfol.cf_parameters == None:
@@ -1293,7 +1296,7 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
     #call signature for lcmodel is pretty long but I think it's OK
     
     def call_lc(self, chk_lc, timeind, dt):
-        lfol, rfol = self.lfol, self.rfol
+        lfol, rfol, lane = self.lane = self.lfol, self.rfol, self.lane
         if lfol== '' and rfol == '':
             return 
         
@@ -1301,12 +1304,12 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
             return 
         
         if lfol != '': 
-            llead, llane, newlfolhd, newlhd = call_lc_helper(lfol, self, self.lane.connect_left)
+            llead, llane, newlfolhd, newlhd = call_lc_helper(lfol, self, lane.connect_left)
         else:
             llead = llane = newlfolhd = newlhd = None
         
         if rfol != '': 
-            rlead, rlane, newrfolhd, newrhd = call_lc_helper(rfol, self, self.lane.connect_right)
+            rlead, rlane, newrfolhd, newrhd = call_lc_helper(rfol, self, lane.connect_right)
         else:
             rlead = rlane = newrfolhd = newrhd = None
             
@@ -1317,7 +1320,7 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
             elif self.lead == None: 
                 newfolhd = fol.lane.dist_to_end(fol)
             else: 
-                newfolhd = fol.lane.get_headway(fol, self.lead)
+                newfolhd = fol.lane.get_headway(fol, lead)
                 
             #do model call now 
             lcmodel(self, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt, 
