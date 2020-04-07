@@ -372,6 +372,7 @@ def plotColorLines(X, Y, SPEED, speed_limit):
 
 def plotformat(sim, auxinfo, roadinfo, starttimeind = 0, endtimeind = 3000, density = 2, indlist = [], specialind = 21):
     #get output from simulation into a format we can plot using plotting functions
+    #output format is pretty inefficient in terms of memory usage - all plotting functions use this format though 
     
     #starttimeind = first time to be plotted 
     #endtimeind = last time to be plotted 

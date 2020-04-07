@@ -4,14 +4,7 @@
 
 houses all the different models for simulation
 
-for models, we want to create some sort of way to modularly build models. For example,
-circular/straight roads have different headway calculations, or optionally add or exclude things like 
-bounds on velocity/acceleration, or extra regimes, or have something like 
-random noise added or not. 
-
-Something like a wrapper function which can accept different parts and combine them into one single thing
-
-models should have the following call signature: 
+models used to have the following call signature: 
     veh - list of state of vehicle model is being applied to
     lead - list of state for vehicle's leader
     p - parameters
@@ -24,16 +17,53 @@ models should have the following call signature:
 
 import numpy as np 
 import scipy.optimize as sc 
+import math 
+
+def IDM(p, state):
+    #state = headway, velocity, lead velocity
+    #p = parameters
+    #returns acceleration 
+    return p[3]*(1-(state[1]/p[0])**4-((p[2]+state[1]*p[1]+(state[1]*(state[1]-state[2]))/(2*(p[3]*p[4])**(1/2)))/(state[0]))**2)
+
+
+def mobil(veh, newlfolhd, newlhf, newrfolhd, newrhd, newfolhd, timeind, dt,
+          lfol, llead, llane, rfol, rlead, rlane, fol, lead, userelax_cur = True, userelax_new = False):
+    
+    lincentive = rincentive = -math.inf
+    
+    if not userelax_cur and veh.in_relax: 
+        cura = veh.call_cf(lead, veh.lane, timeind, dt, False)
+    else: 
+        cura = veh.acc 
+    
+    fola, newfola = mobil_helper()
+    
+def mobil_helper(fol, lead, veh, timeind, dt, userelax_cur, userelax_new):
+    #fol is assumed to follower lead in the current configuration, in potential 
+    #new configuration it would follow veh 
+    if fol.cf_parameters == None: 
+        fola = 0
+        newfola = 0
+    else: 
+        if not userelax_cur and fol.in_relax:
+            fola = fol.call_cf(veh, fol.lane, timeind, dt, False)
+        else: 
+            fola = fol.acc
+        userelax = userelax_new and fol.in_relax
+        newfola = fol.call_cf(lead, fol.lane, timeind, dt, userelax)
+        
+    return  fola, newfola
+
+#####################stuff for older code 
 
 def IDM_b3(p, veh, lead, *args,dt=.1):
     #state is defined as [x,v,s] triples
     #IDM with bounded velocity for circular road
 
     outdx = veh[1]
-    try:
-        outddx = p[3]*(1-(veh[1]/p[0])**4-((p[2]+veh[1]*p[1]+(veh[1]*(veh[1]-lead[1]))/(2*(p[3]*p[4])**(1/2)))/(veh[2]))**2)
-    except: 
-        print('hello!')
+
+    outddx = p[3]*(1-(veh[1]/p[0])**4-((p[2]+veh[1]*p[1]+(veh[1]*(veh[1]-lead[1]))/(2*(p[3]*p[4])**(1/2)))/(veh[2]))**2)
+
     
     if veh[1]+dt*outddx < 0:
         outddx = -veh[1]/dt
@@ -45,10 +75,9 @@ def IDM_b3_b(p, veh, lead, *args,dt=.1):
     #IDM with bounded velocity and acceleration
 
     outdx = veh[1]
-    try:
-        outddx = p[3]*(1-(veh[1]/p[0])**4-((p[2]+veh[1]*p[1]+(veh[1]*(veh[1]-lead[1]))/(2*(p[3]*p[4])**(1/2)))/(veh[2]))**2)
-    except: 
-        print('hello!')
+
+    outddx = p[3]*(1-(veh[1]/p[0])**4-((p[2]+veh[1]*p[1]+(veh[1]*(veh[1]-lead[1]))/(2*(p[3]*p[4])**(1/2)))/(veh[2]))**2)
+
     
     #bounded acceleration in m/s/s units
     if outddx > 3:

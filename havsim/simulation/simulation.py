@@ -1228,3 +1228,208 @@ def simulate_sn(curstate, auxinfo, roadinfo, modelinfo, timesteps = 1000, dt = .
 
 
 ########################end code for simple network#################
+    
+class simulation: 
+    def init(): 
+        pass
+
+def CF_wrapper(cfmodel, acc_bounds = [-7,3]): 
+    #acc_bounds controls [lower, upper] bounds on acceleration 
+    #assumes a second order model which has inputs of (p, state), where state
+    #is a list of all values needed, p is a list of parameters, and
+    #output is a float giving the acceleration 
+    
+    #may want to change the call signature to simplify it but the general 
+    #structure of call_cf makes sense 
+    def call_cf(self, lead, lane, timeind, dt, userelax): 
+        if lead is None: 
+            speed = lane.call_downstream(self, timeind)
+            acc = (speed - self.speed)/dt
+            
+        else:
+            if userelax:
+                currelax = self.relax[timeind - self.relax_start]
+                self.hd += currelax
+                acc = cfmodel(self.cf_parameters, [self.hd, self.speed, lead.speed])
+                self.hd += -currelax
+            else: 
+                acc = cfmodel(self.cf_parameters, [self.hd, self.speed, lead.speed])
+            
+        if acc > acc_bounds[1]: 
+            acc = 3
+        elif acc < acc_bounds[0]: 
+            acc = -7
+        
+        if self.speed + dt*acc < 0: 
+            acc = -self.speed/dt
+            
+        return acc
+    
+    return call_cf
+
+def call_lc_helper(lfol, veh, lcsidelane):
+    #does headway calculation for new potential follower lfol (works for either side)
+    #bug with lane used - needs to use correct lane 
+    llead, llane = lfol.lead, lfol.lane
+    if llead == None: 
+        newlhd = lcsidelane.dist_to_end(veh)
+    else: 
+        newlhd = lcsidelane.get_headway(veh, llead)
+    if lfol.cf_parameters == None:
+        newlfolhd = 0
+    else: 
+        newlfolhd = llane.get_headway(lfol, veh)
+    
+    return llead, llane, newlfolhd, newlhd
+        
+
+def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userelax_new = False
+    #lcmodel - model to wrap. Assume it takes as input the vehicle, 
+        #new left follower headway, new left headway, new right follower headway, new right headway, 
+        #new follower headway (if get_fol is True), timeind, dt, *args, **kwargs
+    #get_fol - lc model uses the current follower if True 
+    #kwargs - keyword arguments which are passed to lcmodel 
+    
+    #call signature for lcmodel is pretty long but I think it's OK
+    
+    def call_lc(self, chk_lc, timeind, dt):
+        lfol, rfol = self.lfol, self.rfol
+        if lfol== '' and rfol == '':
+            return 
+        
+        if np.random.rand() < chk_lc: 
+            return 
+        
+        if lfol != '': 
+            llead, llane, newlfolhd, newlhd = call_lc_helper(lfol, self, self.lane.connect_left)
+        else:
+            llead = llane = newlfolhd = newlhd = None
+        
+        if rfol != '': 
+            rlead, rlane, newrfolhd, newrhd = call_lc_helper(rfol, self, self.lane.connect_right)
+        else:
+            rlead = rlane = newrfolhd = newrhd = None
+            
+        if get_fol: 
+            fol, lead = self.fol, self.lead
+            if fol.cf_parameters == None: 
+                newfolhd = 0 
+            elif self.lead == None: 
+                newfolhd = fol.lane.dist_to_end(fol)
+            else: 
+                newfolhd = fol.lane.get_headway(fol, self.lead)
+                
+            #do model call now 
+            lcmodel(self, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt, 
+                    lfol, llead, llane, rfol, rlead, rlane, fol, lead, **kwargs)
+        else: 
+            lcmodel(self, newlfolhd, newlhd, newrfolhd, newrhd, timeind, dt, 
+                    lfol, llead, llane, rfol, rlead, rlane, **kwargs)
+            
+        
+                
+    return call_lc
+        
+class vehicle: 
+    #2 options for implementing your own LC model and CF model - 
+    #option 1 - we have decorators for book keeping work for the LC/CF functions, user specifies the model 
+    #and what the vehicle object calls is the decorated model which will handle formatting/bookkeeping issues
+    #the default class will use this design so users can write their own model in a standard format 
+    #and directly feed that in (easier but more restrictive)
+    
+    #option 2 - you can inherit this class and write your own functions (more work but less restrictive)
+    def __init__(self, pos, speed, hd, lead, lane, p, length, lcp, fol, lfol, rfol, llead, rlead, time, cfmodel = None, lcmodel = None, eqlfun = None, check_lc = .25): 
+        self.lead = lead
+        self.lane = lane
+        self.road = lane.road
+        self.cf_parameters = p
+        self.length = length
+        self.lc_parameters = lcp
+        self.fol = fol
+        self.lfol = lfol
+        self.rfol = rfol
+        self.llead = llead
+        self.rlead = rlead
+        self.inittime= time
+        self.pos = pos
+        self.speed = speed
+        self.hd = hd
+        
+        self.leadmem = [[lead,time]]
+        self.lanemem = [[lane, time]]
+        self.posmem = [pos]
+        self.speedmem = [speed]
+        self.relaxmem = []
+        #will want lfol and rfol memory if you want gradient wrt LC parameters
+        #won't store headway to save a bit of memory
+        
+        self.in_relax = False
+        self.check_lc = check_lc
+        
+        if cfmodel is not None: 
+            self.call_cf = CF_wrapper(cfmodel)
+            
+#    def call_cf:
+#        pass
+            
+
+def downstream_wrapper(timeseries, starttimeind = 0):
+    @staticmethod
+    def call_downstream(veh, timeind):
+        return timeseries[timeind-starttimeind]
+        
+class anchor_vehicle: #need downstream call
+    #anchor vehicles have cf_parameters as None 
+    def __init__(self, lane, time, lfol = None, rfol = None, lead = None, rlead = set(), llead = set()):
+        self.cf_parameters = None 
+        self.lane = lane
+        self.road = lane.road
+        
+        self.lfol = lfol
+        self.rfol = rfol
+        self.lead = lead
+        self.rlead = rlead
+        self.llead = llead
+        
+        self.pos = 0
+        self.hd = 0 
+        self.length = 0
+        
+        self.leadmem = [[lead,time]]
+        
+    
+class lane: 
+    def __init__(self, length, connect_to=None, connect_from = None, connect_left = None, connect_right = None, downstream_speeds = None, starttime = 0):
+        self.length = length
+        self.connect_to = connect_to
+        self.connect_from = connect_from
+        self.connect_left = connect_left
+        self.connect_right = connect_right
+        
+        if downstream_speeds is not None: 
+            self.call_downstream = downstream_wrapper(downstream_speeds, starttime)
+        
+        #todo - 
+        #need function to initialize roads, which will make roadlen dictionary, 
+        #enddist attribute, initialize special vehicles and anchor vehicles 
+        #add roads and roadind attribute, handle routes 
+    
+    def get_headway(self, veh, lead): 
+        hd = lead.pos - veh.pos - lead.length
+        if self.road != lead.road: 
+            hd += self.roadlen[(self.road, lead.road)]
+        return hd 
+    
+    def get_dist(self, veh, lead): 
+        dist = lead.pos-veh.pos
+        if self.road != lead.road: 
+            dist += self.roadlen[(self.road, lead.road)]
+            
+    def dist_to_end(self, veh):
+        return self.enddist - veh.pos
+        
+#class road:
+#    def __init__(): 
+#        pass
+    
+    
