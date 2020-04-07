@@ -39,34 +39,34 @@ class ProbabilityDistribution(tf.keras.Model):
         return tf.squeeze(tf.random.categorical(logits, 1), axis=-1)
 
 
-class Model(tf.keras.Model):
-  def __init__(self, num_actions):
-    super().__init__('mlp_policy')
-    self.hidden1 = kl.Dense(32, activation='tanh') #hidden layer for actions (policy)
-    self.hidden11 = kl.Dense(32,activation = 'tanh')
-    self.hidden111 = kl.Dense(32, activation = 'tanh')
-    self.hidden2 = kl.Dense(32, activation='tanh') #hidden layer for state-value
-    self.hidden22 = kl.Dense(32, activation='tanh')
-    self.hidden222 = kl.Dense(32, activation='tanh')
-    self.value = kl.Dense(1, name = 'value')
-    # Logits are unnormalized log probabilities.
-    self.logits = kl.Dense(num_actions, name = 'policy_logits')
-    self.dist = ProbabilityDistribution()
-
-  def call(self, inputs, **kwargs):
-    x = tf.convert_to_tensor(inputs)
-    hidden_logs = self.hidden1(x)
-    hidden_logs = self.hidden11(hidden_logs)
-    hidden_logs = self.hidden111(hidden_logs)
-    hidden_vals = self.hidden2(x)
-    hidden_vals = self.hidden22(hidden_vals)
-    hidden_vals = self.hidden222(hidden_vals)
-    return self.logits(hidden_logs), self.value(hidden_vals)
-
-  def action_value(self, obs):
-    logits, value = self.predict_on_batch(obs)
-    action = self.dist.predict_on_batch(logits)
-    return tf.squeeze(action, axis=-1), tf.squeeze(value, axis=-1)
+#class Model(tf.keras.Model):
+#  def __init__(self, num_actions):
+#    super().__init__('mlp_policy')
+#    self.hidden1 = kl.Dense(32, activation='tanh') #hidden layer for actions (policy)
+#    self.hidden11 = kl.Dense(32,activation = 'tanh')
+#    self.hidden111 = kl.Dense(32, activation = 'tanh')
+#    self.hidden2 = kl.Dense(32, activation='tanh') #hidden layer for state-value
+#    self.hidden22 = kl.Dense(32, activation='tanh')
+#    self.hidden222 = kl.Dense(32, activation='tanh')
+#    self.value = kl.Dense(1, name = 'value')
+#    # Logits are unnormalized log probabilities.
+#    self.logits = kl.Dense(num_actions, name = 'policy_logits')
+#    self.dist = ProbabilityDistribution()
+#
+#  def call(self, inputs, **kwargs):
+#    x = tf.convert_to_tensor(inputs)
+#    hidden_logs = self.hidden1(x)
+#    hidden_logs = self.hidden11(hidden_logs)
+#    hidden_logs = self.hidden111(hidden_logs)
+#    hidden_vals = self.hidden2(x)
+#    hidden_vals = self.hidden22(hidden_vals)
+#    hidden_vals = self.hidden222(hidden_vals)
+#    return self.logits(hidden_logs), self.value(hidden_vals)
+#
+#  def action_value(self, obs):
+#    logits, value = self.predict_on_batch(obs)
+#    action = self.dist.predict_on_batch(logits)
+#    return tf.squeeze(action, axis=-1), tf.squeeze(value, axis=-1)
 
 class PolicyModel(tf.keras.Model):
   def __init__(self, num_actions, num_hiddenlayers = 3, num_neurons = 32, activationlayer = kl.Activation('tanh')):
@@ -195,33 +195,33 @@ class ACagent:
         self.I = 1
         return state
            
-    def test_orig(self, env, timesteps, nruns = 4): #Note that this is pretty much the same as simulate_baseline in the environment = circ_singleav
-        curstate = self.reset(env)
-
-        run = 0
-        losses = []
-        while (run < nruns):
-            for i in range(timesteps):
-                action,value = self.action_value(curstate)
-                
-                curstate, reward, done = env.step(action, i, timesteps)
-                #update state, update cumulative reward
-                env.totloss += reward
-                
-#                if (run == 0):
-#                    env.savestate()
-                
-                if done:
-#                    losses.append(env.totloss)
-#                    if run != nruns -1:
-#                        self.reset(env)
-                    break
-            losses.append(env.totloss)
-            if run != nruns -1:
-                self.reset(env)
-            run += 1
-
-        env.totloss = np.sum(losses) / nruns
+#    def test_orig(self, env, timesteps, nruns = 4): #Note that this is pretty much the same as simulate_baseline in the environment = circ_singleav
+#        curstate = self.reset(env)
+#
+#        run = 0
+#        losses = []
+#        while (run < nruns):
+#            for i in range(timesteps):
+#                action,value = self.action_value(curstate)
+#                
+#                curstate, reward, done = env.step(action, i, timesteps)
+#                #update state, update cumulative reward
+#                env.totloss += reward
+#                
+##                if (run == 0):
+##                    env.savestate()
+#                
+#                if done:
+##                    losses.append(env.totloss)
+##                    if run != nruns -1:
+##                        self.reset(env)
+#                    break
+#            losses.append(env.totloss)
+#            if run != nruns -1:
+#                self.reset(env)
+#            run += 1
+#
+#        env.totloss = np.sum(losses) / nruns
         
     def test(self,env,timesteps,nruns = 4):
         curstate = self.reset(env)
@@ -244,38 +244,38 @@ class ACagent:
                         rewards = []
                     break
             run += 1
-        num_eps = len(eplenlist) if len(eplenlist) > 0 else 1
-        env.totloss = np.sum(rewardslist) / num_eps
+#        num_eps = len(eplenlist) if len(eplenlist) > 0 else 1
+#        env.totloss = np.sum(rewardslist) / num_eps
         return rewardslist, eplenlist
     
-    def train_step(self,statemem, TDacc, TDerrors) :
-        with tf.GradientTape(persistent=True) as tape:
-            logits, values = self.model.call(statemem)
-            valuesloss = self._value_loss(TDerrors, values)
-            logitsloss = self._logits_loss(TDacc, logits)
-        valuegradient = tape.gradient(valuesloss, self.model.trainable_variables)
-        logitsgradient = tape.gradient(logitsloss, self.model.trainable_variables)
-        optimizer.apply_gradients(zip(valuegradient, self.model.trainable_variables))
-        optimizer.apply_gradients(zip(logitsgradient, self.model.trainable_variables))        
+#    def train_step(self,statemem, TDacc, TDerrors) :
+#        with tf.GradientTape(persistent=True) as tape:
+#            logits, values = self.model.call(statemem)
+#            valuesloss = self._value_loss(TDerrors, values)
+#            logitsloss = self._logits_loss(TDacc, logits)
+#        valuegradient = tape.gradient(valuesloss, self.model.trainable_variables)
+#        logitsgradient = tape.gradient(logitsloss, self.model.trainable_variables)
+#        optimizer.apply_gradients(zip(valuegradient, self.model.trainable_variables))
+#        optimizer.apply_gradients(zip(logitsgradient, self.model.trainable_variables))        
         
-    def hist_weights(self,filename):
-        fig, axs = plt.subplots(4,1)
-        
-        for weight in self.model.layers[0].get_weights():
-            axs[0].hist(np.ndarray.flatten(weight), bins=500)
-            
-        for weight in self.model.layers[1].get_weights():
-            axs[1].hist(np.ndarray.flatten(weight), bins=500)
-            
-        for weight in self.model.layers[2].get_weights():
-            axs[2].hist(np.ndarray.flatten(weight), bins=500)
-            
-        for weight in self.model.layers[3].get_weights():
-            axs[3].hist(np.ndarray.flatten(weight), bins=500)
-        
-        plt.savefig(os.path.join(os.path.dirname(self.checkpoint_path),filename))
-        plt.close(fig)
-        
+#    def hist_weights(self,filename):
+#        fig, axs = plt.subplots(4,1)
+#        
+#        for weight in self.model.layers[0].get_weights():
+#            axs[0].hist(np.ndarray.flatten(weight), bins=500)
+#            
+#        for weight in self.model.layers[1].get_weights():
+#            axs[1].hist(np.ndarray.flatten(weight), bins=500)
+#            
+#        for weight in self.model.layers[2].get_weights():
+#            axs[2].hist(np.ndarray.flatten(weight), bins=500)
+#            
+#        for weight in self.model.layers[3].get_weights():
+#            axs[3].hist(np.ndarray.flatten(weight), bins=500)
+#        
+#        plt.savefig(os.path.join(os.path.dirname(self.checkpoint_path),filename))
+#        plt.close(fig)
+#        
     def train(self, env, updates=250, by_eps = False, numeps = 1, nTDsteps = -1):   
         curstate = self.reset(env)
         
@@ -664,9 +664,10 @@ sm_best = statemem_vals[0]
 
 def traintest(agent_tt, testenv_tt, nTDsteps_tt):
     agent_tt.train(testenv_tt, updates=1000, nTDsteps=nTDsteps_tt)
-    agent_tt.test(testenv_tt,1500)
+    rewardslist, eplenlist = agent_tt.test(testenv_tt,1500)
     
-    return testenv_tt.totloss, len(testenv_tt.sim[testenv_tt.avid])
+#    return testenv_tt.totloss, len(testenv_tt.sim[testenv_tt.avid])
+    return np.mean(rewardslist), np.mean(eplenlist)
     #print('total reward is '+str(testenv_tt.totloss)+' over '+str(len(testenv_tt.sim[testenv_tt.avid]))+' timesteps')
 def resetPolVal():
     policymodel = PolicyModel(num_actions = 3, num_hiddenlayers=netd_bestPol,num_neurons=nneur_bestPol,activationlayer=act_bestPol)
