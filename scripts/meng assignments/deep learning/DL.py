@@ -5,7 +5,7 @@
 #imports, load data
 import tensorflow as tf
 import tensorflow.keras.layers as kls
-
+from tensorflow.keras.regularizers import l1, l2
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
@@ -66,13 +66,13 @@ maxvelocity = 0
 #get headways for all vehicles
 maxheadway = 0
 #define how the state should look
-statemem = 25
+statemem = 5
 
 xtrain, ytrain, xtest, ytest = [], [], [], []
 for count, i in enumerate(meas.keys()):
-    if count > 400:
-        break
     if len(platooninfo[i][4]) != 1:
+        continue
+    if count == 50:
         continue
     t_nstar, t_n, T_nm1, T_n = platooninfo[i][:4]
     leadinfo, unused, unused = havsim.calibration.helper.makeleadfolinfo([i], platooninfo, meas)
@@ -133,31 +133,43 @@ xtest = normalization_input(xtest, maxheadway, maxvelocity, statemem)
 xtrain, ytrain, xtest, ytest = tf.convert_to_tensor(xtrain,tf.float32), tf.convert_to_tensor(ytrain,tf.float32), tf.convert_to_tensor(xtest,tf.float32), tf.convert_to_tensor(ytest,tf.float32)
 
 train_ds = tf.data.Dataset.from_tensor_slices(
-        (xtrain,ytrain)).shuffle(100000).batch(64)
+        (xtrain,ytrain)).shuffle(100000).batch(32)
 
 test_ds = tf.data.Dataset.from_tensor_slices(
-        (xtest,ytest)).shuffle(100000).batch(64)
+        (xtest,ytest)).shuffle(100000).batch(32)
 #%%
 class Model(tf.keras.Model):
     def __init__(self):
         super().__init__('simple_mlp')
+        self.conv1 = kls.Conv1D(32, 3, activation='relu', input_shape=(5, 1))
+        self.conv2 = kls.Conv1D(32, 3, activation='relu', input_shape=(5, 1))
         self.hidden1 = kls.Dense(32, activation = 'relu')
         self.hidden2 = kls.Dense(32,activation = 'relu')
         self.hidden3 = kls.Dense(32)
+        self.flatten = kls.Flatten()
         self.out = kls.Dense(1)
 
     def call(self,x):
-        x = self.hidden1(x)
-        x = self.hidden2(x)
-        x = self.hidden3(x)
-        return self.out(x)
+        # x = self.hidden1(x)
+        # x = self.hidden2(x)
+        # x = self.hidden3(x)
+        # fin = self.out(x)
+        # print(fin)
+        y1 = self.conv1(tf.expand_dims(x[:, :5], -1))
+        y2 = self.conv2(tf.expand_dims(x[:, 5:], -1))
+        x1 = self.hidden1(y1)
+        x2 = self.hidden2(y2)
+        con = tf.concat([x1, x2], 1)
+        x = self.hidden3(con)
+        flat = self.flatten(x)
+        return self.out(flat)
 
 model = Model()
 
 #%% Set up training
 #x = input, y = output, yhat = labels (true values)
 
-optimizer = tf.keras.optimizers.RMSprop(learning_rate=9e-4)
+optimizer = tf.keras.optimizers.RMSprop(learning_rate=2e-5)
 
 loss_fn = tf.keras.losses.MeanSquaredError(name='train_test_loss')
 def mytestmetric(y,yhat):
@@ -220,7 +232,7 @@ def create_output(xtest, ytest, minoutput, maxoutput, maxvelocity, maxheadway, s
 
 def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutput, minaoutput, maxvelocity, maxheadway, previous_sim_traj):
     #how many samples we should look back
-    statemem = 25
+    statemem = 5
 
     #obtain leadinfo for vehicle_id
     leadinfo, unused, unused = havsim.calibration.helper.makeleadfolinfo([vehicle_id], input_platooninfo, input_meas)
@@ -372,11 +384,11 @@ def predict_platoon_trajectory(model, vehicle_id, input_meas, input_platooninfo,
 
 
 #%% training and testing
-m = test(test_ds,minoutput,maxoutput)
-m2 = test(train_ds, minoutput,maxoutput)
-print('before training rmse on test dataset is '+str(tf.cast(m,tf.float32))+' rmse on train dataset is '+str(m2))
+# m = test(test_ds,minoutput,maxoutput)
+# m2 = test(train_ds, minoutput,maxoutput)
+# print('before training rmse on test dataset is '+str(tf.cast(m,tf.float32))+' rmse on train dataset is '+str(m2))
 
-for epoch in range(8):
+for epoch in range(5):
     for x, yhat in train_ds:
         train_step(x,yhat,loss_fn, optimizer)
     m = test(test_ds,minoutput,maxoutput)
@@ -386,7 +398,7 @@ for epoch in range(8):
 
 
 
-# RMSE calculationg when predicting acceleration
+# RMSE calculationg
 total_error = 0
 total_count = 0
 for count, i in enumerate(meas.keys()):
