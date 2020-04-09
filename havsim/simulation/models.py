@@ -27,8 +27,15 @@ def IDM(p, state):
 
 
 def mobil(veh, newlfolhd, newlhf, newrfolhd, newrhd, newfolhd, timeind, dt,
-          lfol, llead, llane, rfol, rlead, rlane, fol, lead, userelax_cur = True, userelax_new = False):
+          lfol, llead, rfol, rlead, fol, lead, lane, userelax_cur = True, userelax_new = False):
+    #LC parameters 
+    #0 - safety criterion
+    #1 - incentive criteria 
+    #2 - politeness
+    #3 - bias on left side 
+    #4 - bias on right side
     
+    p = veh.lc_parameters
     lincentive = rincentive = -math.inf
     
     if not userelax_cur and veh.in_relax: 
@@ -36,12 +43,39 @@ def mobil(veh, newlfolhd, newlhf, newrfolhd, newrhd, newfolhd, timeind, dt,
     else: 
         cura = veh.acc 
     
-#    lfola, newlfola = mobil_helper()
-#    userelax = userelax_new and veh.in_relax
-#    newla = veh.call_cf(llead, llane, timeind, dt, userelax)
-#    
-#    rfola, newrfola = mobil_helper()
-#    userelax = userelax_new and veh.in_relax
+    fola, newfola = mobil_helper(fol, lead, veh, timeind, dt, userelax_cur, userelax_new)
+    
+    if lfol is not None: 
+        lfola, newlfola = mobil_helper()
+        userelax = userelax_new and veh.in_relax
+        newla = veh.call_cf(llead, lane.connect_left, timeind, dt, userelax)
+        lincentive = newla - cura + p[2]*(newlfola - lfola + newfola - fola) + p[3]
+    
+    if rfol is not None: 
+        rfola, newrfola = mobil_helper()
+        userelax = userelax_new and veh.in_relax
+        newra = veh.call_cf(rlead, lane.connect_right, timeind, dt, userelax)
+        rincentive = newra - cura + p[2]*(newrfola - rfola + newfola - fola) + p[4]
+        
+    if rincentive > lincentive: 
+        side = 'r'
+        incentive = rincentive
+        selfsafe = newra
+        folsafe = newrfola
+        
+    else:
+        side = 'l'
+        incentive = lincentive
+        selfsafe = newla
+        folsafe = newlfola
+    
+    if incentive > p[1]: 
+        if selfsafe > p[0] and folsafe > p[0]:
+            veh.lc = side 
+        else: 
+            #do tactical/cooperation step
+            pass
+    return 
     
     
     

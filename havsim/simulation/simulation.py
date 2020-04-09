@@ -281,39 +281,24 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     a = {}
     lca = {}
     
-    for i in curstate.keys(): 
-        if auxinfo[i][1] is not None and auxinfo[auxinfo[i][1]][2] != auxinfo[i][2]:
-            print('hello!')
     
     #get actions in latitudinal movement 
     for i in curstate.keys():
         a[i] = auxinfo[i][7](i, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, auxinfo[i][0][1]) #wrapper function for model call 
         
-    for i in curstate.keys(): 
-        if auxinfo[i][1] is not None and auxinfo[auxinfo[i][1]][2] != auxinfo[i][2]:
-            print('hello!')
         
     #get actions in latitudinal movement (from LC model)
     for i in curstate.keys(): 
         std_LC(i, lca, a, curstate, auxinfo, roadinfo, modelinfo, timeind, dt)
         
-    for i in curstate.keys(): 
-        if auxinfo[i][1] is not None and auxinfo[auxinfo[i][1]][2] != auxinfo[i][2]:
-            print('hello!')
     
     #update current state 
     updatefun(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt) #updates curstate, auxinfo, roadinfo in place 
     
-    for i in curstate.keys(): 
-        if auxinfo[i][1] is not None and auxinfo[auxinfo[i][1]][2] != auxinfo[i][2]:
-            print('hello!')
     
     #update inflow
     increment_inflow(curstate, auxinfo, roadinfo, timeind, dt) #adds vehicle with default parameters 
     
-    for i in curstate.keys(): 
-        if auxinfo[i][1] is not None and auxinfo[auxinfo[i][1]][2] != auxinfo[i][2]:
-            print('hello!')
     
     return curstate, auxinfo, roadinfo
 
@@ -340,14 +325,6 @@ def std_CF(veh, curstate, auxinfo, roadinfo, modelinfo,timeind, dt, relax):
         else:  #standard CF call 
             out = vehaux[6](vehaux[5], curstate[veh], curstate[vehaux[1]], dt) 
             
-    if out[0] + dt*out[1] < 0: 
-#        print('hello!') #believe bug is caused by negative headways 
-        pass
-    
-    if vehaux[1] is not None: 
-        if auxinfo[vehaux[1]][2] != vehaux[2]: 
-            print('hello!') #caused by anchor vehicles not being updated correctly 
-            pass
     return out 
     
 def get_headway(curstate, auxinfo, roadinfo, fol, lead):
@@ -744,7 +721,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
     #vehicles may change at same time into same gap because we don't check this case
     #There can be problems because a vehicle's left/right/new LC side leaders are not going to 
     #have their follower updated correctly when there is a road change coming up 
-    for i in lca.keys(): 
+    for i in lca.keys():  #believe this is the only part of code which cannot be parralelized - updating lane changes 
         #prepare for updates
         curaux = auxinfo[i]
         road = curaux[3]
@@ -971,13 +948,11 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             auxinfo[curaux[11][0]][20][2].add(i)
             auxinfo[lfol][20][2].remove(i)
             
+            auxinfo[auxinfo[lfol][11][2]][20][0].remove(lfol)
             auxinfo[lfol][11][2] = i
             curaux[20][0].add(lfol)
-            try: 
-                auxinfo[curaux[11][1]][20][0].remove(lfol)
-            except: 
-#                print('hello!') #caused by very large negative speeds which are caused by negative headways which are caused by anchor vehicles being updated wrong 
-                pass
+            
+
         if rfol == '' or type(rfol) == str:
             pass
         elif curstate[i][0] < curstate[rfol][0] and curaux[3] == auxinfo[rfol][3]: 
@@ -985,13 +960,11 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
             auxinfo[curaux[11][2]][20][0].add(i)
             auxinfo[rfol][20][0].remove(i)
             
+            auxinfo[auxinfo[rfol][11][0]][20][2].remove(rfol)
             auxinfo[rfol][11][0] = i
             curaux[20][2].add(rfol)
-            try:
-                auxinfo[curaux[11][1]][20][2].remove(rfol)
-            except: 
-#                print('hello!')
-                pass
+            
+
             
     #check if roads change
     dellist = []
@@ -1077,7 +1050,7 @@ def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
                 if auxinfo[j][1] is not None: 
                     roadinfo[i][8][count] = auxinfo[j][1]
             elif j in lca: #vehicle changed lanes -> default to follower
-                if lca[j] == 'l':
+                if lca[j] == 'l': #
                     newguess = auxinfo[j][11][2]
                 else:
                     newguess = auxinfo[j][11][0]
@@ -1283,7 +1256,7 @@ def call_lc_helper(lfol, veh, lcsidelane):
     else: 
         newlfolhd = llane.get_headway(lfol, veh)
     
-    return llead, llane, newlfolhd, newlhd
+    return llead, newlfolhd, newlhd
         
 
 def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userelax_new = False
@@ -1292,8 +1265,6 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
         #new follower headway (if get_fol is True), timeind, dt, *args, **kwargs
     #get_fol - lc model uses the current follower if True 
     #kwargs - keyword arguments which are passed to lcmodel 
-    
-    #call signature for lcmodel is pretty long but I think it's OK
     
     def call_lc(self, chk_lc, timeind, dt):
         lfol, rfol, lane = self.lane = self.lfol, self.rfol, self.lane
@@ -1304,14 +1275,14 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
             return 
         
         if lfol != '': 
-            llead, llane, newlfolhd, newlhd = call_lc_helper(lfol, self, lane.connect_left)
+            llead, newlfolhd, newlhd = call_lc_helper(lfol, self, lane.connect_left)
         else:
-            llead = llane = newlfolhd = newlhd = None
+            llead = newlfolhd = newlhd = None
         
         if rfol != '': 
-            rlead, rlane, newrfolhd, newrhd = call_lc_helper(rfol, self, lane.connect_right)
+            rlead, newrfolhd, newrhd = call_lc_helper(rfol, self, lane.connect_right)
         else:
-            rlead = rlane = newrfolhd = newrhd = None
+            rlead = newrfolhd = newrhd = None
             
         if get_fol: 
             fol, lead = self.fol, self.lead
@@ -1324,13 +1295,11 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
                 
             #do model call now 
             lcmodel(self, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt, 
-                    lfol, llead, llane, rfol, rlead, rlane, fol, lead, **kwargs)
+                    lfol, llead, rfol, rlead, fol, lead, lane, **kwargs)
         else: 
             lcmodel(self, newlfolhd, newlhd, newrfolhd, newrhd, timeind, dt, 
-                    lfol, llead, llane, rfol, rlead, rlane, **kwargs)
+                    lfol, llead, rfol, rlead, lane, **kwargs)
             
-        
-                
     return call_lc
         
 class vehicle: 
@@ -1357,13 +1326,14 @@ class vehicle:
         self.pos = pos
         self.speed = speed
         self.hd = hd
+        self.lc = None
         
         self.leadmem = [[lead,time]]
         self.lanemem = [[lane, time]]
         self.posmem = [pos]
         self.speedmem = [speed]
         self.relaxmem = []
-        #will want lfol and rfol memory if you want gradient wrt LC parameters
+        #will want lfol and rfol memory if you want gradient wrt LC parameters, probably need memory for lc output as well 
         #won't store headway to save a bit of memory
         
         self.in_relax = False
@@ -1371,6 +1341,9 @@ class vehicle:
         
         if cfmodel is not None: 
             self.call_cf = CF_wrapper(cfmodel)
+        
+        if lcmodel is not None: 
+            self.call_lc = LC_wrapper(lcmodel)
             
 #    def call_cf:
 #        pass
