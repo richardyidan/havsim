@@ -72,10 +72,11 @@ xtrain, ytrain, xtest, ytest = [], [], [], []
 for count, i in enumerate(meas.keys()):
     if len(platooninfo[i][4]) != 1:
         continue
-    if count == 50:
-        continue
+
     t_nstar, t_n, T_nm1, T_n = platooninfo[i][:4]
-    leadinfo, unused, unused = havsim.calibration.helper.makeleadfolinfo([i], platooninfo, meas)
+    leadinfo, folinfo, rinfo = havsim.calibration.helper.makeleadfolinfo([i], platooninfo, meas)
+    relax = havsim.calibration.opt.r_constant(rinfo[0], [t_n, T_nm1], T_n, 5, False)
+
     if T_nm1 - t_n ==0:
         continue
     lead = np.zeros((T_nm1 - t_n+1,3)) #columns are position, speed, length
@@ -86,6 +87,7 @@ for count, i in enumerate(meas.keys()):
 
     curmeas = meas[i][t_n-t_nstar:T_nm1+1-t_nstar,[2,3,8]] #columns are position, speed, acceleration
     headway = lead[:,0] - curmeas[:,0] - lead[:,2] #headway is distance between front bumper to rear bumper of leader
+    headway = np.array(headway) + np.array(relax[0][:T_nm1-t_n+1])
 
 
 
@@ -103,6 +105,7 @@ for count, i in enumerate(meas.keys()):
     for j in range(T_nm1+1-t_n):
         if j == 0:
             continue
+
         curx, cury = create_input(statemem, j, lead, headway, curmeas)
         #new output for model
         if cury == None:
@@ -234,13 +237,15 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutp
     #how many samples we should look back
     statemem = 5
 
-    #obtain leadinfo for vehicle_id
-    leadinfo, unused, unused = havsim.calibration.helper.makeleadfolinfo([vehicle_id], input_platooninfo, input_meas)
+
 
     #obtain t_n and T-nm1 for vehicle_id
     t_nstar, t_n, T_nm1, T_n = input_platooninfo[vehicle_id][:4]
     if T_nm1 - t_n ==0:
         return None, None, None
+    #obtain leadinfo for vehicle_id
+    leadinfo, folinfo, rinfo = havsim.calibration.helper.makeleadfolinfo([vehicle_id], input_platooninfo, input_meas)
+    relax = havsim.calibration.opt.r_constant(rinfo[0], [t_n, T_nm1], T_n, 5, False)
 
     #form the lead trajectory for vehicle_id
     lead = np.zeros((T_nm1 - t_n+1,3)) #columns are position, speed, length
@@ -254,7 +259,7 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutp
 
     curmeas = meas[vehicle_id][t_n-t_nstar:T_nm1+1-t_nstar,[2,3,8]] #columns are position, speed, acceleration
     headway = lead[:,0] - curmeas[:,0] - lead[:,2] #headway is distance between front bumper to rear bumper of leader
-
+    headway = np.array(headway) + np.array(relax[0][:T_nm1-t_n+1])
 
     curr_trajectory = curmeas[0,0]
     simulated_trajectory_lst = [curr_trajectory]
@@ -264,6 +269,9 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutp
             continue
         xtest = []
         ytest = []
+
+
+
         curx, cury = create_input(statemem, j, lead, headway, curmeas)
         xtest.append(curx)
         new_traj = create_output(xtest, ytest, minoutput, maxoutput, maxvelocity, maxheadway, simulated_trajectory_lst, headway, lead, j)
@@ -388,7 +396,7 @@ def predict_platoon_trajectory(model, vehicle_id, input_meas, input_platooninfo,
 # m2 = test(train_ds, minoutput,maxoutput)
 # print('before training rmse on test dataset is '+str(tf.cast(m,tf.float32))+' rmse on train dataset is '+str(m2))
 
-for epoch in range(5):
+for epoch in range(6):
     for x, yhat in train_ds:
         train_step(x,yhat,loss_fn, optimizer)
     m = test(test_ds,minoutput,maxoutput)
@@ -401,17 +409,31 @@ for epoch in range(5):
 # RMSE calculationg
 total_error = 0
 total_count = 0
+
+lane_error = 0
+lane_count =0
 for count, i in enumerate(meas.keys()):
     if i == 0:
         continue
     if len(platooninfo[i][4]) != 1:
-        continue
-    pred_traj, acc_traj, rmse = predict_trajectory(model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, None)
-    print(pred_traj)
-    print(acc_traj)
-    print(rmse)
-    if tf.is_tensor(rmse):
-        total_error += rmse
-        total_count += 1
-print("------------THIS IS THE FINAL RMSE-------------")
+        pred_traj, acc_traj, rmse = predict_trajectory(model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, None)
+        print(pred_traj)
+        print(acc_traj)
+        print(rmse)
+        if tf.is_tensor(rmse):
+            total_error += rmse
+            total_count += 1
+    else:
+        pred_traj, acc_traj, rmse = predict_trajectory(model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, None)
+        print(pred_traj)
+        print(acc_traj)
+        print(rmse)
+        if tf.is_tensor(rmse):
+            lane_error += rmse
+            lane_count += 1
+
+print("------------THIS IS THE FINAL RMSE FOR NONE LANE CHANGE CARS-------------")
 print(total_error/total_count)
+
+print("------------THIS IS THE FINAL RMSE FOR LANE CHANGE CARS-------------")
+print(lane_error/lane_count)
