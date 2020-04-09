@@ -25,8 +25,13 @@ def IDM(p, state):
     #returns acceleration 
     return p[3]*(1-(state[1]/p[0])**4-((p[2]+state[1]*p[1]+(state[1]*(state[1]-state[2]))/(2*(p[3]*p[4])**(1/2)))/(state[0]))**2)
 
+def free_IDM(p, state):
+    #state = velocity
+    #p = parameters
+    return p[3]*(1-(state/p[0])**4)
 
-def mobil(veh, newlfolhd, newlhf, newrfolhd, newrhd, newfolhd, timeind, dt,
+
+def mobil(veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,
           lfol, llead, rfol, rlead, fol, lead, lane, userelax_cur = True, userelax_new = False):
     #LC parameters 
     #0 - safety criterion
@@ -34,6 +39,9 @@ def mobil(veh, newlfolhd, newlhf, newrfolhd, newrhd, newfolhd, timeind, dt,
     #2 - politeness
     #3 - bias on left side 
     #4 - bias on right side
+    
+    #naming convention - l/r = left/right respectively, current lane if no l/r
+    #new indicates that it would be the configuration after potential change 
     
     p = veh.lc_parameters
     lincentive = rincentive = -math.inf
@@ -43,18 +51,29 @@ def mobil(veh, newlfolhd, newlhf, newrfolhd, newrhd, newfolhd, timeind, dt,
     else: 
         cura = veh.acc 
     
-    fola, newfola = mobil_helper(fol, lead, veh, timeind, dt, userelax_cur, userelax_new)
+    fola, newfola = mobil_helper(fol, lead, veh, newfolhd, timeind, dt, userelax_cur, userelax_new) #this is bugged 
     
     if lfol is not None: 
-        lfola, newlfola = mobil_helper()
+        lfola, newlfola = mobil_helper(lfol, llead, veh, newlfolhd, timeind, dt, userelax_cur, userelax_new)
+        
         userelax = userelax_new and veh.in_relax
+        curhd = veh.hd
+        veh.hd = newlhd
         newla = veh.call_cf(llead, lane.connect_left, timeind, dt, userelax)
+        veh.hd = curhd
+        
+        
         lincentive = newla - cura + p[2]*(newlfola - lfola + newfola - fola) + p[3]
     
     if rfol is not None: 
-        rfola, newrfola = mobil_helper()
+        rfola, newrfola = mobil_helper(rfol, rlead, veh, newrfolhd, timeind, dt, userelax_cur, userelax_new)
+        
         userelax = userelax_new and veh.in_relax
+        curhd = veh.hd
+        veh.hd = newrhd
         newra = veh.call_cf(rlead, lane.connect_right, timeind, dt, userelax)
+        veh.hd = curhd
+        
         rincentive = newra - cura + p[2]*(newrfola - rfola + newfola - fola) + p[4]
         
     if rincentive > lincentive: 
@@ -79,19 +98,23 @@ def mobil(veh, newlfolhd, newlhf, newrfolhd, newrhd, newfolhd, timeind, dt,
     
     
     
-def mobil_helper(fol, lead, veh, timeind, dt, userelax_cur, userelax_new):
-    #fol is assumed to follower lead in the current configuration, in potential 
-    #new configuration it would follow veh 
+def mobil_helper(fol, curlead, newlead, newhd, timeind, dt, userelax_cur, userelax_new):
+    #fol is assumed to follow curlead in the current configuration, in potential 
+    #new configuration it would follow newlead
     if fol.cf_parameters == None: 
         fola = 0
         newfola = 0
     else: 
         if not userelax_cur and fol.in_relax:
-            fola = fol.call_cf(veh, fol.lane, timeind, dt, False)
+            fola = fol.call_cf(curlead, fol.lane, timeind, dt, False)
         else: 
             fola = fol.acc
+            
         userelax = userelax_new and fol.in_relax
-        newfola = fol.call_cf(lead, fol.lane, timeind, dt, userelax)
+        curhd = fol.hd
+        fol.hd = newhd
+        newfola = fol.call_cf(newlead, fol.lane, timeind, dt, userelax)
+        fol.hd = curhd
         
     return  fola, newfola
 

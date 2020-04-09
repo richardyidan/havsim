@@ -719,8 +719,6 @@ def mobil_change(i,lfol, curstate, auxinfo, roadinfo, modelinfo, timeind, dt, us
 def update_sn(a, lca, curstate, auxinfo, roadinfo, modelinfo, timeind, dt):
     #update lanes, leaders, followers for all lane change actions 
     #vehicles may change at same time into same gap because we don't check this case
-    #There can be problems because a vehicle's left/right/new LC side leaders are not going to 
-    #have their follower updated correctly when there is a road change coming up 
     for i in lca.keys():  #believe this is the only part of code which cannot be parralelized - updating lane changes 
         #prepare for updates
         curaux = auxinfo[i]
@@ -1202,9 +1200,53 @@ def simulate_sn(curstate, auxinfo, roadinfo, modelinfo, timesteps = 1000, dt = .
 
 ########################end code for simple network#################
     
+def update_net(): 
+    #update followers/leaders for all lane changes 
+    for veh in vehicles: 
+        if veh.lc is None: 
+            continue
+        #logic for updating - logic is complicated because we avoid doing any sorts - should be faster this way 
+        #initialization 
+        if veh.lc == 'l':
+            lcsidefol, opsidefol, lcsidelead, opsidelead = 'lfol', 'rfol', 'llead', 'rlead'
+        else: 
+            lcsidefol, opsidefol, lcsidelead, opsidelead = 'rfol', 'lfol', 'rlead', 'llead'
+        lead = veh.lead 
+        fol = veh.fol
+        
+        #update current leader
+        if lead == None: 
+            pass
+        else: 
+            lead.fol = fol
+        
+        #update opposite/lc side leaders
+        for j in getattr(veh, opsidelead):
+            setattr(j, lcsidefol, fol)
+        for j in getattr(veh, lcsidelead):
+            setattr(j, opsidefol, fol)
+            
+        getattr(fol,lcsidelead).update(getattr(veh, lcsidelead))
+        getattr(fol,opsidelead).update(getattr(veh, opsidelead))
+        fol.lead = lead
+        
+        
+        
+    
 class simulation: 
-    def init(): 
+    def __init__(): 
         pass
+    
+    def step(self):
+        for veh in self.vehicles: 
+            veh.acc = veh.call_cf(veh.lead, veh.lane, timeind, dt, veh.in_relax)
+            
+        for veh in self.vehicles: 
+            veh.call_lc(veh.check_lc, timeind, dt)
+            
+        #update function goes here 
+        
+        #inflow condition goes here 
 
 def CF_wrapper(cfmodel, acc_bounds = [-7,3]): 
     #acc_bounds controls [lower, upper] bounds on acceleration 
@@ -1216,8 +1258,7 @@ def CF_wrapper(cfmodel, acc_bounds = [-7,3]):
     #structure of call_cf makes sense 
     def call_cf(self, lead, lane, timeind, dt, userelax): 
         if lead is None: 
-            speed = lane.call_downstream(self, timeind)
-            acc = (speed - self.speed)/dt
+            acc = lane.call_downstream(self, timeind, dt)
             
         else:
             if userelax:
@@ -1323,6 +1364,7 @@ class vehicle:
         self.llead = llead
         self.rlead = rlead
         self.inittime= time
+        self.endtime = None
         self.pos = pos
         self.speed = speed
         self.hd = hd
@@ -1351,8 +1393,14 @@ class vehicle:
 
 def downstream_wrapper(timeseries, starttimeind = 0):
     @staticmethod
-    def call_downstream(veh, timeind):
-        return timeseries[timeind-starttimeind]
+    def call_downstream(veh, timeind, dt):
+        speed = timeseries[timeind-starttimeind]
+        return (speed - veh.speed)/dt
+    
+def free_downstream_wrapper(free_cf_model):
+    @staticmethod
+    def call_downstream(veh, *args):
+        return free_cf_model(veh.cf_parameters, veh.speed)
         
 class anchor_vehicle: #need downstream call
     #anchor vehicles have cf_parameters as None 
@@ -1375,14 +1423,19 @@ class anchor_vehicle: #need downstream call
         
     
 class lane: 
-    def __init__(self, length, connect_to=None, connect_from = None, connect_left = None, connect_right = None, downstream_speeds = None, starttime = 0):
+    def __init__(self, length, connect_to=None, connect_from = None, connect_left = None, connect_right = None, downstream_speeds = None, starttime = 0, 
+                 free_cf_model = None):
         self.length = length
         self.connect_to = connect_to
         self.connect_from = connect_from
         self.connect_left = connect_left
         self.connect_right = connect_right
         
-        if downstream_speeds is not None: 
+        #free flow boundary condition - lets vehicles accelerate freely to exit simulation
+        if free_cf_model is not None: 
+            self.call_downstream = free_downstream_wrapper(free_cf_model)
+        #can simulate congested outflow condition by specifying a time series which controls speed of vehicles at end of simulation 
+        elif downstream_speeds is not None: 
             self.call_downstream = downstream_wrapper(downstream_speeds, starttime)
         
         #todo - 
