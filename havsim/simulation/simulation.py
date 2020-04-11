@@ -1209,12 +1209,41 @@ def update_net():
         if veh.lc is None: 
             continue
         update_change(veh, timeind) #this cannot be done in parralel
-        #relaxation 
+        
+        #apply relaxation 
+        new_relaxation(veh, timeind, dt)
         
     for veh in vehicles: 
         #update states 
         pass
-        
+
+def new_relaxation(veh,timeind, dt):
+    rp = veh.relaxp
+    if veh.lead == None or rp == None: 
+        return
+    olds = veh.hd
+    news = veh.lane.get_headway(veh, veh.lead)
+    if olds is None: 
+        olds = veh.get_eql(veh.speed)
+    
+    relaxamount = olds-news
+    relaxlen = math.ceil(rp/dt) - 1
+    curr =  relaxamount*np.linspace(1 - dt/rp, 1 - dt/rp*relaxlen,relaxlen)
+    
+    if veh.in_relax: #add to existing relax
+        curlen = len(veh.relax)
+        newend = timeind + relaxlen #time index when relax ends 
+        newrelax = np.zeros((newend - veh.relax_start+1))
+        newrelax[0:curlen] = veh.relax
+        newrelax[timeind-veh.relax_start+1:] += curr
+        veh.relax = newrelax
+    else: #create new relax
+        veh.in_relax = True
+        veh.relax_start = timeind + 1
+        veh.relax = curr
+    
+    return
+
 def update_change(veh, timeind): 
     #logic for updating - logic is complicated because we avoid doing any sorts - faster this way 
     #no check for vehicles moving into same gap
@@ -1310,6 +1339,8 @@ def update_change(veh, timeind):
             unused, newlcsidefol = lcsidelane.leadfol_find(veh, guess)
             setattr(veh, lcsidefol, newlcsidefol)
             getattr(newlcsidefol, opsidelead).add(veh)
+            
+    veh.lc = None 
             
     return 
         
@@ -1460,11 +1491,13 @@ class vehicle:
     #and directly feed that in (easier but more restrictive)
     
     #option 2 - you can inherit this class and write your own functions (more work but less restrictive)
-    def __init__(self, pos, speed, hd, lead, lane, p, length, lcp, fol, lfol, rfol, llead, rlead, time, cfmodel = None, lcmodel = None, eqlfun = None, check_lc = .25): 
+    def __init__(self, pos, speed, hd, lead, lane, p, length, lcp, fol, lfol, rfol, llead, rlead, time, relaxp = None,
+                 cfmodel = None, free_cf = None, lcmodel = None, eqlfun = None, check_lc = .25): 
         self.lead = lead
         self.lane = lane
         self.road = lane.road
         self.cf_parameters = p
+        self.relaxp = relaxp
         self.length = length
         self.lc_parameters = lcp
         self.fol = fol
@@ -1489,11 +1522,20 @@ class vehicle:
         #won't store headway to save a bit of memory
         
         self.in_relax = False
+        self.relax = None
+        self.relax_start = None
+        
         self.check_lc = check_lc
         
         if cfmodel is not None: 
             self.call_cf = CF_wrapper(cfmodel)
         
+        if free_cf is not None: 
+            self.free_cf = staticmethod(free_cf)
+            
+        if eqlfun is not None: 
+            self.get_eql = eql_wrapper(eqlfun)
+            
         if lcmodel is not None: 
             self.call_lc = LC_wrapper(lcmodel)
             
@@ -1508,11 +1550,14 @@ def downstream_wrapper(timeseries, starttimeind = 0):
         speed = timeseries[timeind-starttimeind]
         return (speed - veh.speed)/dt
     
-def free_downstream_wrapper(free_cf_model):
-    #this only works if all vehicles have same model - needs to call something vehicle specific
-    @staticmethod
-    def call_downstream(veh, *args):
-        return free_cf_model(veh.cf_parameters, veh.speed)
+#def free_downstream_wrapper(free_cf_model):
+#    #this only works if all vehicles have same model - needs to call something vehicle specific
+#    @staticmethod
+#    def call_downstream(veh, *args):
+#        return free_cf_model(veh.cf_parameters, veh.speed)
+@staticmethod
+def free_downstream(veh, *args):
+    return veh.free_cf(veh.cf_parameters, veh.speed)
         
 class anchor_vehicle:
     #anchor vehicles have cf_parameters as None 
@@ -1536,7 +1581,7 @@ class anchor_vehicle:
     
 class lane: 
     def __init__(self, length, connect_to=None, connect_from = None, connect_left = None, connect_right = None, downstream_speeds = None, starttime = 0, 
-                 free_cf_model = None):
+                 free_cf = True):
         self.length = length
         self.connect_to = connect_to
         self.connect_from = connect_from
@@ -1544,8 +1589,10 @@ class lane:
         self.connect_right = connect_right
         
         #free flow boundary condition - lets vehicles accelerate freely to exit simulation
-        if free_cf_model is not None: 
-            self.call_downstream = free_downstream_wrapper(free_cf_model)
+#        if free_cf is not None: 
+#            self.call_downstream = free_downstream_wrapper(free_cf_model)
+        if free_cf: 
+            self.call_downstream = free_downstream
         #can simulate congested outflow condition by specifying a time series which controls speed of vehicles at end of simulation 
         elif downstream_speeds is not None: 
             self.call_downstream = downstream_wrapper(downstream_speeds, starttime)
