@@ -25,10 +25,16 @@ def IDM(p, state):
     #returns acceleration 
     return p[3]*(1-(state[1]/p[0])**4-((p[2]+state[1]*p[1]+(state[1]*(state[1]-state[2]))/(2*(p[3]*p[4])**(1/2)))/(state[0]))**2)
 
-def free_IDM(p, state):
+def IDM_free(p, state):
     #state = velocity
     #p = parameters
     return p[3]*(1-(state/p[0])**4)
+
+def IDM_eql(p, v):
+    #input is p = parameters, v = velocity, output is s = headway corresponding to eql soln
+    
+    s = ((p[2]+p[1]*v)**2/(1- (v/p[0])**4))**.5
+    return s 
 
 
 def mobil(veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,

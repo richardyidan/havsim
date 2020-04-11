@@ -9,6 +9,7 @@ houses the main code for running simulations
 from havsim.simulation.models import dboundary, IDM_b3, IDM_b3_b
 import numpy as np 
 import math 
+import scipy.optimize as sc 
 
 ###############code for single lane circular road#################
 
@@ -1069,6 +1070,7 @@ def update2nd(i, curstate,  auxinfo, roadinfo, a, dt):
     curstate[i][0] += dt*a[0]
     curstate[i][1] += dt*a[1]
     
+    #no you can't compute headway here - this is bug 
     lead = auxinfo[i][1]
     if lead is not None: 
         curstate[i][2] = get_headway(curstate, auxinfo, roadinfo, i, lead)
@@ -1206,97 +1208,110 @@ def update_net():
     for veh in vehicles: 
         if veh.lc is None: 
             continue
-        #logic for updating - logic is complicated because we avoid doing any sorts - faster this way 
-        #initialization 
-        lane = veh.lane
-        if veh.lc == 'l':
-            lcsidefol, opsidefol, lcsidelead, opsidelead = 'lfol', 'rfol', 'llead', 'rlead'
-            lcsidelane = lane.connect_left
-            newlcsidelane = lcsidelane.connect_left
+        update_change(veh, timeind) #this cannot be done in parralel
+        #relaxation 
+        
+    for veh in vehicles: 
+        #update states 
+        pass
+        
+def update_change(veh, timeind): 
+    #logic for updating - logic is complicated because we avoid doing any sorts - faster this way 
+    #no check for vehicles moving into same gap
+    #no cooperative tactical components 
+    
+    #initialization 
+    lane = veh.lane
+    if veh.lc == 'l':
+        lcsidefol, opsidefol, lcsidelead, opsidelead = 'lfol', 'rfol', 'llead', 'rlead'
+        lcsidelane = lane.connect_left
+        newlcsidelane = lcsidelane.connect_left
+        
+    else: 
+        lcsidefol, opsidefol, lcsidelead, opsidelead = 'rfol', 'lfol', 'rlead', 'llead'
+        lcsidelane = lane.connect_right
+        newlcsidelane = lcsidelane.connect_right
+    
+    
+    #update current leader
+    lead = veh.lead 
+    fol = veh.fol
+    if lead == None: 
+        pass
+    else: 
+        lead.fol = fol
+    
+    #update opposite/lc side leaders
+    for j in getattr(veh, opsidelead):
+        setattr(j, lcsidefol, fol)
+    for j in getattr(veh, lcsidelead):
+        setattr(j, opsidefol, fol)
+    
+    #update follower
+    getattr(fol,lcsidelead).update(getattr(veh, lcsidelead))
+    getattr(fol,opsidelead).update(getattr(veh, opsidelead))
+    fol.lead = lead
+    fol.leadmem.append((lead, timeind+1))
+    
+    #update opposite side for vehicle 
+    vehopsidefol = getattr(veh, opsidefol)
+    if vehopsidefol != '': 
+        getattr(vehopsidefol, lcsidelead).remove(veh)
+    setattr(veh, opsidefol, fol)
+    getattr(fol, lcsidelead).add(veh)
+    #update cur lc side follower for vehicle 
+    lcfol = getattr(veh, lcsidefol)
+    lcfol.lead = veh
+    lcfol.leadmem.append((veh, timeind+1))
+    getattr(lcfol, opsidelead).remove(veh)
+    veh.fol = lcfol
+    #update lc side leader
+    lclead = lcfol.lead
+    veh.lead = lclead
+    veh.leadmem.append((lclead, timeind+1))
+    veh.lanemem.append((lcsidelane, timeind+1))
+    veh.lane = lcsidelane
+    if lclead is not None: 
+        lclead.fol = veh
+    #update for new left/right leaders - opside first 
+    newleads = set()
+    oldleads = getattr(lcfol, opsidelead)
+    for j in oldleads.copy(): 
+        curdist = lane.get_dist(j, veh)
+        if curdist < 0: 
+            setattr(j, lcsidefol, veh)
+            newleads.add(j)
+            oldleads.remove(j)
+    setattr(veh, opsidelead, newleads)
+    #lcside 
+    newleads = set()
+    oldleads = getattr(lcfol, lcsidelead)
+    maxdist = -math.inf
+    minveh = None
+    for j in oldleads.copy():
+        curdist = lane.get_dist(j, veh)
+        if curdist < 0: 
+            setattr(j, opsidefol, veh)
+            newleads.add(j)
+            oldleads.remove(j)
+            if curdist > maxdist: 
+                maxdist = curdist 
+                minveh = j #minveh is the leader of new lc side follower 
+    setattr(veh, lcsidelead, newleads)
+    #update new lcside 
+    if newlcsidelane: #new lcside is None
+        setattr(veh, lcsidefol, '')
+    else: 
+        if minveh is not None: 
+            setattr(veh, lcsidefol, minveh.fol)
+            getattr(minveh.fol,opsidelead).add(veh)
+        else: 
+            guess = get_guess(lcfol, lclead, veh, lcsidefol, newlcsidelane)
+            unused, newlcsidefol = lcsidelane.leadfol_find(veh, guess)
+            setattr(veh, lcsidefol, newlcsidefol)
+            getattr(newlcsidefol, opsidelead).add(veh)
             
-        else: 
-            lcsidefol, opsidefol, lcsidelead, opsidelead = 'rfol', 'lfol', 'rlead', 'llead'
-            lcsidelane = lane.connect_right
-            newlcsidelane = lcsidelane.connect_right
-        
-        
-        #update current leader
-        lead = veh.lead 
-        fol = veh.fol
-        if lead == None: 
-            pass
-        else: 
-            lead.fol = fol
-        
-        #update opposite/lc side leaders
-        for j in getattr(veh, opsidelead):
-            setattr(j, lcsidefol, fol)
-        for j in getattr(veh, lcsidelead):
-            setattr(j, opsidefol, fol)
-        
-        #update follower
-        getattr(fol,lcsidelead).update(getattr(veh, lcsidelead))
-        getattr(fol,opsidelead).update(getattr(veh, opsidelead))
-        fol.lead = lead
-        fol.leadmem.append((lead, timeind+1))
-        
-        #update opposite side for vehicle 
-        vehopsidefol = getattr(veh, opsidefol)
-        if vehopsidefol != '': 
-            getattr(vehopsidefol, lcsidelead).remove(veh)
-        setattr(veh, opsidefol, fol)
-        getattr(fol, lcsidelead).add(veh)
-        #update cur lc side follower for vehicle 
-        lcfol = getattr(veh, lcsidefol)
-        lcfol.lead = veh
-        lcfol.leadmem.append((veh, timeind+1))
-        getattr(lcfol, opsidelead).remove(veh)
-        veh.fol = lcfol
-        #update lc side leader
-        lclead = lcfol.lead
-        veh.lead = lclead
-        veh.leadmem.append((lclead, timeind+1))
-        veh.lanemem.append((lcsidelane, timeind+1))
-        veh.lane = lcsidelane
-        if lclead is not None: 
-            lclead.fol = veh
-        #update for new left/right leaders - opside first 
-        newleads = set()
-        oldleads = getattr(lcfol, opsidelead)
-        for j in oldleads.copy(): 
-            curdist = lane.get_dist(j, veh)
-            if curdist < 0: 
-                setattr(j, lcsidefol, veh)
-                newleads.add(j)
-                oldleads.remove(j)
-        setattr(veh, opsidelead, newleads)
-        #lcside 
-        newleads = set()
-        oldleads = getattr(lcfol, lcsidelead)
-        maxdist = -math.inf
-        minveh = None
-        for j in oldleads.copy():
-            curdist = lane.get_dist(j, veh)
-            if curdist < 0: 
-                setattr(j, opsidefol, veh)
-                newleads.add(j)
-                oldleads.remove(j)
-                if curdist > maxdist: 
-                    maxdist = curdist 
-                    minveh = j #minveh is the leader of new lc side follower 
-        setattr(veh, lcsidelead, newleads)
-        #update new lcside 
-        if newlcsidelane: #new lcside is None
-            setattr(veh, lcsidefol, '')
-        else: 
-            if minveh is not None: 
-                setattr(veh, lcsidefol, minveh.fol)
-                getattr(minveh.fol,opsidelead).add(veh)
-            else: 
-                guess = get_guess(lcfol, lclead, veh, lcsidefol, newlcsidelane)
-                unused, newlcsidefol = lcsidelane.leadfol_find(veh, guess)
-                setattr(veh, lcsidefol, newlcsidefol)
-                getattr(newlcsidefol, opsidelead).add(veh)
+    return 
         
 def get_guess(lcfol, lclead, veh, lcsidefol, newlcsidelane):
     #need to find new lcside follower for veh
@@ -1322,6 +1337,25 @@ class simulation:
         #update function goes here 
         
         #inflow condition goes here 
+        
+def eql_wrapper(eqlfun, input_type = 'v', bounds = (1e-10, 120), tol = .5):
+    #eqlfun -> fun to wrap
+    #input_type = 's' - eqlfun goes from s to v or v to s? (doesn't currently support case when we can do both)
+    #bounds = (1e-10, 120) - bounds used when input_type != find
+    def get_eql(self, x, find = 's'):
+        if find != input_type: 
+            return eqlfun(self.cf_parameters, x)
+        elif find == input_type: 
+            def inveql(y):
+                return x - eqlfun(self.cf_parameters, y)
+            ans = sc.minimize_scalar(inveql, bracket = bounds, tol = tol)
+            if ans['success']: 
+                return ans['x']
+            else: 
+                raise RuntimeError('could not invert provided equilibrium function')
+    
+    return get_eql
+
 
 def CF_wrapper(cfmodel, acc_bounds = [-7,3]): 
     #acc_bounds controls [lower, upper] bounds on acceleration 
@@ -1444,6 +1478,7 @@ class vehicle:
         self.speed = speed
         self.hd = hd
         self.lc = None
+        self.acc = None
         
         self.leadmem = [(lead,time)]
         self.lanemem = [(lane, time)]
@@ -1462,8 +1497,9 @@ class vehicle:
         if lcmodel is not None: 
             self.call_lc = LC_wrapper(lcmodel)
             
-#    def call_cf:
-#        pass
+    def update(self, dt):
+        self.pos += self.speed*dt
+        self.speed += self.acc*dt
             
 
 def downstream_wrapper(timeseries, starttimeind = 0):
@@ -1473,6 +1509,7 @@ def downstream_wrapper(timeseries, starttimeind = 0):
         return (speed - veh.speed)/dt
     
 def free_downstream_wrapper(free_cf_model):
+    #this only works if all vehicles have same model - needs to call something vehicle specific
     @staticmethod
     def call_downstream(veh, *args):
         return free_cf_model(veh.cf_parameters, veh.speed)
