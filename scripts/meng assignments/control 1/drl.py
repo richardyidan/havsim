@@ -552,10 +552,9 @@ class gym_env:
     
     def savestate(self):
         pass
-
-if __name__ == "main":
-    pass
 '''
+#if __name__ == "main":
+#    pass
 #%% initialize agent (we expect the agent to be awful before training)
 #env = gym.make('CartPole-v0')
 #model = Model(num_actions=env.action_space.n)
@@ -572,10 +571,8 @@ if __name__ == "main":
 #plt.xlabel('episode')
 #agent.test(testenv,200)
 #print('total reward is '+str(testenv.totloss))
-
 \''' 
 gym_env is flexible to pass in other environments, including MountainCar-V0
-
 for MountainCar:
 reward := -1 for each time step, until the goal position of 0.5 is reached
 The episode ends when you reach 0.5 position, or if 200 iterations are reached.
@@ -588,7 +585,6 @@ sim, curstate, auxinfo = simulate_cir(initstate, auxinfo,roadinfo, update_cir, t
 vlist = {i: curstate[i][1] for i in curstate.keys()}
 avid = min(vlist, key=vlist.get)
 testingtime = 1500
-
 #create simulation environment
 testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward8,dt = .25)
 #%% sanity check
@@ -603,7 +599,7 @@ print('loss for one AV with parametrized control is '+str(testenv.totloss)+' sta
 #%% initialize agent
 #model = Model(num_actions = 3)
 policymodel = PolicyModel(num_actions = 3)
-valuemodel = ValueModel() #ValueModelReinforce() ValueModelLinearBaseline
+valuemodel = ValueModel()
 agent = ACagent(policymodel, valuemodel)
 #%%
 agent.test(testenv,testingtime, nruns = 1) #200 timesteps
@@ -619,7 +615,6 @@ for i in range(10):
     allrewards.extend(rewards)
     agent.test(testenv,testingtime,nruns=1)
     print('total reward is '+str(testenv.totloss)+' over '+str(len(testenv.sim[testenv.avid]))+' timesteps')
-
 #%%
 avtraj = np.asarray(testenv.sim[testenv.avid])
 plt.figure() #plots, in order, position, speed, and headway time series.
@@ -643,7 +638,6 @@ plt.plot(avtraj[:,2])
 #    mcagent.test(mctestenv,1000,nruns=1)
 #    print('total reward is '+str(mctestenv.totloss)+' over '+str(mcagent.counter)+' timesteps')
 #%%
-\'''
 learning rate (~2e-4, 3e-4, ... 1e-3)
 entropy (1e-5 5e-5 1e-4 5e-4) 
 for both neural nets:
@@ -652,7 +646,7 @@ for both neural nets:
     activation (relu, leaky relu, tanh)
 state memory (statemem parameter in code) (1, 5, 10)
 nstep for TD errors (5, 10, 20, math.inf)
-\'''
+'''
 p = [33.33, 1.2, 2, 1.1, 1.5] #parameters for human drivers
 initstate, auxinfo, roadinfo = eq_circular(p, IDM_b3, update2nd_cir, IDM_b3_eql, 41, length = 2, L = None, v = 15, perturb = 2) #create initial state on road
 sim, curstate, auxinfo = simulate_cir(initstate, auxinfo,roadinfo, update_cir, timesteps = 25000, dt = .25)
@@ -696,14 +690,14 @@ def resetPolVal():
     valuemodel = ValueModel(num_hiddenlayers=netd_bestVal,num_neurons=nneur_bestVal,activationlayer=act_bestVal)
     return policymodel,valuemodel
 
-res = ""
+res = ''''''
 for i in range(3):
-    res+= "+------------------------------------------+\n| Iter: {}                                  |\n+------------------------------------------+\n".format(i)
+    res+= '''+------------------------------------------+\n| Iter: {}                                  |\n+------------------------------------------+\n'''.format(i)
     
     policymodel,valuemodel = resetPolVal()
     testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward8,dt = .25,statemem=sm_best)
     
-    res+="| Learning rate                            |\n+------------------------------------------+\n"
+    res+='''| Learning rate                            |\n+------------------------------------------+\n'''
     rewards = []
     for lrv in lr_vals:  
         agent = ACagent(policymodel, valuemodel, lr=lrv, entropy_const = ev_best)
@@ -716,7 +710,7 @@ for i in range(3):
     rewards = []
     res += "\nSelected learning rate: {:.4f}\n".format(lr_best)
     print();print("\n".join(res.splitlines()[-16:]))
-    res+="+------------------------------------------+\n| Entropy                                  |\n+------------------------------------------+\n"    
+    res+='''+------------------------------------------+\n| Entropy                                  |\n+------------------------------------------+\n'''    
     for ev in entropy_vals:
         agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev)
         totreward, testlen = traintest(agent, testenv, nstep_best)
@@ -728,7 +722,7 @@ for i in range(3):
     rewards = []
     res += "\nSelected entropy const: {}\n".format(ev_best)
     print();print("\n".join(res.splitlines()[-9:]))
-    res+="+------------------------------------------+\n| Nstep for TD errors                      |\n+------------------------------------------+\n"
+    res+='''+------------------------------------------+\n| Nstep for TD errors                      |\n+------------------------------------------+\n'''
     for ns in nstep_vals:
         agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)
         totreward, testlen = traintest(agent, testenv, ns)
@@ -740,7 +734,7 @@ for i in range(3):
     rewards = []
     res += "\nSelected nstep: {}\n".format(nstep_best)
     print();print("\n".join(res.splitlines()[-9:]))
-    res+="+------------------------------------------+\n| Depth (Policy)                           |\n+------------------------------------------+\n"
+    res+='''+------------------------------------------+\n| Depth (Policy)                           |\n+------------------------------------------+\n'''
     for ndP in netdepths:
         policymodel = PolicyModel(num_actions = 3, num_hiddenlayers=ndP,num_neurons=nneur_bestPol,activationlayer=act_bestPol)
         agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)       
@@ -753,7 +747,7 @@ for i in range(3):
     rewards = []
     res += "\nSelected Policy depth: {}\n".format(netd_bestPol)
     print();print("\n".join(res.splitlines()[-8:]))
-    res+="+------------------------------------------+\n| Number of neurons in each layer (Policy) |\n+------------------------------------------+\n"
+    res+='''+------------------------------------------+\n| Number of neurons in each layer (Policy) |\n+------------------------------------------+\n'''
     for nnP in numneuron_vals:
         policymodel = PolicyModel(num_actions = 3, num_hiddenlayers=netd_bestPol,num_neurons=nnP,activationlayer=act_bestPol)
         agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)       
@@ -766,7 +760,7 @@ for i in range(3):
     rewards = []
     res += "\nSelected Policy num neurons: {}\n".format(nneur_bestPol)
     print();print("\n".join(res.splitlines()[-8:]))
-    res+="+------------------------------------------+\n| Activation (Policy)                      |\n+------------------------------------------+\n"
+    res+='''+------------------------------------------+\n| Activation (Policy)                      |\n+------------------------------------------+\n'''
     for idx,actP in enumerate(activations):
         policymodel = PolicyModel(num_actions = 3, num_hiddenlayers=netd_bestPol,num_neurons=nneur_bestPol,activationlayer=actP)
         agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)       
@@ -780,7 +774,7 @@ for i in range(3):
     rewards = []
     policymodel = PolicyModel(num_actions = 3, num_hiddenlayers=netd_bestPol,num_neurons=nneur_bestPol,activationlayer=act_bestPol)
     print();print("\n".join(res.splitlines()[-8:]))
-    res+="+------------------------------------------+\n| Depth (Value)                            |\n+------------------------------------------+\n"
+    res+='''+------------------------------------------+\n| Depth (Value)                            |\n+------------------------------------------+\n'''
     for ndV in netdepths:
         valuemodel = ValueModel(num_hiddenlayers=ndV,num_neurons=nneur_bestVal,activationlayer=act_bestVal)
         agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)       
@@ -793,7 +787,7 @@ for i in range(3):
     rewards = []
     res += "\nSelected Value depth: {}\n".format(netd_bestVal)
     print();print("\n".join(res.splitlines()[-8:]))
-    res+="+------------------------------------------+\n| Number of neurons in each layer (Value)  |\n+------------------------------------------+\n"
+    res+='''+------------------------------------------+\n| Number of neurons in each layer (Value)  |\n+------------------------------------------+\n'''
     for nnV in numneuron_vals:
         valuemodel = ValueModel(num_hiddenlayers=netd_bestVal,num_neurons=nnV,activationlayer=act_bestVal)
         agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)       
@@ -806,7 +800,7 @@ for i in range(3):
     rewards = []
     res += "\nSelected Value num neurons: {}\n".format(nneur_bestVal)
     print();print("\n".join(res.splitlines()[-8:]))
-    res+="+------------------------------------------+\n| Activation (Value)                       |\n+------------------------------------------+\n"
+    res+='''+------------------------------------------+\n| Activation (Value)                       |\n+------------------------------------------+\n'''
     for idx,actV in enumerate(activations):
         valuemodel = ValueModel(num_hiddenlayers=netd_bestVal,num_neurons=nneur_bestVal,activationlayer=actV)
         agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)       
@@ -820,7 +814,7 @@ for i in range(3):
     rewards = []
     valuemodel = ValueModel(num_hiddenlayers=netd_bestVal,num_neurons=nneur_bestVal,activationlayer=act_bestVal)
     print();print("\n".join(res.splitlines()[-8:]))
-    res+="+------------------------------------------+\n| State memory                             |\n+------------------------------------------+\n"
+    res+='''+------------------------------------------+\n| State memory                             |\n+------------------------------------------+\n'''
     for sm in statemem_vals:
         testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward8,dt = .25,statemem=sm)
         agent = ACagent(policymodel, valuemodel, lr=lr_best, entropy_const = ev_best)       
@@ -896,7 +890,6 @@ plt.plot(avtraj[:,1])
 plt.subplot(1,3,3)
 plt.plot(avtraj[:,2])
 plt.title("Reinforce w. Linear Baseline")
-'''    
 
         
         
