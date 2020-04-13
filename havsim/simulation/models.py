@@ -37,7 +37,7 @@ def IDM_eql(p, v):
     return s 
 
 
-def mobil(veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,
+def mobil(lc_actions, veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,
           lfol, llead, rfol, rlead, fol, lead, lane, userelax_cur = True, userelax_new = False):
     #LC parameters 
     #0 - safety criterion
@@ -55,7 +55,7 @@ def mobil(veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,
     if not userelax_cur and veh.in_relax: 
         cura = veh.call_cf(lead, veh.lane, timeind, dt, False)
     else: 
-        cura = veh.acc 
+        cura = veh.action #more generally could use a method to return acceleration 
     
     fola, newfola = mobil_helper(fol, lead, veh, newfolhd, timeind, dt, userelax_cur, userelax_new) #this is bugged 
     
@@ -96,7 +96,7 @@ def mobil(veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,
     
     if incentive > p[1]: 
         if selfsafe > p[0] and folsafe > p[0]:
-            veh.lc = side 
+            lc_actions[veh] = side
         else: 
             #do tactical/cooperation step
             pass

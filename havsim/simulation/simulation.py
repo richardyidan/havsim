@@ -298,7 +298,7 @@ def simulate_step2(curstate, auxinfo, roadinfo, modelinfo, updatefun, timeind, d
     
     
     #update inflow
-    increment_inflow(curstate, auxinfo, roadinfo, timeind, dt) #adds vehicle with default parameters 
+    increment_inflow2(curstate, auxinfo, roadinfo, timeind, dt) #adds vehicle with default parameters 
     
     
     return curstate, auxinfo, roadinfo
@@ -1113,7 +1113,7 @@ def leadfol_find(curstate, auxinfo, roadinfo, veh, guess):
         
             return guess, nextguess
         
-def increment_inflow(curstate, auxinfo, roadinfo, timeind, dt, defaultspeed = 5, chkhd = 15):
+def increment_inflow2(curstate, auxinfo, roadinfo, timeind, dt, defaultspeed = 5, chkhd = 15):
     #hacky solution for now - refer to notes BC3- 1. 
     #defaultspeed and chkhd magic numbers 
     for i in roadinfo.keys(): 
@@ -1203,19 +1203,81 @@ def simulate_sn(curstate, auxinfo, roadinfo, modelinfo, timesteps = 1000, dt = .
 
 ########################end code for simple network#################
     
-def update_net(): 
+def update_net(vehicles, lc_actions, timeind, dt): 
     #update followers/leaders for all lane changes 
-    for veh in vehicles: 
-        if veh.lc is None: 
-            continue
+    for veh in lc_actions.keys(): 
         update_change(veh, timeind) #this cannot be done in parralel
         
         #apply relaxation 
         new_relaxation(veh, timeind, dt)
-        
+    
+    #update all states, memory and headway 
     for veh in vehicles: 
-        #update states 
+        veh.update(timeind, dt)
+    for veh in vehicles:
+        if veh.lead is not None: 
+            veh.hd = veh.lane.get_headway(veh, veh.lead)
+        
+    #update left and right followers
+    for veh in vehicles:
+        update_lrfol(veh)
+        
+    #inflow goes here
+    
+    #update merge_anchors
+    for lane in merge_lanes:
+        for i in range(len(lane.merge_anchors)):
+            veh, pos = lane.merge_anchors[i]
+            if pos == None: #some merge anchors may not need to be updated 
+                continue
+            if veh.cf_parameters == None:  
+                lead = veh.lead
+                if lead is not None and lead.lane is lane and lead.pos < pos:
+                    lane.merge_anchors[i][0] = lead
+                    
+            elif veh in lc_actions: 
+                if lc_actions[veh] == 'l': 
+                    lane.merge_anchors[i][0] = veh.rfol
+                else: 
+                    lane.merge_anchors[i][0] = veh.lfol
+            
+            else:
+                if veh.pos > pos: 
+                    lane.merge_anchors[i][0] = veh.fol
+                    
+    #update roads and routes last
+                    
+    return 
+
+
+        
+def update_lrfol(veh):
+    lfol, rfol = veh.lfol, veh.rfol
+    if lfol == '':
         pass
+    elif veh.lane.get_dist(veh,lfol) > 0: 
+        veh.lfol = lfol.fol
+        veh.lfol.rlead.add(veh)
+        lfol.rlead.remove(veh)
+        
+        lfol.rfol.llead.remove(lfol)
+        lfol.rfol = veh
+        veh.llead.add(lfol)
+        
+    if rfol == '':
+        pass
+    elif veh.lane.get_dist(veh,lfol) > 0: 
+        veh.lfol = lfol.fol
+        veh.lfol.rlead.add(veh)
+        lfol.rlead.remove(veh)
+        
+        lfol.rfol.llead.remove(lfol)
+        lfol.rfol = veh
+        veh.llead.add(lfol)
+        
+        
+        
+    
 
 def new_relaxation(veh,timeind, dt):
     rp = veh.relaxp
@@ -1359,11 +1421,13 @@ class simulation:
         pass
     
     def step(self):
+        lc_actions = {}
+        
         for veh in self.vehicles: 
-            veh.acc = veh.call_cf(veh.lead, veh.lane, timeind, dt, veh.in_relax)
+            veh.action = veh.call_cf(veh.lead, veh.lane, timeind, dt, veh.in_relax)
             
         for veh in self.vehicles: 
-            veh.call_lc(veh.check_lc, timeind, dt)
+            veh.call_lc(lc_actions, veh.check_lc, timeind, dt)
             
         #update function goes here 
         
@@ -1403,7 +1467,7 @@ def CF_wrapper(cfmodel, acc_bounds = [-7,3]):
         else:
             if userelax:
                 currelax = self.relax[timeind - self.relax_start]
-                self.hd += currelax
+                self.hd += currelax #can add check to see if relaxed headway is too small
                 acc = cfmodel(self.cf_parameters, [self.hd, self.speed, lead.speed])
                 self.hd += -currelax
             else: 
@@ -1491,8 +1555,9 @@ class vehicle:
     #and directly feed that in (easier but more restrictive)
     
     #option 2 - you can inherit this class and write your own functions (more work but less restrictive)
-    def __init__(self, pos, speed, hd, lead, lane, p, length, lcp, fol, lfol, rfol, llead, rlead, time, relaxp = None,
+    def __init__(self, vehid, pos, speed, hd, lead, lane, p, length, lcp, fol, lfol, rfol, llead, rlead, time, relaxp = None,
                  cfmodel = None, free_cf = None, lcmodel = None, eqlfun = None, check_lc = .25): 
+        self.vehid = vehid
         self.lead = lead
         self.lane = lane
         self.road = lane.road
@@ -1510,8 +1575,8 @@ class vehicle:
         self.pos = pos
         self.speed = speed
         self.hd = hd
-        self.lc = None
-        self.acc = None
+#        self.lc = None
+        self.action = None
         
         self.leadmem = [(lead,time)]
         self.lanemem = [(lane, time)]
@@ -1539,9 +1604,29 @@ class vehicle:
         if lcmodel is not None: 
             self.call_lc = LC_wrapper(lcmodel)
             
-    def update(self, dt):
+    def __hash__(self):
+        return self.vehid
+        
+    def __eq__(self, other):
+        return self.vehid == other.vehid
+    
+    def __ne__(self, other):
+        return not(self is other)
+            
+    def update(self, timeind, dt): 
+        #update state
         self.pos += self.speed*dt
-        self.speed += self.acc*dt
+        self.speed += self.action*dt
+        
+        #update memory and relax
+        self.posmem.append(self.pos)
+        self.speedmem.append(self.speed)
+        if self.in_relax:
+            if timeind == self.relax_start + len(self.relax) - 1:
+                self.in_relax = False
+                self.relaxmem.append((self.relax_start, timeind, self.relax))
+                
+    
             
 
 def downstream_wrapper(timeseries, starttimeind = 0):
@@ -1614,6 +1699,7 @@ class lane:
         dist = lead.pos-veh.pos
         if self.road != lead.road: 
             dist += self.roadlen[(self.road, lead.road)]
+        return dist
             
     def dist_to_end(self, veh):
         #distance from front of vehicle to end of network 
