@@ -8,6 +8,7 @@ import tensorflow.keras.layers as kl
 import tensorflow.keras.losses as kls
 import matplotlib.pyplot as plt
 
+
 #disable gpu 
 physical_devices = tf.config.experimental.list_physical_devices('GPU') 
 try: 
@@ -398,9 +399,9 @@ class circ_singleav: #example of single AV environment
         #for debugging purposes to verify that timestepping is done correctly
         #if using deep RL the code to simulate/test is the same except action is chosen from NN
         self.reset()
-        avlead = self.auxinfo[avid][1]
+        avlead = self.auxinfo[self.avid][1]
         for i in range(timesteps):
-            action = CFmodel(p, self.curstate[avid],self.curstate[avlead], dt = self.dt)
+            action = CFmodel(p, self.curstate[self.avid],self.curstate[avlead], dt = self.dt)
             nextstate, reward, done = self.step(action[1],i,timesteps, baseline = True)
             #update state, update cumulative reward
             self.curstate = nextstate
