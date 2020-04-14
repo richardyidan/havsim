@@ -1203,7 +1203,7 @@ def simulate_sn(curstate, auxinfo, roadinfo, modelinfo, timesteps = 1000, dt = .
 
 ########################end code for simple network#################
     
-def update_net(vehicles, lc_actions, timeind, dt): 
+def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, dt): 
     #update followers/leaders for all lane changes 
     for veh in lc_actions.keys(): 
         update_change(veh, timeind) #this cannot be done in parralel
@@ -1223,6 +1223,8 @@ def update_net(vehicles, lc_actions, timeind, dt):
         update_lrfol(veh)
         
     #inflow goes here
+    for lane in inflow_lanes: 
+        vehid = lane.increment_inflow(vehicles, vehid, timeind, dt)
     
     #update merge_anchors
     for lane in merge_lanes:
@@ -1430,8 +1432,6 @@ class simulation:
             
         #update function goes here 
         
-        #inflow condition goes here 
-        
 def eql_wrapper(eqlfun, eql_type = 'v', bounds = (1e-10, 120), tol = .5):
     #eqlfun -> fun to wrap, needs call signature like (parameters, input, *args)
     #eql_type = 's' - if 'v', eqlfun takes in velocity and outputs headway. if 's', it takes in headway and outputs velocity
@@ -1627,30 +1627,35 @@ class vehicle:
     #and directly feed that in (easier but more restrictive)
     
     #option 2 - you can inherit this class and write your own functions (more work but less restrictive)
-    def __init__(self, vehid,lane, p, length, lcp, relaxp = None,
+    def __init__(self, vehid,lane, p, lcp, length = 2, relaxp = None,
                  cfmodel = None, free_cf = None, lcmodel = None, eqlfun = None, check_lc = .25): 
         self.vehid = vehid
-        self.lead = None
         self.lane = lane
         self.road = lane.road
+
+        #model parameters
         self.cf_parameters = p
         self.relaxp = relaxp
         self.length = length
         self.lc_parameters = lcp
         
+        #leader/follower relationships
+        self.lead = None
         self.fol = None
         self.lfol = None
         self.rfol = None
         self.llead = None
         self.rlead = None
         
-        self.inittime= None
-        self.endtime = None
+        #state
         self.pos = None
         self.speed = None
         self.hd = None
         self.action = None
         
+        #memory
+        self.inittime= None
+        self.endtime = None
         self.leadmem = []
         self.lanemem = []
         self.posmem = []
@@ -1753,7 +1758,7 @@ class anchor_vehicle:
         
         self.leadmem = [[lead,time]]
         
-def get_inflow_wrapper(timeseries = None, inflow_type = 'flow', starttimeind = 0):
+def get_inflow_wrapper(speed_fun, inflow_type = 'flow'):
     #to use the inflow functions provided, you need the following methods in the lane 
     # - get_inflow = 'flow' - accepts either timeseries of flow ('flow'), or timeseries of speed ('speed'). 
     #If giving speeds, the vehicle to be added needs a get_eql method
@@ -1764,10 +1769,10 @@ def get_inflow_wrapper(timeseries = None, inflow_type = 'flow', starttimeind = 0
     
     if inflow_type == 'flow':
         def get_inflow(self, timeind):
-            return timeseries[timeind-starttimeind], None
+            return speed_fun(timeind), None
     elif inflow_type == 'speed':
         def get_inflow(self, timeind):
-            spd = timeseries[timeind - starttimeind]
+            spd = speed_fun(timeind)
             lead = self.anchor.lead
             if lead is not None:
                 leadlen = lead.len
@@ -1783,7 +1788,7 @@ def get_inflow_wrapper(timeseries = None, inflow_type = 'flow', starttimeind = 0
                 spd = lead.speed
             else:
                 leadlen = self.newveh.len
-                spd = timeseries[timeind - starttimeind]
+                spd = speed_fun(timeind)
             s = self.newveh.get_eql(spd, find = 's')
             return spd / (s + leadlen), spd
 
@@ -1871,14 +1876,14 @@ def speed_inflow(lane, speed_fun, timeind, dt, accel_bound = -2):
     
 
 
-def increment_inflow_wrapper(method = 'eql', accel_bound = -2, speed_fun = None, check_gap = True, shift = 1, c = .8):
+def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -2, check_gap = True, shift = 1, c = .8):
     #method = 'eql' vehicles have 0 acceleration when being added. The speed is defined by the vehicles
     #equilibrium function. Thus to use this method, the vehicle to be added must have a get_eql method 
     #(and use a model which predicts acceleration)
     #if check_gap = True, the headway must be at least as big as the equilibrium headway corresponding to 
     #the current inflow. 
     #method = 'shifted' - uses shifted speed 
-    def increment_inflow(self,timeind, dt):
+    def increment_inflow(self, vehicles, vehid, timeind, dt):
         inflow, spd = self.get_inflow(timeind)
         self.inflow_buffer += inflow * dt
         
@@ -1898,31 +1903,91 @@ def increment_inflow_wrapper(method = 'eql', accel_bound = -2, speed_fun = None,
             
             if out == None:  
                 return
-            #add vehicle with given initial conditions
+            #add vehicle with the given initial conditions
             pos, speed, hd = out[0], out[1], out[2]
+            newveh = lane.newveh
+            lead = self.anchor.lead
+            anchor = lane.anchor
+            #initialize state
+            self.pos = pos
+            self.speed = speed
+            self.hd= hd
             
+            #initalize memory
+            self.inittime = timeind+1
+            self.leadmem.append((lead, timeind+1))
+            self.lanemem.append((lane,timeind+1))
+            self.posmem.append(pos)
+            self.speedmem.append(speed)
+            
+            #update leader/follower relationships
+            #leader relationships
+            lead.fol = newveh
+            newveh.lead = lead
+            for rlead in anchor.rlead: 
+                rlead.lfol = newveh
+            newveh.rlead = anchor.rlead
+            anchor.rlead = set()
+            for llead in anchor.llead:
+                llead.rfol = newveh
+            newveh.llead = anchor.llead
+            anchor.llead = set()
+            
+            #update anchor and follower relationships
+            anchor.leadmem.append((newveh, timeind+1))
+            anchor.lead = newveh
+            if lane.connect_left == None:
+                newveh.lfol = ''
+            else:
+                leftanchor = lane.connect_left.anchor
+                newveh.lfol = leftanchor
+                leftanchor.rlead.add(newveh)
+            newveh.fol = anchor
+            if lane.connect_right == None:
+                newveh.rfol = ''
+            else:
+                rightanchor = lane.connect_right.anchor
+                newveh.rfol = rightanchor
+                rightanchor.llead.add(newveh)
+            
+            #initaialize route // TO DO
             
             self.inflow_buffer += -1
+            vehicles.add(newveh)
+        
             #create next vehicle
+            cf_parameters, lc_parameters, kwargs = self.new_vehicle()
+            newveh = vehicle(vehid, self, cf_parameters, lc_parameters, **kwargs)
+            self.newveh = newveh
+            vehid = vehid + 1
             
                 
                 
-                
-        return
+        return vehid
         
     return increment_inflow
         
     
 class lane: 
-    def __init__(self, length, connect_to=None, connect_from = None, connect_left = None, connect_right = None, downstream_kwargs = None):
+    def __init__(self, length, connect_to=None, connect_from = None, connect_left = None, connect_right = None,
+                 downstream = {}, increment_inflow = {}, get_inflow = {}, new_vehicle = None):
         self.length = length
         self.connect_to = connect_to
         self.connect_from = connect_from
         self.connect_left = connect_left
         self.connect_right = connect_right
         
-        if downstream_kwargs is not None:
-            self.call_downstream = downstream_wrapper(**downstream_kwargs)
+        if downstream != {}:
+            self.call_downstream = downstream_wrapper(**downstream)
+            
+        if increment_inflow != {}:
+            self.increment_inflow = increment_inflow_wrapper(**increment_inflow)
+            
+        if get_inflow != {}:
+            self.get_inflow = get_inflow_wrapper(**get_inflow)
+            
+        if new_vehicle != None:
+            self.new_vehicle = staticmethod(new_vehicle)
         
         #todo - 
         #need function to initialize roads, which will make roadlen dictionary, 

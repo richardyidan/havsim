@@ -131,7 +131,8 @@ def generate_IDM_parameters(*args):
     cf_parameters[0] += np.random.rand()*25-15 #give vehicles very different speeds for testing purposes
     lc_parameters = [-2, .1, .2, .2, 0]
     
-    kwargs = {'relaxp': 15, 
+    kwargs = {'length':2,
+              'relaxp': 15, 
               'cfmodel': IDM, 
               'free_cf': IDM_free, 
               'lcmodel' : mobil, 
