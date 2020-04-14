@@ -77,29 +77,39 @@ for _ in range(5):
     end = time.time()
     times.append(end-start)
 print("Average over 5 runs is {:.4f}".format(np.mean(times)))   #0.0115
-
-#For the same batch size, time how long it takes to do that many steps in training for cart pole.
+##
+###For the same batch size, time how long it takes to do that many steps in training for cart pole.
 env = gym.make('CartPole-v0')
-agent = ACagent(PolicyModel(num_actions=env.action_space.n), ValueModel())
+agent = ACagent(PolicyModel(num_actions=env.action_space.n), ValueModel(num_hiddenlayers = 4))
 testenv = gym_env(env)
 
 times2=[]
+out2 = []
 for _ in range(5):
     start = time.time()
-    agent.train(testenv, updates=64)
+    agent.train(testenv, updates=1)
     end = time.time()
     times2.append(end-start)
+    out2.append(agent.timecounter)
 print("Average over 5 runs is {:.4f}".format(np.mean(times2)))  #5.8304 eager
+print(np.mean(out2))
+start = time.time()
+for i in range(64):
+    out = testenv.step(test, 0, 0, False)
+print(time.time()-start)
 
 #Using the same neural network for the agent, and same batch size, time how long it takes to do the training for the circular environment.
 testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward8,dt = .25)
 agent = ACagent(PolicyModel(num_actions=3), ValueModel())
 
 times3=[]
+out3 = []
 for _ in range(5):
     start = time.time()
-    agent.train(testenv, updates=64)
+    agent.train(testenv, updates=1)
     end = time.time()
     times3.append(end-start)
+    out3.append(agent.timecounter)
 print("Average over 5 runs is {:.4f}".format(np.mean(times3)))  #25.1353 eager
+print(np.mean(out3))
  

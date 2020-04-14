@@ -33,6 +33,7 @@ import gym
 import os
 from tqdm import tqdm
 from scipy.interpolate import interp1d
+import time
 #to start we will just use a quantized action space since continuous actions is more complicated
 #%%
 class ProbabilityDistribution(tf.keras.Model):
@@ -204,6 +205,7 @@ class ACagent:
     
     def train(self, env, updates=250, by_eps = False, numeps = 1, nTDsteps = -1):   
         curstate = self.reset(env)
+        self.timecounter = 0
         
         batch_sz = self.simlen * numeps if by_eps else self.batch_sz
         if nTDsteps < 0:
@@ -227,7 +229,9 @@ class ACagent:
             for bstep in range(batch_sz):
                 statemem[bstep] = curstate
                 
+                start = time.time()
                 nextstate, reward, done = env.step(action,self.counter,self.simlen, False)
+                self.timecounter += time.time() - start
                 nextaction, nextvalue = self.action_value(nextstate)
                 env.totloss += reward
                 self.counter += 1
