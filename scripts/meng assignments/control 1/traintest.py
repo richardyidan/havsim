@@ -95,7 +95,7 @@ print("Average over 5 runs is {:.4f}".format(np.mean(times2)))  #5.8304 eager
 print(np.mean(out2))
 start = time.time()
 for i in range(64):
-    out = testenv.step(test, 0, 0, False)
+    out = testenv.step(tf.convert_to_tensor(0), 0, 0, False)
 print(time.time()-start)
 
 #Using the same neural network for the agent, and same batch size, time how long it takes to do the training for the circular environment.
