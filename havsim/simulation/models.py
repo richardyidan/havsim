@@ -30,7 +30,7 @@ def IDM_free(p, state):
     #p = parameters
     return p[3]*(1-(state/p[0])**4)
 
-def IDM_eql(p, v):
+def IDM_eql(p, v, *args):
     #input is p = parameters, v = velocity, output is s = headway corresponding to eql soln
     
     s = ((p[2]+p[1]*v)**2/(1- (v/p[0])**4))**.5
@@ -123,6 +123,23 @@ def mobil_helper(fol, curlead, newlead, newhd, timeind, dt, userelax_cur, userel
         fol.hd = curhd
         
     return  fola, newfola
+
+
+def generate_IDM_parameters(*args): 
+    cf_parameters = [27, 1.2, 2, 1.1, 1.5] #note speed is supposed to be in m/s
+#    cf_parameters[0] += np.random.rand()*6
+    cf_parameters[0] += np.random.rand()*25-15 #give vehicles very different speeds for testing purposes
+    lc_parameters = [-2, .1, .2, .2, 0]
+    
+    kwargs = {'relaxp': 15, 
+              'cfmodel': IDM, 
+              'free_cf': IDM_free, 
+              'lcmodel' : mobil, 
+              'eqlfun' : IDM_eql, 
+              'check_lc': .25}
+    
+    return cf_parameters, lc_parameters, kwargs
+    
 
 #####################stuff for older code 
 

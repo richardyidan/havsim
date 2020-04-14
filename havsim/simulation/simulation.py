@@ -1249,7 +1249,6 @@ def update_net(vehicles, lc_actions, timeind, dt):
                     
     return 
 
-
         
 def update_lrfol(veh):
     lfol, rfol = veh.lfol, veh.rfol
@@ -1433,23 +1432,96 @@ class simulation:
         
         #inflow condition goes here 
         
-def eql_wrapper(eqlfun, input_type = 'v', bounds = (1e-10, 120), tol = .5):
-    #eqlfun -> fun to wrap
-    #input_type = 's' - eqlfun goes from s to v or v to s? (doesn't currently support case when we can do both)
-    #bounds = (1e-10, 120) - bounds used when input_type != find
-    def get_eql(self, x, find = 's'):
-        if find != input_type: 
-            return eqlfun(self.cf_parameters, x)
-        elif find == input_type: 
-            def inveql(y):
-                return x - eqlfun(self.cf_parameters, y)
-            ans = sc.minimize_scalar(inveql, bracket = bounds, tol = tol)
-            if ans['success']: 
-                return ans['x']
-            else: 
-                raise RuntimeError('could not invert provided equilibrium function')
+def eql_wrapper(eqlfun, eql_type = 'v', bounds = (1e-10, 120), tol = .5):
+    #eqlfun -> fun to wrap, needs call signature like (parameters, input, *args)
+    #eql_type = 's' - if 'v', eqlfun takes in velocity and outputs headway. if 's', it takes in headway and outputs velocity
+    #if eql_type = 'both', then eqlfun takes in an additional argument (parameters, input, input_type) and will return the other quantity
+    #bounds = (1e-10, 120) - bounds used when eql_type != find. Should define an interval that the soln is in 
+    #tol = .5 - if need to numerically invert the function, this is the tolerance used 
+    if eql_type != 'both':
+        def get_eql(self, x, input_type = 'v'):
+            if input_type == eql_type: 
+                return eqlfun(self.cf_parameters, x)
+            elif input_type != eql_type: 
+                def inveql(y):
+                    return x - eqlfun(self.cf_parameters, y)
+                ans = sc.root_scalar(inveql, bracket = bounds, xtol = tol, method = 'brentq')
+                if ans['converged']: 
+                    return ans['root']
+                else: 
+                    raise RuntimeError('could not invert provided equilibrium function')
+    else:
+        def get_eql(self, x, input_type = 'v'):
+            return eqlfun(self.cf_parameters, x, input_type)
     
     return get_eql
+
+def FD_wrapper(eqlfun):
+    #returns flow based on provided equilibrium function 
+    def get_flow(self, x, leadlen = None, input_type = 'v'):
+        if leadlen == None: 
+            lead = self.lead 
+            if lead != None: 
+                leadlen = lead.len
+            else:
+                leadlen = self.len
+        if input_type == 'v':
+            s = self.get_eql(x, input_type = input_type)
+            return x / (s + leadlen)
+        elif input_type == 's': 
+            v = self.get_eql(x, input_type = input_type)
+            return v / (s + leadlen)
+    return get_flow
+                
+        
+def invFD_wrapper(eqlfun, eql_type = 'v', bounds = (1e-10, 120), tol = .01):
+    if eql_type != 'both':
+        def inv_flow(self, x, leadlen = None, output_type = 'v', congested = True):
+            if leadlen == None: 
+                lead = self.lead 
+            if lead != None: 
+                leadlen = lead.len
+            else:
+                leadlen = self.len
+                
+            def maxfun(y):
+                return -self.get_flow(y, leadlen = leadlen, input_type = eql_type)
+            
+            res = sc.minimize_scalar(maxfun, bracket = bounds, tol = tol)
+            if res['converged']:
+                if congested: 
+                    invbounds = (bounds[0], res['x'])
+                else:
+                    invbounds = (res['x'], bounds[1])
+            else:
+                raise RuntimeError('could not find maximum flow')
+                
+                
+            if eql_type == 'v':
+                def invfun(y): 
+                    return x - y/(self.get_eql(y, input_type = eql_type) + leadlen)
+            elif eql_type == 's':
+                def invfun(y):
+                    return x - self.get_eql(y, input_type = eql_type)/(y+leadlen)
+            
+            ans = sc.root_scalar(invfun, bracket = invbounds, xtol = tol, method = 'brentq')
+            
+            if ans['converged']:
+                if output_type == eql_type: 
+                    return ans['root']
+                elif output_type == 's':
+                    return ans['root']/x - leadlen
+                elif output_type == 'v':
+                    return (ans['root']+leadlen)*x
+            else: 
+                raise RuntimeError('could not invert provided equilibrium function')
+    else: 
+        raise RuntimeError('not supported')
+    
+    return inv_flow
+        
+        
+    
 
 
 def CF_wrapper(cfmodel, acc_bounds = [-7,3]): 
@@ -1555,33 +1627,34 @@ class vehicle:
     #and directly feed that in (easier but more restrictive)
     
     #option 2 - you can inherit this class and write your own functions (more work but less restrictive)
-    def __init__(self, vehid, pos, speed, hd, lead, lane, p, length, lcp, fol, lfol, rfol, llead, rlead, time, relaxp = None,
+    def __init__(self, vehid,lane, p, length, lcp, relaxp = None,
                  cfmodel = None, free_cf = None, lcmodel = None, eqlfun = None, check_lc = .25): 
         self.vehid = vehid
-        self.lead = lead
+        self.lead = None
         self.lane = lane
         self.road = lane.road
         self.cf_parameters = p
         self.relaxp = relaxp
         self.length = length
         self.lc_parameters = lcp
-        self.fol = fol
-        self.lfol = lfol
-        self.rfol = rfol
-        self.llead = llead
-        self.rlead = rlead
-        self.inittime= time
+        
+        self.fol = None
+        self.lfol = None
+        self.rfol = None
+        self.llead = None
+        self.rlead = None
+        
+        self.inittime= None
         self.endtime = None
-        self.pos = pos
-        self.speed = speed
-        self.hd = hd
-#        self.lc = None
+        self.pos = None
+        self.speed = None
+        self.hd = None
         self.action = None
         
-        self.leadmem = [(lead,time)]
-        self.lanemem = [(lane, time)]
-        self.posmem = [pos]
-        self.speedmem = [speed]
+        self.leadmem = []
+        self.lanemem = []
+        self.posmem = []
+        self.speedmem = []
         self.relaxmem = []
         #will want lfol and rfol memory if you want gradient wrt LC parameters, probably need memory for lc output as well 
         #won't store headway to save a bit of memory
@@ -1629,20 +1702,37 @@ class vehicle:
     
             
 
-def downstream_wrapper(timeseries, starttimeind = 0):
-    @staticmethod
-    def call_downstream(veh, timeind, dt):
-        speed = timeseries[timeind-starttimeind]
-        return (speed - veh.speed)/dt
+def downstream_wrapper(timeseries = None, starttimeind = 0, method = 'speed', congested = True):
+    #downstream function -> method of lane, takes in (veh, timeind, dt)
+    #and returns action (acceleration) for the vehicle 
+    
+    if method == 'speed':
+        @staticmethod
+        def call_downstream(veh, timeind, dt):
+            speed = timeseries[timeind-starttimeind]
+            return (speed - veh.speed)/dt
+        return call_downstream
+    
+    elif method == 'free':
+        @staticmethod
+        def free_downstream(veh, *args):
+            return veh.free_cf(veh.cf_parameters, veh.speed)
+        return free_downstream
+    
+    elif method == 'flow':
+        @staticmethod
+        def call_downstream(veh, timeind, dt):
+            flow = timeseries[timeind - starttimeind]
+            speed = veh.inv_flow(flow, output_type = 'v', congested = congested)
+            return (speed - veh.speed)/dt
+        return call_downstream
     
 #def free_downstream_wrapper(free_cf_model):
 #    #this only works if all vehicles have same model - needs to call something vehicle specific
 #    @staticmethod
 #    def call_downstream(veh, *args):
 #        return free_cf_model(veh.cf_parameters, veh.speed)
-@staticmethod
-def free_downstream(veh, *args):
-    return veh.free_cf(veh.cf_parameters, veh.speed)
+
         
 class anchor_vehicle:
     #anchor vehicles have cf_parameters as None 
@@ -1663,24 +1753,176 @@ class anchor_vehicle:
         
         self.leadmem = [[lead,time]]
         
+def get_inflow_wrapper(timeseries = None, inflow_type = 'flow', starttimeind = 0):
+    #to use the inflow functions provided, you need the following methods in the lane 
+    # - get_inflow = 'flow' - accepts either timeseries of flow ('flow'), or timeseries of speed ('speed'). 
+    #If giving speeds, the vehicle to be added needs a get_eql method
+    # - generate_parameters (accepts no arguments, returns cf/lc_parameters, and all keyword arguments, 
+    # for a new vehicle)
+    
+    #returns get_inflow function, which accepts timeind and returns the flow at that time
+    
+    if inflow_type == 'flow':
+        def get_inflow(self, timeind):
+            return timeseries[timeind-starttimeind], None
+    elif inflow_type == 'speed':
+        def get_inflow(self, timeind):
+            spd = timeseries[timeind - starttimeind]
+            lead = self.anchor.lead
+            if lead is not None:
+                leadlen = lead.len
+            else:
+                leadlen = self.newveh.len
+            s = self.newveh.get_eql(spd, find = 's')
+            return spd / (s + leadlen), spd
+    elif inflow_type == 'congested':
+        def get_inflow(self, timeind):
+            lead = self.anchor.lead
+            if lead is not None:
+                leadlen = lead.len
+                spd = lead.speed
+            else:
+                leadlen = self.newveh.len
+                spd = timeseries[timeind - starttimeind]
+            s = self.newveh.get_eql(spd, find = 's')
+            return spd / (s + leadlen), spd
+
+    return get_inflow
+        
+def timeseries_wrapper(timeseries, starttimeind = 0):
+    def out(timeind):
+        return timeseries[timeind-starttimeind]
+    return out
+    
+def eql_inflow_congested(lane, inflow, c = .8, check_gap = True):
+    #suggested by treiber for congested conditions, requires to invert the inflow to obtain 
+    #the steady state headway. the actual headway on the road must be at least c * the steady state headway 
+    #for the vehicle to be added. 
+    #if check_gap is False, we don't have to invert the flow, we will always just add at the equilibrium speed
+    #the vehicle is added with a speed obtained from the equilibrium speed with the current headway 
+    
+    lead = lane.anchor.lead
+    hd = lane.get_headway(lane.anchor, lead)
+    if check_gap == True:
+        se = lane.newveh.inv_flow(inflow, leadlen = lead.len, output_type = 's') #headway corresponding to current flow
+    else:
+        se = -math.inf
+    if hd > c*se: #condition met
+        spd = lane.veh.get_eql(hd, input_type = 's')
+        return 0, spd, hd
+    else:
+        return None
+    
+def eql_inflow_free(lane, inflow):
+    #suggested by treiber for free conditions, requires to invert the inflow to obtain 
+    #the velocity 
+    lead = lane.anchor.lead
+    hd = lane.get_headway(lane.anchor, lead)
+    spd = lane.newveh.inv_flow(inflow, leadlen = lead.len, output_type = 'v', congested = False) #speed corresponding to current flow
+    return 0, spd, hd
+
+def shifted_speed_inflow(lane, dt, shift = 1, accel_bound = -2):
+    #gives the first speed based on the shifted speed of the lead vehicle (similar to newell model)
+    #shift = 1 - shift in time, measured in real time 
+    #accel_bound = -2 - if not None, the acceleration of the vehicle 
+    #must be greater than the accel_bound. Otherwise, no such bound is enforced
+    lead = lane.anchor.lead
+    hd = lane.get_headway(lane.anchor, lead)
+    if len(lead.speedmem)*dt < shift: 
+        spd = lead.speedmem[0]
+    else:
+        ind = math.ceil(shift/dt)
+        spd = lead.speedmem[-ind]
+        
+    if accel_bound is not None: 
+        newveh = lane.newveh
+        newveh.pos = 0
+        newveh.spd = spd
+        newveh.hd = hd
+        acc = newveh.call_cf(lead, lane, None, dt, False)
+        if acc > accel_bound: 
+            return 0, spd, hd
+        else: 
+            return None
+    
+    return 0, spd, hd
+
+def speed_inflow(lane, speed_fun, timeind, dt, accel_bound = -2):
+    #gives the first speed based on the shifted speed of the lead vehicle (similar to newell model)
+    #shift = 1 - shift in time, measured in real time 
+    #accel_bound = -2 - if not None, the acceleration of the vehicle 
+    #must be greater than the accel_bound. Otherwise, no such bound is enforced
+    lead = lane.anchor.lead
+    hd = lane.get_headway(lane.anchor, lead)
+    spd = speed_fun(timeind)
+        
+    if accel_bound is not None: 
+        newveh = lane.newveh
+        newveh.pos = 0
+        newveh.spd = spd
+        newveh.hd = hd
+        acc = newveh.call_cf(lead, lane, None, dt, False)
+        if acc > accel_bound: 
+            return 0, spd, hd
+        else: 
+            return None
+    
+    return 0, spd, hd 
+    
+
+
+def increment_inflow_wrapper(method = 'eql', accel_bound = -2, speed_fun = None, check_gap = True, shift = 1, c = .8):
+    #method = 'eql' vehicles have 0 acceleration when being added. The speed is defined by the vehicles
+    #equilibrium function. Thus to use this method, the vehicle to be added must have a get_eql method 
+    #(and use a model which predicts acceleration)
+    #if check_gap = True, the headway must be at least as big as the equilibrium headway corresponding to 
+    #the current inflow. 
+    #method = 'shifted' - uses shifted speed 
+    def increment_inflow(self,timeind, dt):
+        inflow, spd = self.get_inflow(timeind)
+        self.inflow_buffer += inflow * dt
+        
+        if self.inflow_buffer >= 1: 
+            if self.anchor.lead is None: 
+                if spd is None: 
+                    spd = speed_fun(timeind)
+                out = (0, spd, None)
+            elif method == 'ceql': 
+                out = eql_inflow_congested(self, inflow, c = c, check_gap = check_gap)
+            elif method == 'feql':
+                out = eql_inflow_free(self, inflow)
+            elif method == 'shifted':
+                out = shifted_speed_inflow(self, dt, shift = shift, accel_bound = accel_bound)
+            elif method == 'speed':
+                out = speed_inflow(self, speed_fun, timeind, dt, accel_bound = accel_bound)
+            
+            if out == None:  
+                return
+            #add vehicle with given initial conditions
+            pos, speed, hd = out[0], out[1], out[2]
+            
+            
+            self.inflow_buffer += -1
+            #create next vehicle
+            
+                
+                
+                
+        return
+        
+    return increment_inflow
+        
     
 class lane: 
-    def __init__(self, length, connect_to=None, connect_from = None, connect_left = None, connect_right = None, downstream_speeds = None, starttime = 0, 
-                 free_cf = True):
+    def __init__(self, length, connect_to=None, connect_from = None, connect_left = None, connect_right = None, downstream_kwargs = None):
         self.length = length
         self.connect_to = connect_to
         self.connect_from = connect_from
         self.connect_left = connect_left
         self.connect_right = connect_right
         
-        #free flow boundary condition - lets vehicles accelerate freely to exit simulation
-#        if free_cf is not None: 
-#            self.call_downstream = free_downstream_wrapper(free_cf_model)
-        if free_cf: 
-            self.call_downstream = free_downstream
-        #can simulate congested outflow condition by specifying a time series which controls speed of vehicles at end of simulation 
-        elif downstream_speeds is not None: 
-            self.call_downstream = downstream_wrapper(downstream_speeds, starttime)
+        if downstream_kwargs is not None:
+            self.call_downstream = downstream_wrapper(**downstream_kwargs)
         
         #todo - 
         #need function to initialize roads, which will make roadlen dictionary, 
