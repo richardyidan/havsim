@@ -1683,7 +1683,7 @@ class vehicle:
             self.call_lc = LC_wrapper(lcmodel)
             
     def __hash__(self):
-        return self.vehid
+        return hash(self.vehid)
         
     def __eq__(self, other):
         return self.vehid == other.vehid
@@ -1707,14 +1707,14 @@ class vehicle:
     
             
 
-def downstream_wrapper(timeseries = None, starttimeind = 0, method = 'speed', congested = True):
+def downstream_wrapper(speed_fun = None, method = 'speed', congested = True):
     #downstream function -> method of lane, takes in (veh, timeind, dt)
     #and returns action (acceleration) for the vehicle 
     
     if method == 'speed':
         @staticmethod
         def call_downstream(veh, timeind, dt):
-            speed = timeseries[timeind-starttimeind]
+            speed = speed_fun(timeind)
             return (speed - veh.speed)/dt
         return call_downstream
     
@@ -1727,7 +1727,7 @@ def downstream_wrapper(timeseries = None, starttimeind = 0, method = 'speed', co
     elif method == 'flow':
         @staticmethod
         def call_downstream(veh, timeind, dt):
-            flow = timeseries[timeind - starttimeind]
+            flow = speed_fun(timeind)
             speed = veh.inv_flow(flow, output_type = 'v', congested = congested)
             return (speed - veh.speed)/dt
         return call_downstream

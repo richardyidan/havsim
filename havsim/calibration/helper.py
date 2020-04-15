@@ -1109,11 +1109,16 @@ def boundaryspeeds(meas, entrylanes, exitlanes, timeind, outtimeind, car_ids=Non
 def interpolate(data, interval=1.0):
     # entry/exit data: 2d array with 2 columns: time and speed for a lane
     #second column is the one we act on; not necessarily have to be speed
-    # interval: aggregation units.
+    # interval: aggregation units. = new timeind / old timeind
     # returns: (aggregated_speed_list, (start_time_of_first_interval, start_time_of_last_interval))
     
     if not len(data):
         return list(), ()
+    if len(np.shape(data)) == 1:
+        newdata = np.zeros((len(data),2))
+        newdata[:,1] = data
+        newdata[:,0] = list(range(len(data)))
+        data = newdata
     speeds = list()
     cur_ind = 0
     cur_time = data[0, 0]
