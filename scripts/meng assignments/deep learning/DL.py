@@ -245,7 +245,7 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutp
         return None, None, None
     #obtain leadinfo for vehicle_id
     leadinfo, folinfo, rinfo = havsim.calibration.helper.makeleadfolinfo([vehicle_id], input_platooninfo, input_meas)
-    relax = havsim.calibration.opt.r_constant(rinfo[0], [t_n, T_nm1], T_n, 5, False)
+    relax = havsim.calibration.opt.r_constant(rinfo[0], [t_n, T_nm1], T_n, 5, False)#change this
 
     #form the lead trajectory for vehicle_id
     lead = np.zeros((T_nm1 - t_n+1,3)) #columns are position, speed, length
