@@ -93,6 +93,7 @@ for _ in range(5):
     out2.append(agent.timecounter)
 print("Average over 5 runs is {:.4f}".format(np.mean(times2)))  #5.8304 eager
 print(np.mean(out2))
+testenv.reset()
 start = time.time()
 for i in range(64):
     out = testenv.step(tf.convert_to_tensor(0), 0, 0, False)

@@ -23,8 +23,8 @@ except:
 
 
 import havsim
-from havsim.simulation.simulation import *
-from havsim.simulation.models import *
+from havsim.simulation.simulation import simulate_step, eq_circular, simulate_cir, update_cir, update2nd_cir
+from havsim.simulation.models import drl_reward8, IDM_b3, IDM_b3_eql, FS
 from havsim.plotting import plotformat, platoonplot
 
 import copy
