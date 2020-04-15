@@ -457,7 +457,6 @@ def plotformat(sim, auxinfo, roadinfo, starttimeind = 0, endtimeind = 3000, dens
 
     return meas, platooninfo
 
-
 def platoonplot(meas, sim, followerchain, platoon=[], newfig=True, clr=['C0', 'C1'],
                 fulltraj=True, lane=None, opacity=.4, colorcode=True, speed_limit=[]):  # plot platoon in space-time
     # CURRENT DOCUMENTATION 11/11
@@ -1278,36 +1277,47 @@ def plotvhd(meas, sim, platooninfo, my_id, show_sim=True, show_meas=True, effect
     return
 
 ##################################
-def plotvhd_v2(meas, sim, platooninfo, vehicle_id, show_sim=True, show_meas=True, effective_headway=False, rp=None, h=.1,
-            datalen=9, end=None, delay=0, newfig=True):
+def plotvhd_v2(meas, sim, platooninfo, vehicle_id, draw_arrows=False, effective_headway=False, rp=None, h=.1,
+            datalen=9, timerange=[None, None], lane=None, delay=0, newfig=True):
     # plot in the velocity headway plane.
     # would like to make this so that you can pass in rinfo and it will automatically not connect the lines between before/after the lane changes so you don't get the annoying horizontal lines
     # in the plot (which occur because of lane changing)
-        
+
     ####plotting
     if newfig:
         plt.figure()
     plt.xlabel('space headway (ft)')
     plt.ylabel('speed (ft/s)')
-    plt.title('space-headway for vehicle ' + " ".join(list(map(str, (vehicle_id)))))
+    title_text = 'space-headway for vehicle ' + " ".join(list(map(str, (vehicle_id))))
+    if lane is not None:
+        title_text = title_text + ' on lane ' + str(lane)
+    plt.title(title_text)
     ax = plt.gca()
 
     if sim is None:
         # If sim is None, plot meas for all vehicles in vehicle_id
         for my_id in vehicle_id:
-            plot_one_vehicle(plt, ax, meas, sim, platooninfo, my_id, effective_headway, rp, h, datalen, end, delay)
+            plot_one_vehicle(plt, ax, False, meas, sim, platooninfo, my_id, timerange, lane, effective_headway, rp, h, datalen, delay)
     else:
         # If both meas and sim are provided,
         # will plot both simulation and measurement data for the first vehicle in vehicle_id
         if len(vehicle_id) > 1: 
             print('plotting first vehicle '+str(vehicle_id[0])+' only')
-        plot_one_vehicle(plt, ax, meas, sim, platooninfo, vehicle_id[0], effective_headway, rp, h, datalen, end, delay)
+        plot_one_vehicle(plt, ax, False, meas, sim, platooninfo, vehicle_id[0], timerange, lane, effective_headway, rp, h, datalen, delay)
 
     organize_legends(plt)
+
+    if draw_arrows:
+        if sim is None:
+            for my_id in vehicle_id:
+                plot_one_vehicle(plt, ax, True, meas, sim, platooninfo, my_id, timerange, lane, effective_headway, rp, h, datalen, delay)
+        else:
+            plot_one_vehicle(plt, ax, True, meas, sim, platooninfo, vehicle_id[0], timerange, lane, effective_headway, rp, h, datalen, delay)
     return
 
 
-def plot_one_vehicle(plt, ax, meas, sim, platooninfo, my_id, effective_headway=False, rp=None, h=.1, datalen=9, end=None, delay=0):
+def plot_one_vehicle(plt, ax, draw_arrow, meas, sim, platooninfo, my_id, timerange, lane, effective_headway=False, rp=None, h=.1, datalen=9, delay=0):
+    # draw_arrow = True: draw arrows; False: plot the actual trajectories
     if effective_headway:
         leadinfo, folinfo, rinfo = helper.makeleadfolinfo([my_id], platooninfo, meas)
     else:
@@ -1315,14 +1325,8 @@ def plot_one_vehicle(plt, ax, meas, sim, platooninfo, my_id, effective_headway=F
     
     t_nstar, t_n, T_nm1, T_n = platooninfo[my_id][0:4]
     
-    if delay != 0:
-        offset = math.ceil(delay / h)
-        start = t_n + offset
-    else:
-        start = t_n
-
-    if end == None:
-        end = T_nm1
+    # Compute and validate start and end time
+    start, end = compute_validate_time(timerange, t_n, T_nm1, h, delay)
             
     frames = [t_n, T_nm1]
     relax, unused = r_constant(rinfo[0], frames, T_n, rp, False, h)  # get the relaxation amounts for the current vehicle; these depend on the parameter curp[-1] only.
@@ -1333,18 +1337,19 @@ def plot_one_vehicle(plt, ax, meas, sim, platooninfo, my_id, effective_headway=F
         headway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, sim, my_id, relax)
         sim_color = next(ax._get_lines.prop_cycler)['color']
         meas_label = 'Measurements'
-        plot_one_vehicle_with_leader_change(plt, headway[:end + 1 - start], sim[my_id][start - t_nstar:end + 1 - t_nstar, 3], leadinfo, start, 'Simulation', sim_color)
+        plot_one_vehicle_with_leader_change(plt, draw_arrow, headway[:end + 1 - start], sim[my_id][start - t_nstar:end + 1 - t_nstar, 3], sim[my_id][start - t_nstar:end + 1 - t_nstar, 7], lane, leadinfo, start, 'Simulation', sim_color)
         
     trueheadway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, meas, my_id, relax)
     meas_color = next(ax._get_lines.prop_cycler)['color']
-    plot_one_vehicle_with_leader_change(plt, trueheadway[:end + 1 - start], meas[my_id][start - t_nstar:end + 1 - t_nstar, 3], leadinfo, start, meas_label, meas_color)
+    plot_one_vehicle_with_leader_change(plt, draw_arrow, trueheadway[:end + 1 - start], meas[my_id][start - t_nstar:end + 1 - t_nstar, 3], meas[my_id][start - t_nstar:end + 1 - t_nstar, 7], lane, leadinfo, start, meas_label, meas_color)
     return
 
-def plot_one_vehicle_with_leader_change(plt, x_coordinates, y_coordinates, leadinfo, start, label, color):
+def plot_one_vehicle_with_leader_change(plt, draw_arrow, x_coordinates, y_coordinates, lane_numbers, target_lane, leadinfo, start, label, color, opacity=.4):
     # If there is at least a leader change,
     # we want to separate data into multiple sets otherwise there will be horizontal lines that have no meanings
     # x_coordinates and y_coordinates will have the same length,
     # and x_coordinates[0] and y_coordinates[0] have the same time frame == start
+    # lane_numbers list has corresponding lane number for every single y_coordinates (speed)
     temp_start = 0
     leader_id = leadinfo[0][0][0]
 
@@ -1353,12 +1358,25 @@ def plot_one_vehicle_with_leader_change(plt, x_coordinates, y_coordinates, leadi
         if current_leader_id != leader_id:
             # Detected a leader change, plot the previous set
             leader_id = current_leader_id
-            plt.plot(x_coordinates[temp_start:index], y_coordinates[temp_start:index], label=label, color=color)
-            plot_arrow_directions(x_coordinates[temp_start:index], y_coordinates[temp_start:index], color)
+            if draw_arrow:
+                plot_arrow_directions(x_coordinates[temp_start:index], y_coordinates[temp_start:index], color)
+            else:
+                kwargs = {}
+                # Check if lane changed as well, if yes, plot opaque lines instead
+                if lane_numbers[temp_start] != target_lane and target_lane is not None:
+                    kwargs = {'alpha': opacity}  # .4 opacity (60% see through)
+                plt.plot(x_coordinates[temp_start:index], y_coordinates[temp_start:index], label=label, color=color, **kwargs)
+
             temp_start = index
+
     # Plot the very last set, if there is one
-    plt.plot(x_coordinates[temp_start:], y_coordinates[temp_start:], label=label, color=color)
-    plot_arrow_directions(x_coordinates[temp_start:], y_coordinates[temp_start:], color)
+    if draw_arrow:
+        plot_arrow_directions(x_coordinates[temp_start:], y_coordinates[temp_start:], color)
+    else:
+        kwargs = {}
+        if lane_numbers[temp_start] != target_lane and target_lane is not None:
+            kwargs = {'alpha': opacity}  # .4 opacity (60% see through)
+        plt.plot(x_coordinates[temp_start:], y_coordinates[temp_start:], label=label, color=color, **kwargs)
     return
 
 def organize_legends(plt):
@@ -1371,6 +1389,13 @@ def organize_legends(plt):
     plt.legend(newHandles, newLabels)
 
 def plot_arrow_directions(x_coordinates, y_coordinates, color, arrowinterval=15, arrlen=3):
+    ###############
+    ax = plt.gca()
+    width = ax.get_xlim()[1] - ax.get_xlim()[0]
+    height = ax.get_ylim()[1] - ax.get_ylim()[0]
+    scale_ratio = width / height
+    ###############
+
     # Reverse the list so the arrows are pointing at the correct direction
     x_coordinates = list(reversed(x_coordinates))
     y_coordinates = list(reversed(y_coordinates))
@@ -1392,13 +1417,7 @@ def plot_arrow_directions(x_coordinates, y_coordinates, color, arrowinterval=15,
             arr2dx = curdx*math.cos(arroffset) + curdy*math.sin(arroffset)
             arr1dy = curdx*math.sin(arroffset) + curdy*math.cos(arroffset)
             arr2dy = -curdx*math.sin(arroffset) + curdy*math.cos(arroffset)
-            
-            
-            
-#            arr1dx = arrlen * math.cos(theta - arroffset)
-#            arr2dx = arrlen * math.cos(theta + arroffset)
-#            arr1dy = arrlen * math.sin(theta - arroffset)
-#            arr2dy = arrlen * math.sin(theta + arroffset)
+
             plt.plot([x_coordinates[i], x_coordinates[i] + arr1dx], [y_coordinates[i], y_coordinates[i] + 1/2*arr1dy], 'k-')
             plt.plot([x_coordinates[i], x_coordinates[i] + arr2dx], [y_coordinates[i], y_coordinates[i] + 1/2*arr2dy], 'k-')
 
@@ -1531,9 +1550,6 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
             leadinfo, folinfo, rinfo = helper.makeleadfolinfo([id], platooninfo, meas, relaxtype = 'both')
         else:
             leadinfo, folinfo, rinfo = helper.makeleadfolinfo([ id], platooninfo, meas, relaxtype = 'none')
-
-        print(id)
-        print(leadinfo)
         
         if useend is None:
             end = T_nm1
