@@ -1279,9 +1279,7 @@ def plotvhd(meas, sim, platooninfo, my_id, show_sim=True, show_meas=True, effect
 ##################################
 def plotvhd_v2(meas, sim, platooninfo, vehicle_id, draw_arrows=False, effective_headway=False, rp=None, h=.1,
             datalen=9, timerange=[None, None], lane=None, delay=0, newfig=True):
-    # plot in the velocity headway plane.
-    # would like to make this so that you can pass in rinfo and it will automatically not connect the lines between before/after the lane changes so you don't get the annoying horizontal lines
-    # in the plot (which occur because of lane changing)
+    #draw_arrow is not fully implemented 
 
     ####plotting
     if newfig:
@@ -1337,11 +1335,13 @@ def plot_one_vehicle(plt, ax, draw_arrow, meas, sim, platooninfo, my_id, timeran
         headway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, sim, my_id, relax)
         sim_color = next(ax._get_lines.prop_cycler)['color']
         meas_label = 'Measurements'
-        plot_one_vehicle_with_leader_change(plt, draw_arrow, headway[:end + 1 - start], sim[my_id][start - t_nstar:end + 1 - t_nstar, 3], sim[my_id][start - t_nstar:end + 1 - t_nstar, 7], lane, leadinfo, start, 'Simulation', sim_color)
+        plot_one_vehicle_with_leader_change(plt, draw_arrow, headway[:end + 1 - start], sim[my_id][start - t_nstar:end + 1 - t_nstar, 3], 
+                                            sim[my_id][start - t_nstar:end + 1 - t_nstar, 7], lane, leadinfo, start, 'Simulation', sim_color)
         
     trueheadway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, meas, my_id, relax)
     meas_color = next(ax._get_lines.prop_cycler)['color']
-    plot_one_vehicle_with_leader_change(plt, draw_arrow, trueheadway[:end + 1 - start], meas[my_id][start - t_nstar:end + 1 - t_nstar, 3], meas[my_id][start - t_nstar:end + 1 - t_nstar, 7], lane, leadinfo, start, meas_label, meas_color)
+    plot_one_vehicle_with_leader_change(plt, draw_arrow, trueheadway[:end + 1 - start], meas[my_id][start - t_nstar:end + 1 - t_nstar, 3], 
+                                        meas[my_id][start - t_nstar:end + 1 - t_nstar, 7], lane, leadinfo, start, meas_label, meas_color)
     return
 
 def plot_one_vehicle_with_leader_change(plt, draw_arrow, x_coordinates, y_coordinates, lane_numbers, target_lane, leadinfo, start, label, color, opacity=.4):
@@ -1358,25 +1358,29 @@ def plot_one_vehicle_with_leader_change(plt, draw_arrow, x_coordinates, y_coordi
         if current_leader_id != leader_id:
             # Detected a leader change, plot the previous set
             leader_id = current_leader_id
+#            if draw_arrow:
+#                plot_arrow_directions(x_coordinates[temp_start:index], y_coordinates[temp_start:index], color)
+#            else:
+            kwargs = {}
+            # Check if lane changed as well, if yes, plot opaque lines instead
+            if lane_numbers[temp_start] != target_lane and target_lane is not None:
+                kwargs = {'alpha': opacity}  # .4 opacity (60% see through)
+            art = plt.plot(x_coordinates[temp_start:index], y_coordinates[temp_start:index], label=label, color=color, **kwargs)
             if draw_arrow:
-                plot_arrow_directions(x_coordinates[temp_start:index], y_coordinates[temp_start:index], color)
-            else:
-                kwargs = {}
-                # Check if lane changed as well, if yes, plot opaque lines instead
-                if lane_numbers[temp_start] != target_lane and target_lane is not None:
-                    kwargs = {'alpha': opacity}  # .4 opacity (60% see through)
-                plt.plot(x_coordinates[temp_start:index], y_coordinates[temp_start:index], label=label, color=color, **kwargs)
+                add_arrow(art[0])
 
             temp_start = index
 
     # Plot the very last set, if there is one
+#    if draw_arrow:
+#        plot_arrow_directions(x_coordinates[temp_start:], y_coordinates[temp_start:], color)
+#    else:
+    kwargs = {}
+    if lane_numbers[temp_start] != target_lane and target_lane is not None:
+        kwargs = {'alpha': opacity}  # .4 opacity (60% see through)
+    art = plt.plot(x_coordinates[temp_start:], y_coordinates[temp_start:], label=label, color=color, **kwargs)
     if draw_arrow:
-        plot_arrow_directions(x_coordinates[temp_start:], y_coordinates[temp_start:], color)
-    else:
-        kwargs = {}
-        if lane_numbers[temp_start] != target_lane and target_lane is not None:
-            kwargs = {'alpha': opacity}  # .4 opacity (60% see through)
-        plt.plot(x_coordinates[temp_start:], y_coordinates[temp_start:], label=label, color=color, **kwargs)
+        add_arrow(art[0])
     return
 
 def organize_legends(plt):
@@ -1418,10 +1422,42 @@ def plot_arrow_directions(x_coordinates, y_coordinates, color, arrowinterval=15,
             arr1dy = curdx*math.sin(arroffset) + curdy*math.cos(arroffset)
             arr2dy = -curdx*math.sin(arroffset) + curdy*math.cos(arroffset)
 
-            plt.plot([x_coordinates[i], x_coordinates[i] + arr1dx], [y_coordinates[i], y_coordinates[i] + 1/2*arr1dy], 'k-')
-            plt.plot([x_coordinates[i], x_coordinates[i] + arr2dx], [y_coordinates[i], y_coordinates[i] + 1/2*arr2dy], 'k-')
+            plt.plot([x_coordinates[i], x_coordinates[i] + arr1dx], [y_coordinates[i], y_coordinates[i] + arr1dy], 'k-')
+            plt.plot([x_coordinates[i], x_coordinates[i] + arr2dx], [y_coordinates[i], y_coordinates[i] + arr2dy], 'k-')
 
     return
+
+def add_arrow(line, position=None, direction='right', size=15, color=None):
+    """
+    add an arrow to a line.
+
+    line:       Line2D object
+    position:   x-position of the arrow. If None, mean of xdata is taken
+    direction:  'left' or 'right'
+    size:       size of the arrow in fontsize points
+    color:      if None, line color is taken.
+    """
+    if color is None:
+        color = line.get_color()
+
+    xdata = line.get_xdata()
+    ydata = line.get_ydata()
+
+    if position is None:
+        position = xdata.mean()
+    # find closest index
+    start_ind = np.argmin(np.absolute(xdata - position))
+    if direction == 'right':
+        end_ind = start_ind + 1
+    else:
+        end_ind = start_ind - 1
+
+    line.axes.annotate('',
+        xytext=(xdata[start_ind], ydata[start_ind]),
+        xy=(xdata[end_ind], ydata[end_ind]),
+        arrowprops=dict(arrowstyle="->", color=color),
+        size=size
+    )
 
 ##################################
 
@@ -2313,7 +2349,7 @@ def animatetraj_v2(meas, followerchain, platoon=[], usetime=[], presim=True, pos
         data = np.vstack(pts)
         scatter_pts.set_offsets(data)
         scatter_pts.set_array(c)
-        return
+        return [scatter_pts].extend(current_annotation_dict.values())
 
     def init():
         ax = plt.gca()
@@ -2333,9 +2369,9 @@ def animatetraj_v2(meas, followerchain, platoon=[], usetime=[], presim=True, pos
         scatter_pts.set(norm=norm)
         scatter_pts.set_offsets(data)
         scatter_pts.set_array(c)
-        return
+        return [scatter_pts]
 
-    out = animation.FuncAnimation(fig, aniFunc, init_func=init, frames=len(usetime), interval=3)
+    out = animation.FuncAnimation(fig, aniFunc, init_func=init, frames=len(usetime), interval=1, blit = True)
 
     return out
 
