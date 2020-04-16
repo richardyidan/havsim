@@ -17,7 +17,7 @@ from havsim.calibration.opt import platoonobjfn_obj, platoonobjfn_objder
 from havsim.simulation.simulation import eq_circular, simulate_cir, update2nd_cir, update_cir
 from havsim.simulation.models import IDM_b3, IDM_b3_eql
 #plotting 
-from havsim.plotting import platoonplot, platoonplot_v2, plotflows, animatevhd, plotvhd, plotvhd_v2, animatevhd_list, animatevhd_list_v2, animatetraj, meanspeedplot, optplot, selectoscillation, plotformat, selectvehID
+from havsim.plotting import platoonplot, platoonplot_v2, plotflows, animatevhd, plotvhd, plotvhd_v2, animatevhd_list, animatevhd_list_v2, animatetraj, animatetraj_v2, meanspeedplot, optplot, selectoscillation, plotformat, selectvehID
 #data processing
 from havsim.calibration.algs import makeplatoonlist
 #%% #load data
@@ -50,12 +50,14 @@ platoonplot(meas, sim, platooninfo, platoon = testplatoon[0:2], colorcode = Fals
 
 
 #%% plotvhd and animatevhd\_list
-plotvhd_v2(meas,None,platooninfo,[928,931,967],draw_arrows=True)
+#plotvhd_v2(meas,None,platooninfo,[928,931,967],draw_arrows=True)
 
 
 #animatevhd(meas, None, platooninfo, [928, 931, 967])
 
-animatetraj(meas, platooninfo, platoon = testplatoon[0])
+#animatetraj(meas, platooninfo, platoon = testplatoon[0])
+animatetraj_v2(meas, platooninfo, platoon = testplatoon[0])
+
 
 #%%
 

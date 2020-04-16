@@ -2243,6 +2243,105 @@ def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsi
     return out
 
 
+def animatetraj_v2(meas, followerchain, platoon=[], usetime=[], presim=True, postsim=True, datalen=9, speed_limit = [] ):
+    #plots vehicles platoon using data meas.
+
+    # platoon = [] - if given as a platoon, only plots those vehicles in the platoon (e.g. [[],1,2,3] )
+    # usetime = [] - if given as a list, only plots those times in the list (e.g. list(range(1,100)) )
+    # presim = True - presim and postsim control whether the entire trajectory is displayed or just the simulated parts (t_nstar - T_n versus T-n - T_nm1)
+    # postsim = True
+
+    if platoon != []:
+        followerchain = helper.platoononly(followerchain, platoon)
+    platoontraj, mytime = helper.arraytraj(meas, followerchain, presim, postsim, datalen)
+    if not usetime:
+        usetime = mytime
+
+    fig = plt.figure(figsize=(10, 4))  # initialize figure and axis
+    ax = fig.add_axes([0, 0, 1, 1], frameon=False)
+    ax.set_xlim(0, 1600), ax.set_xlabel('localY')
+    ax.set_ylim(7.5, 0), ax.set_ylabel('laneID')
+
+    scatter_pts = ax.scatter([], [], c=[], cmap=palettable.colorbrewer.diverging.RdYlGn_4.mpl_colormap, marker=">") #cm.get_cmap('RdYlBu')
+
+    if speed_limit == []:
+        maxspeed = 0
+        minspeed = math.inf
+        for i in followerchain.keys():
+            curmax = max(meas[i][:,3])
+            curmin = min(meas[i][:,3])
+            if curmin < minspeed:
+                minspeed = curmin
+            if curmax > maxspeed:
+                maxspeed = curmax
+        norm = plt.Normalize(minspeed,maxspeed)
+    else:
+        norm = plt.Normalize(speed_limit[0], speed_limit[1])
+
+    fig.colorbar(scatter_pts, cmap=cm.get_cmap('RdYlBu'), norm=norm, shrink=0.7)
+    current_annotation_dict = {}
+
+    def aniFunc(frame):
+        ax = plt.gca()
+        curdata = platoontraj[usetime[frame]]
+        X = curdata[:, 2]
+        Y = curdata[:, 7]
+        speeds = curdata[:, 3]
+        ids = curdata[:, 0]
+        existing_vids = list(current_annotation_dict.keys()).copy()
+
+        # Go through ids list
+        # If the annotation already exists, modify it via set_position
+        # If the annotation doesn't exist before, introduce it via ax.annotate
+
+        for i in range(len(ids)):
+            vid = ids[i]
+            if vid in current_annotation_dict.keys():
+                current_annotation_dict[vid].set_position((X[i], Y[i]))
+                existing_vids.remove(vid)
+            else:
+                current_annotation_dict[vid] = ax.annotate(str(int(vid)), (X[i], Y[i]), fontsize=7)
+
+        # Afterwards, check if existing annotations need to be removed, process it accordingly
+        if len(existing_vids) > 0:
+            for vid in existing_vids:
+                current_annotation_dict[vid].remove()
+                del current_annotation_dict[vid]
+
+        c = speeds
+        pts = [[X[i], Y[i]] for i in range(len(X))]
+        data = np.vstack(pts)
+        scatter_pts.set_offsets(data)
+        scatter_pts.set_array(c)
+        return
+
+    def init():
+        ax = plt.gca()
+        for vid, annotation in current_annotation_dict.items():
+            annotation.set_text("")
+            del current_annotation_dict[vid]
+        curdata = platoontraj[usetime[0]]
+        X = curdata[:, 2]
+        Y = curdata[:, 7]
+        speeds = curdata[:, 3]
+        ids = curdata[:, 0]
+        for i in range(len(ids)):
+            current_annotation_dict[ids[i]] = ax.annotate(str(int(ids[i])), (X[i], Y[i]), fontsize=7)
+        c = speeds
+        pts = [[X[i], Y[i]] for i in range(len(X))]
+        data = np.vstack(pts)
+        scatter_pts.set(norm=norm)
+        scatter_pts.set_offsets(data)
+        scatter_pts.set_array(c)
+        return
+
+    out = animation.FuncAnimation(fig, aniFunc, init_func=init, frames=len(usetime), interval=3)
+
+    return out
+
+####################################
+
+
 def wtplot(meas, ID):
     testveh = ID
 
