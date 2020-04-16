@@ -2318,6 +2318,7 @@ def animatetraj_v2(meas, followerchain, platoon=[], usetime=[], presim=True, pos
     current_annotation_dict = {}
 
     def aniFunc(frame):
+        artists = [scatter_pts]
         ax = plt.gca()
         curdata = platoontraj[usetime[frame]]
         X = curdata[:, 2]
@@ -2337,24 +2338,29 @@ def animatetraj_v2(meas, followerchain, platoon=[], usetime=[], presim=True, pos
                 existing_vids.remove(vid)
             else:
                 current_annotation_dict[vid] = ax.annotate(str(int(vid)), (X[i], Y[i]), fontsize=7)
+            artists.append(current_annotation_dict[vid])
 
         # Afterwards, check if existing annotations need to be removed, process it accordingly
         if len(existing_vids) > 0:
             for vid in existing_vids:
+                artists.append(current_annotation_dict[vid])
                 current_annotation_dict[vid].remove()
                 del current_annotation_dict[vid]
+                
 
         c = speeds
         pts = [[X[i], Y[i]] for i in range(len(X))]
         data = np.vstack(pts)
         scatter_pts.set_offsets(data)
         scatter_pts.set_array(c)
-        return [scatter_pts].extend(current_annotation_dict.values())
+        return artists
 
     def init():
+        artists = [scatter_pts]
         ax = plt.gca()
-        for vid, annotation in current_annotation_dict.items():
-            annotation.set_text("")
+        for vid, annotation in list(current_annotation_dict.items()).copy():
+            artists.append(annotation)
+            annotation.remove()
             del current_annotation_dict[vid]
         curdata = platoontraj[usetime[0]]
         X = curdata[:, 2]
@@ -2363,13 +2369,14 @@ def animatetraj_v2(meas, followerchain, platoon=[], usetime=[], presim=True, pos
         ids = curdata[:, 0]
         for i in range(len(ids)):
             current_annotation_dict[ids[i]] = ax.annotate(str(int(ids[i])), (X[i], Y[i]), fontsize=7)
+            artists.append(current_annotation_dict[ids[i]])
         c = speeds
         pts = [[X[i], Y[i]] for i in range(len(X))]
         data = np.vstack(pts)
         scatter_pts.set(norm=norm)
         scatter_pts.set_offsets(data)
         scatter_pts.set_array(c)
-        return [scatter_pts]
+        return artists
 
     out = animation.FuncAnimation(fig, aniFunc, init_func=init, frames=len(usetime), interval=1, blit = True)
 
