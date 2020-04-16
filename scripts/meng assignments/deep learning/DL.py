@@ -37,10 +37,7 @@ def create_input(statemem, j, lead, headway, curmeas, vspeed = False):
         curx = list(leadv)
         curx.extend(list(vehv))
         curx.extend(list(hd))
-    if j + 1 < len(headway):
-        cury = [headway[j+1]]
-    else:
-        cury = None
+    cury = [curmeas[j+1,1]]
     return curx, cury
 
 def normalization_input(xinput, maxheadway, maxvelocity, statemem):
@@ -56,6 +53,8 @@ def normalization_input(xinput, maxheadway, maxvelocity, statemem):
 #comment out and replace with path to pickle files on your computer
 path_reconngsim = '/Users/nathanbala/Desktop/meng_project/data/reconngsim.pkl'
 path_highd26 = '/Users/nathanbala/Desktop/meng_project/data/highd26.pkl'
+#path_reconngsim = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/reconngsim.pkl'
+#path_highd26 = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/highd26.pkl'
 
 # reconstructed ngsim data
 with open(path_reconngsim, 'rb') as f:
@@ -88,6 +87,8 @@ xtrain, ytrain, xtest, ytest = [], [], [], []
 for count, i in enumerate(meas.keys()):
     if len(platooninfo[i][4]) != 1:
         continue
+    if count > 100:
+        break
 
 
     t_nstar, t_n, T_nm1, T_n = platooninfo[i][:4]
@@ -118,14 +119,9 @@ for count, i in enumerate(meas.keys()):
             maxvelocity = temp
 
     #form samples for the current vehicle
-    for j in range(T_nm1+1-t_n):
-        if j == 0:
-            continue
+    for j in range(T_nm1-t_n):
 
         curx, cury = create_input(statemem, j, lead, headway, curmeas, False)
-        #new output for model
-        if cury == None:
-            continue
         if train_or_test[count]:
             xtrain.append(curx)
             ytrain.append(cury)
@@ -216,7 +212,31 @@ def test(dataset, minacc, maxacc):
 
 
 
-def create_output(xtest, minoutput, maxoutput, maxvelocity, maxheadway, headway, lead, curmeas, j, dt=.1):
+#def create_output(xtest, minoutput, maxoutput, maxvelocity, maxheadway, headway, lead, curmeas, j, dt=.1):
+#
+#    #vector to put into NN
+#    xtest = np.asarray([xtest], np.float32)
+#    xtest = normalization_input(xtest, maxheadway, maxvelocity, 5)
+#    predicted = model(xtest)
+#
+#
+#    simulated_headway = (predicted.numpy()[0][0]) * (maxoutput - minoutput) - minoutput
+#    if j + 1 < len(lead):
+#        simulated_trajectory = lead[j+1,0] - lead[j+1,2] - simulated_headway
+#        headway[j+1] = simulated_headway
+#        curmeas[j+1, 0] = simulated_trajectory
+#        prev_speed = (simulated_trajectory - curmeas[j,0]) / dt
+#        curmeas[j+1,1] = prev_speed
+#    else:
+#        simulated_trajectory = lead[j,0] - lead[j,2] - simulated_headway
+#        curmeas[j, 0] = simulated_trajectory
+#        prev_speed = (simulated_trajectory - curmeas[j,0]) / dt
+#        curmeas[j,1] = prev_speed
+#
+#    return curmeas, headway
+
+def create_output2(xtest, minoutput, maxoutput, maxvelocity, maxheadway, headway, lead, curmeas, j, dt=.1):
+    #create_output2 is the new version which assumes the output is next speed and inputs include the vehicle's own speed
 
     #vector to put into NN
     xtest = np.asarray([xtest], np.float32)
@@ -224,20 +244,24 @@ def create_output(xtest, minoutput, maxoutput, maxvelocity, maxheadway, headway,
     predicted = model(xtest)
 
 
-    simulated_headway = (predicted.numpy()[0][0]) * (maxoutput - minoutput) - minoutput
-    if j + 1 < len(lead):
-        simulated_trajectory = lead[j+1,0] - lead[j+1,2] - simulated_headway
-        headway[j+1] = simulated_headway
-        curmeas[j+1, 0] = simulated_trajectory
-        prev_speed = (simulated_trajectory - curmeas[j,0]) / dt
-        curmeas[j+1,1] = prev_speed
-    else:
-        simulated_trajectory = lead[j,0] - lead[j,2] - simulated_headway
-        curmeas[j, 0] = simulated_trajectory
-        prev_speed = (simulated_trajectory - curmeas[j,0]) / dt
-        curmeas[j,1] = prev_speed
+    simulated_speed = (predicted.numpy()[0][0]) * (maxoutput - minoutput) - minoutput
+    curmeas[j+1,0] = curmeas[j,0] + dt*curmeas[j,1]
+    ############
+    #add some extra constraints on acceleration
+    acc = (simulated_speed - curmeas[j,1])/dt
+    if acc > 4*3.3: 
+        simulated_speed = curmeas[j,1] + 4*3.3*dt
+    elif acc < -6*3.3:
+        simulated_speed = curmeas[j,1] - 6*3.3*dt
+    #speeds must be non negative
+    if simulated_speed < 0: 
+        simulated_speed = 0
+    curmeas[j+1,1] = simulated_speed
+    
+    headway[j+1] += lead[j+1,0] - curmeas[j+1,0] - lead[j+1,2] #headway is really relax + headway 
 
-    return curmeas, headway
+    return curmeas, headway 
+
 
 
 
@@ -254,36 +278,27 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutp
     #obtain leadinfo for vehicle_id
     leadinfo, folinfo, rinfo = havsim.calibration.helper.makeleadfolinfo([vehicle_id], input_platooninfo, input_meas)
 
-    relax = havsim.calibration.opt.r_constant(rinfo[0], [t_n, T_nm1], T_n, 5, False)#change this
+    relax = havsim.calibration.opt.r_constant(rinfo[0], [t_n, T_nm1], T_n, 12, False)#change this
 
 
     #form the lead trajectory for vehicle_id
     lead = np.zeros((T_nm1 - t_n+1,3)) #columns are position, speed, length
-
-
-
     for j in leadinfo[0]:
         curleadid = j[0]
         leadt_nstar = input_platooninfo[curleadid][0]
         lead[j[1]-t_n:j[2]+1-t_n,:] = meas[curleadid][j[1]-leadt_nstar:j[2]+1-leadt_nstar,[2,3,6]]
-
+        
     headway = (relax[0][:T_nm1-t_n+1])
-    curmeas = meas[vehicle_id][t_n-t_nstar:T_nm1+1-t_nstar,[2,3,8]]
-
-    first_headway = lead[0,0] - curmeas[0,0] - lead[0,2] #headway is distance between front bumper to rear bumper of leader
+    first_headway = lead[0,0] - meas[vehicle_id][t_n - t_nstar,2] - lead[0,2] #headway is distance between front bumper to rear bumper of leader
 
     headway[0] += first_headway
-    first_vals = curmeas[0,:]
     curmeas = np.zeros((T_nm1-t_n+1, 3))
-
-    curmeas[0,:] = first_vals
+    curmeas[0,:] = meas[vehicle_id][0,[2,3,8]]
 
     #iterating through simulated times
-    for j in range(T_nm1 - t_n+1):
+    for j in range(T_nm1 - t_n):
         curx, unused = create_input(statemem, j, lead, headway, curmeas, False)
-        new_curmeas, new_headway = create_output(curx, minoutput, maxoutput, maxvelocity, maxheadway, headway, lead, curmeas, j)
-        headway = new_headway
-        curmeas = new_curmeas
+        curmeas, headway = create_output2(curx, minoutput, maxoutput, maxvelocity, maxheadway, headway, lead, curmeas, j)
 
 
     x = curmeas[:,0]
@@ -320,8 +335,6 @@ total_count = 0
 lane_error = 0
 lane_count =0
 for count, i in enumerate(meas.keys()):
-    if i == 0:
-        continue
     if count > 500:
         break
     if len(platooninfo[i][4]) != 1:
