@@ -72,7 +72,8 @@ xtrain, ytrain, xtest, ytest = [], [], [], []
 for count, i in enumerate(meas.keys()):
     if len(platooninfo[i][4]) != 1:
         continue
-
+    if count > 250:
+        continue
     t_nstar, t_n, T_nm1, T_n = platooninfo[i][:4]
     leadinfo, folinfo, rinfo = havsim.calibration.helper.makeleadfolinfo([i], platooninfo, meas)
     relax = havsim.calibration.opt.r_constant(rinfo[0], [t_n, T_nm1], T_n, 5, False)
@@ -208,29 +209,23 @@ def test1(dataset, minacc, maxacc):
         mse.append(m)
     return (tf.math.reduce_mean(mse)**.5)*(maxacc-minacc)-minacc, predicted_output
 
-def create_output(xtest, ytest, minoutput, maxoutput, maxvelocity, maxheadway, simulated_trajectory_lst, headway, lead, j):
-    xtest[-1][:statemem] = xtest[-1][:statemem]/maxvelocity
-    xtest[-1][statemem:statemem*2] = xtest[-1][statemem:statemem*2]/maxheadway
+def create_output(xtest, minoutput, maxoutput, maxvelocity, maxheadway, headway, lead, curmeas, j):
+    xtest[:statemem] = xtest[:statemem]/maxvelocity
+    xtest[statemem:statemem*2] = xtest[statemem:statemem*2]/maxheadway
     #vector to put into NN
-    xtest = np.asarray(xtest, np.float32)
-    cury = [0]
-    ytest.append(cury)
-    ytest = (ytest + minoutput)/(maxoutput-minoutput)
-    ytest = tf.convert_to_tensor(ytest,tf.float32)
-    test_ds = tf.data.Dataset.from_tensor_slices(
-            (xtest,ytest)).shuffle(100000).batch(32)
+    xtest = np.asarray([xtest], np.float32)
+    predicted = model(xtest)
 
-
-    output, predicted_acc = test1(test_ds,minoutput,maxoutput)
-    simulated_headway = (predicted_acc[0].numpy()[0][0]) * (maxoutput - minoutput) - minoutput
+    simulated_headway = (predicted.numpy()[0][0]) * (maxoutput - minoutput) - minoutput
     if j + 1 < len(lead):
         simulated_trajectory = lead[j+1,0] - lead[j+1,2] - simulated_headway
         headway[j+1] = simulated_headway
+        curmeas[j+1, 0] = simulated_trajectory
     else:
         simulated_trajectory = lead[j,0] - lead[j,2] - simulated_headway
-    curr_trajectory = simulated_trajectory
+        curmeas[j, 0] = simulated_trajectory
 
-    return curr_trajectory
+    return curmeas
 
 
 def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutput, minaoutput, maxvelocity, maxheadway, previous_sim_traj):
@@ -257,26 +252,19 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutp
         leadt_nstar = input_platooninfo[curleadid][0]
         lead[j[1]-t_n:j[2]+1-t_n,:] = meas[curleadid][j[1]-leadt_nstar:j[2]+1-leadt_nstar,[2,3,6]]
 
-    curmeas = meas[vehicle_id][t_n-t_nstar:T_nm1+1-t_nstar,[2,3,8]] #columns are position, speed, acceleration
+    curmeas = meas[vehicle_id][t_n-t_nstar:T_nm1+1-t_nstar,[2,3,8]]
     headway = lead[:,0] - curmeas[:,0] - lead[:,2] #headway is distance between front bumper to rear bumper of leader
     headway = np.array(headway) + np.array(relax[0][:T_nm1-t_n+1])
 
     curr_trajectory = curmeas[0,0]
-    simulated_trajectory_lst = [curr_trajectory]
+    curmeas = np.zeros((T_nm1-t_n+1, 3))
+    curmeas[0,0] = curr_trajectory
     #iterating through simulated times
     for j in range(T_nm1 - t_n+1):
-        if j == 0:
-            continue
-        xtest = []
-        ytest = []
-
-
-
-        curx, cury = create_input(statemem, j, lead, headway, curmeas)
-        xtest.append(curx)
-        new_traj = create_output(xtest, ytest, minoutput, maxoutput, maxvelocity, maxheadway, simulated_trajectory_lst, headway, lead, j)
-        simulated_trajectory_lst.append(new_traj)
-    x = (simulated_trajectory_lst)
+        curx, unused = create_input(statemem, j, lead, headway, curmeas)
+        new_curmeas = create_output(curx, minoutput, maxoutput, maxvelocity, maxheadway, headway, lead, curmeas, j)
+        curmeas = new_curmeas
+    x = curmeas[:,0]
     x_hat = (meas[vehicle_id][t_n-t_nstar:T_nm1+1-t_nstar,2])
     error = (tf.sqrt(tf.losses.mean_squared_error(x, x_hat)))
 
@@ -396,7 +384,7 @@ def predict_platoon_trajectory(model, vehicle_id, input_meas, input_platooninfo,
 # m2 = test(train_ds, minoutput,maxoutput)
 # print('before training rmse on test dataset is '+str(tf.cast(m,tf.float32))+' rmse on train dataset is '+str(m2))
 
-for epoch in range(6):
+for epoch in range(5):
     for x, yhat in train_ds:
         train_step(x,yhat,loss_fn, optimizer)
     m = test(test_ds,minoutput,maxoutput)
@@ -415,25 +403,25 @@ lane_count =0
 for count, i in enumerate(meas.keys()):
     if i == 0:
         continue
-    if len(platooninfo[i][4]) != 1:
-        pred_traj, acc_traj, rmse = predict_trajectory(model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, None)
-        print(pred_traj)
-        print(acc_traj)
-        print(rmse)
-        if tf.is_tensor(rmse):
-            total_error += rmse
-            total_count += 1
-    else:
-        pred_traj, acc_traj, rmse = predict_trajectory(model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, None)
-        print(pred_traj)
-        print(acc_traj)
-        print(rmse)
-        if tf.is_tensor(rmse):
-            lane_error += rmse
-            lane_count += 1
+    # if len(platooninfo[i][4]) != 1:
+    #     pred_traj, acc_traj, rmse = predict_trajectory(model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, None)
+    #     print(pred_traj)
+    #     print(acc_traj)
+    #     print(rmse)
+    #     if tf.is_tensor(rmse):
+    #         total_error += rmse
+    #         total_count += 1
+    # else:
+    pred_traj, acc_traj, rmse = predict_trajectory(model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, None)
+    print(pred_traj)
+    print(acc_traj)
+    print(rmse)
+    if tf.is_tensor(rmse):
+        lane_error += rmse
+        lane_count += 1
 
 print("------------THIS IS THE FINAL RMSE FOR NONE LANE CHANGE CARS-------------")
 print(total_error/total_count)
 
-print("------------THIS IS THE FINAL RMSE FOR LANE CHANGE CARS-------------")
-print(lane_error/lane_count)
+# print("------------THIS IS THE FINAL RMSE FOR LANE CHANGE CARS-------------")
+# print(lane_error/lane_count)
