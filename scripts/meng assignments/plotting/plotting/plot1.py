@@ -56,7 +56,7 @@ platoonplot(meas, sim, platooninfo, platoon = testplatoon[0:2], colorcode = Fals
 #animatevhd(meas, None, platooninfo, [928, 931, 967])
 
 #animatetraj(meas, platooninfo, platoon = testplatoon[0])
-animatetraj_v2(meas, platooninfo, platoon = testplatoon[0])
+animatetraj_v2(meas, platooninfo, platoon = testplatoon[0], interval = 10)
 
 
 #%%

@@ -1787,7 +1787,8 @@ def animatevhd_list(meas, sim, platooninfo, my_id, lentail=20, show_sim=True, sh
     plt.show()
     return im_ani
 
-def animatevhd(meas, sim, platooninfo, platoon, lentail=20, timerange=[None, None], lane = None, opacity = .2, rp = None, h=.1, delay=0):
+def animatevhd(meas, sim, platooninfo, platoon, lentail=20, timerange=[None, None], 
+               lane = None, opacity = .2, interval = 10, rp = None, h=.1, delay=0):
     # plot multiple vehicles in phase space (speed v headway)
     #meas, sim - data in key = ID, value = numpy array format, pass sim = None to plot one set of data 
     #platooninfo
@@ -1937,7 +1938,7 @@ def animatevhd(meas, sim, platooninfo, platoon, lentail=20, timerange=[None, Non
             
         return artists
     
-    ani = animation.FuncAnimation(fig, anifunc, init_func = init, frames = frames, blit = True, interval = 10)
+    ani = animation.FuncAnimation(fig, anifunc, init_func = init, frames = frames, blit = True, interval = interval)
     
     return ani
             
@@ -2279,7 +2280,8 @@ def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsi
     return out
 
 
-def animatetraj_v2(meas, followerchain, platoon=[], usetime=[], presim=True, postsim=True, datalen=9, speed_limit = [] ):
+def animatetraj_v2(meas, followerchain, platoon=[], usetime=[], presim=True, postsim=True, datalen=9, speed_limit = [], 
+                   show_ID = True, interval = 10):
     #plots vehicles platoon using data meas.
 
     # platoon = [] - if given as a platoon, only plots those vehicles in the platoon (e.g. [[],1,2,3] )
@@ -2330,22 +2332,22 @@ def animatetraj_v2(meas, followerchain, platoon=[], usetime=[], presim=True, pos
         # Go through ids list
         # If the annotation already exists, modify it via set_position
         # If the annotation doesn't exist before, introduce it via ax.annotate
-
-        for i in range(len(ids)):
-            vid = ids[i]
-            if vid in current_annotation_dict.keys():
-                current_annotation_dict[vid].set_position((X[i], Y[i]))
-                existing_vids.remove(vid)
-            else:
-                current_annotation_dict[vid] = ax.annotate(str(int(vid)), (X[i], Y[i]), fontsize=7)
-            artists.append(current_annotation_dict[vid])
-
-        # Afterwards, check if existing annotations need to be removed, process it accordingly
-        if len(existing_vids) > 0:
-            for vid in existing_vids:
+        if show_ID:
+            for i in range(len(ids)):
+                vid = ids[i]
+                if vid in current_annotation_dict.keys():
+                    current_annotation_dict[vid].set_position((X[i], Y[i]))
+                    existing_vids.remove(vid)
+                else:
+                    current_annotation_dict[vid] = ax.annotate(str(int(vid)), (X[i], Y[i]), fontsize=7)
                 artists.append(current_annotation_dict[vid])
-                current_annotation_dict[vid].remove()
-                del current_annotation_dict[vid]
+    
+            # Afterwards, check if existing annotations need to be removed, process it accordingly
+            if len(existing_vids) > 0:
+                for vid in existing_vids:
+                    artists.append(current_annotation_dict[vid])
+                    current_annotation_dict[vid].remove()
+                    del current_annotation_dict[vid]
                 
 
         c = speeds
@@ -2358,10 +2360,11 @@ def animatetraj_v2(meas, followerchain, platoon=[], usetime=[], presim=True, pos
     def init():
         artists = [scatter_pts]
         ax = plt.gca()
-        for vid, annotation in list(current_annotation_dict.items()).copy():
-            artists.append(annotation)
-            annotation.remove()
-            del current_annotation_dict[vid]
+        if show_ID:
+            for vid, annotation in list(current_annotation_dict.items()).copy():
+                artists.append(annotation)
+                annotation.remove()
+                del current_annotation_dict[vid]
         curdata = platoontraj[usetime[0]]
         X = curdata[:, 2]
         Y = curdata[:, 7]
@@ -2378,7 +2381,7 @@ def animatetraj_v2(meas, followerchain, platoon=[], usetime=[], presim=True, pos
         scatter_pts.set_array(c)
         return artists
 
-    out = animation.FuncAnimation(fig, aniFunc, init_func=init, frames=len(usetime), interval=1, blit = True)
+    out = animation.FuncAnimation(fig, aniFunc, init_func=init, frames=len(usetime), interval=interval, blit = True)
 
     return out
 
