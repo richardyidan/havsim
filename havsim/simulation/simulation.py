@@ -1432,7 +1432,7 @@ class simulation:
             
         #update function goes here 
         
-def eql_wrapper(eqlfun, eql_type = 'v', bounds = (1e-10, 120), tol = .5):
+def eql_wrapper(eqlfun, eql_type = 'v', bounds = (1e-10, 120), tol = .1, **kwargs):
     #eqlfun -> fun to wrap, needs call signature like (parameters, input, *args)
     #eql_type = 's' - if 'v', eqlfun takes in velocity and outputs headway. if 's', it takes in headway and outputs velocity
     #if eql_type = 'both', then eqlfun takes in an additional argument (parameters, input, input_type) and will return the other quantity
@@ -1456,6 +1456,7 @@ def eql_wrapper(eqlfun, eql_type = 'v', bounds = (1e-10, 120), tol = .5):
     
     return get_eql
 
+#get_flow is currently not needed anywhere in the code, but could be useful to have 
 def FD_wrapper(eqlfun):
     #returns flow based on provided equilibrium function 
     def get_flow(self, x, leadlen = None, input_type = 'v'):
@@ -1473,8 +1474,12 @@ def FD_wrapper(eqlfun):
             return v / (s + leadlen)
     return get_flow
                 
-        
-def invFD_wrapper(eqlfun, eql_type = 'v', bounds = (1e-10, 120), tol = .01):
+#solving for the headway/speed given flow must be done numerically, 
+    #and thus has some extra computational costs associated with it. 
+    #if eql_type = 'both', it should be possible to solve for the inverse flow function 
+    #analytically and thus one should just define the inv\_flow method using that 
+def invFD_wrapper(eqlfun, eql_type = 'v', bounds = (1e-10, 120), tol = .1, ftol = .01):
+    #same call signature as eql_wrapper, tol is for headway/speed tolerance, ftol is for flow tolerance 
     if eql_type != 'both':
         def inv_flow(self, x, leadlen = None, output_type = 'v', congested = True):
             if leadlen == None: 
@@ -1487,7 +1492,7 @@ def invFD_wrapper(eqlfun, eql_type = 'v', bounds = (1e-10, 120), tol = .01):
             def maxfun(y):
                 return -self.get_flow(y, leadlen = leadlen, input_type = eql_type)
             
-            res = sc.minimize_scalar(maxfun, bracket = bounds, tol = tol)
+            res = sc.minimize_scalar(maxfun, bracket = bounds, tol = ftol)
             if res['converged']:
                 if congested: 
                     invbounds = (bounds[0], res['x'])
@@ -1499,10 +1504,10 @@ def invFD_wrapper(eqlfun, eql_type = 'v', bounds = (1e-10, 120), tol = .01):
                 
             if eql_type == 'v':
                 def invfun(y): 
-                    return x - y/(self.get_eql(y, input_type = eql_type) + leadlen)
+                    return x - y/(eqlfun(self.cf_parameters, y) + leadlen)
             elif eql_type == 's':
                 def invfun(y):
-                    return x - self.get_eql(y, input_type = eql_type)/(y+leadlen)
+                    return x - eqlfun(self.cf_parameters, y)/(y+leadlen)
             
             ans = sc.root_scalar(invfun, bracket = invbounds, xtol = tol, method = 'brentq')
             
@@ -1516,7 +1521,7 @@ def invFD_wrapper(eqlfun, eql_type = 'v', bounds = (1e-10, 120), tol = .01):
             else: 
                 raise RuntimeError('could not invert provided equilibrium function')
     else: 
-        raise RuntimeError('not supported')
+        raise RuntimeError('not currently supported')
     
     return inv_flow
         
@@ -1529,9 +1534,6 @@ def CF_wrapper(cfmodel, acc_bounds = [-7,3]):
     #assumes a second order model which has inputs of (p, state), where state
     #is a list of all values needed, p is a list of parameters, and
     #output is a float giving the acceleration 
-    
-    #may want to change the call signature to simplify it but the general 
-    #structure of call_cf makes sense 
     def call_cf(self, lead, lane, timeind, dt, userelax): 
         if lead is None: 
             acc = lane.call_downstream(self, timeind, dt)
@@ -1588,7 +1590,11 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
         if lfol== '' and rfol == '':
             return 
         
-        if np.random.rand() < chk_lc: 
+        if chk_lc == 0:
+            return
+        elif chk_lc == 1:
+            pass
+        elif np.random.rand() > chk_lc: 
             return 
         
         if lfol != '': 
@@ -1618,17 +1624,20 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
                     lfol, llead, rfol, rlead, lane, **kwargs)
             
     return call_lc
-        
-class vehicle: 
-    #2 options for implementing your own LC model and CF model - 
+
+#2 options for implementing your own LC model and CF model - 
     #option 1 - we have decorators for book keeping work for the LC/CF functions, user specifies the model 
     #and what the vehicle object calls is the decorated model which will handle formatting/bookkeeping issues
     #the default class will use this design so users can write their own model in a standard format 
     #and directly feed that in (easier but more restrictive)
     
     #option 2 - you can inherit this class and write your own functions (more work but less restrictive)
+    #(also possible that you may use the decorators for your own custom methods)
+class vehicle: 
+    
     def __init__(self, vehid,lane, p, lcp, length = 2, relaxp = None,
-                 cfmodel = None, free_cf = None, lcmodel = None, eqlfun = None, check_lc = .25): 
+                 cfmodel = None, free_cf = None, lcmodel = None, eqlfun = None, check_lc = .25,
+                 eql_kwargs = {}): 
         self.vehid = vehid
         self.lane = lane
         self.road = lane.road
@@ -1677,7 +1686,9 @@ class vehicle:
             self.free_cf = staticmethod(free_cf)
             
         if eqlfun is not None: 
-            self.get_eql = eql_wrapper(eqlfun)
+            self.get_eql = eql_wrapper(eqlfun, **eql_kwargs)
+            self.get_flow = FD_wrapper(eqlfun)
+            self.inv_flow = invFD_wrapper(eqlfun, **eql_kwargs)
             
         if lcmodel is not None: 
             self.call_lc = LC_wrapper(lcmodel)

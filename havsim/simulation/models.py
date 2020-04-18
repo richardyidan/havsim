@@ -4,7 +4,7 @@
 
 houses all the different models for simulation
 
-models used to have the following call signature: 
+models USED TO have the following call signature: 
     veh - list of state of vehicle model is being applied to
     lead - list of state for vehicle's leader
     p - parameters
@@ -13,6 +13,7 @@ models used to have the following call signature:
     dt = .1 - timestep 
     
     they return the derivative of the state i.e. how to update in the next timestep 
+current documentation is in jupyter notebook 
 """
 
 import numpy as np 
@@ -30,7 +31,7 @@ def IDM_free(p, state):
     #p = parameters
     return p[3]*(1-(state/p[0])**4)
 
-def IDM_eql(p, v, *args):
+def IDM_eql(p, v):
     #input is p = parameters, v = velocity, output is s = headway corresponding to eql soln
     
     s = ((p[2]+p[1]*v)**2/(1- (v/p[0])**4))**.5
