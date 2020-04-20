@@ -1234,7 +1234,7 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
                 continue
             if veh.cf_parameters == None:  
                 lead = veh.lead
-                if lead is not None and lead.lane is lane and lead.pos < pos:
+                if lead is not None and ((lead.lane is lane and lead.pos < pos) or pos + lane.roadlen[(lead.lane.road, lane.road)]-lead.pos > 0):
                     lane.merge_anchors[i][0] = lead
                     
             elif veh in lc_actions: 
@@ -1307,6 +1307,25 @@ def new_relaxation(veh,timeind, dt):
     
     return
 
+#in current logic, main cost per timestep is just one distance compute in update_lrfol
+#whenever there is a lane change, there are a fair number of extra updates we have to do to keep all 
+#of the rlead/llead updated. Also, whenever an lfol/rfol changes, there are two rlead/lead attributes 
+#that need to be changed as well. 
+#Thus this strategy is very efficient assuming we want to keep lfol/rfol updated (call lc every timestep), lane changes aren't 
+#super common, and all vehicles travel at around the same speed. (which are all reasonable assumptions)
+    
+#naive way would be like having to do something like keep a sorted list, every time we want lfol/rfol
+#we have to do log(n) dist computes, where n is the number of vehicles in the current lane. 
+#whenever a vehicle changes lanes, you need to remove from the current list and add to the new, 
+#so it is log(n) dist computations + 2n index updates. Thus this implementation is definitely much better than the naive way. 
+    
+#Another option you could do is to only store lfol/rfol, to keep it updated you would have to 
+#do 2 dist calculations per side per timestep (do a call of leadfol find where we already have either a follower or leader as guess). 
+#When there is a lane change store a dict which has the lane changing vehicle as a key, and store as the value the new guess to use. 
+#in lfol/rfol update, you know there was a lane change if your fol is in the wrong lane (need a way to check that). Then can get a new guess for the fol from the dict. 
+#This strategy would have higher costs per timestep to keep lfol/rfol updated, but would be simpler to update when there is a lane change. 
+#Thus it might be more efficient if the timesteps are long relative to the number of lane changes. 
+#Overall I doubt there would be much practical difference between this option and the first option. 
 def update_change(veh, timeind): 
     #logic for updating - logic is complicated because we avoid doing any sorts - faster this way 
     #no check for vehicles moving into same gap
@@ -1316,13 +1335,13 @@ def update_change(veh, timeind):
     lane = veh.lane
     if veh.lc == 'l':
         lcsidefol, opsidefol, lcsidelead, opsidelead = 'lfol', 'rfol', 'llead', 'rlead'
-        lcsidelane = lane.connect_left
-        newlcsidelane = lcsidelane.connect_left
+        lcsidelane = lane.get_connect_left(veh.pos)
+        newlcsidelane = lcsidelane.get_connect_left(veh.pos)
         
     else: 
         lcsidefol, opsidefol, lcsidelead, opsidelead = 'rfol', 'lfol', 'rlead', 'llead'
-        lcsidelane = lane.connect_right
-        newlcsidelane = lcsidelane.connect_right
+        lcsidelane = lane.get_connect_right(veh.pos)
+        newlcsidelane = lcsidelane.get_connect_right(veh.pos)
     
     
     #update current leader
@@ -1478,7 +1497,7 @@ def FD_wrapper(eqlfun):
     #and thus has some extra computational costs associated with it. 
     #if eql_type = 'both', it should be possible to solve for the inverse flow function 
     #analytically and thus one should just define the inv\_flow method using that 
-def invFD_wrapper(eqlfun, eql_type = 'v', bounds = (1e-10, 120), tol = .1, ftol = .01):
+def invFD_wrapper(eqlfun, eql_type = 'v', bounds = (1e-10, 120), tol = .1, ftol = .01, invflowfun = None):
     #same call signature as eql_wrapper, tol is for headway/speed tolerance, ftol is for flow tolerance 
     if eql_type != 'both':
         def inv_flow(self, x, leadlen = None, output_type = 'v', congested = True):
@@ -1521,7 +1540,8 @@ def invFD_wrapper(eqlfun, eql_type = 'v', bounds = (1e-10, 120), tol = .1, ftol 
             else: 
                 raise RuntimeError('could not invert provided equilibrium function')
     else: 
-        raise RuntimeError('not currently supported')
+        def inv_flow(self, x, leadlen = None, output_type = 'v', congested = True):
+            return invflowfun(x, leadlen, output_type, congested)
     
     return inv_flow
         
@@ -1598,12 +1618,12 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
             return 
         
         if lfol != '': 
-            llead, newlfolhd, newlhd = call_lc_helper(lfol, self, lane.connect_left)
+            llead, newlfolhd, newlhd = call_lc_helper(lfol, self, lane.get_connect_left(self.pos))
         else:
             llead = newlfolhd = newlhd = None
         
         if rfol != '': 
-            rlead, newrfolhd, newrhd = call_lc_helper(rfol, self, lane.connect_right)
+            rlead, newrfolhd, newrhd = call_lc_helper(rfol, self, lane.get_connect_right(self.pos))
         else:
             rlead = newrfolhd = newrhd = None
             
@@ -1980,11 +2000,16 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -2
         
     
 class lane: 
-    def __init__(self, length, connect_to=None, connect_from = None, connect_left = None, connect_right = None,
+    def __init__(self, laneid, start, end, road, laneindex, connect_left = [(0, None)], connect_right = [(0, None)],
                  downstream = {}, increment_inflow = {}, get_inflow = {}, new_vehicle = None):
-        self.length = length
-        self.connect_to = connect_to
-        self.connect_from = connect_from
+        
+        self.laneid = laneid
+        self.laneindex = laneindex
+        self.road = road
+        #starting position/end (float)
+        self.start = start
+        self.end = end
+        #connect_left/right has format of list of (pos (float), lane (object)) tuples where lane is the connection starting at pos 
         self.connect_left = connect_left
         self.connect_right = connect_right
         
@@ -2057,4 +2082,30 @@ class lane:
                     nexthd = get_dist(nextguess,veh)
                 return guess, nextguess
         
+        
+    def get_connect_left(self, pos):
+        #given position, returns the connection to left 
+        #output is either lane object or None
+        return connect_helper(self.connect_left, pos)
+
+    def get_connect_right(self, pos):
+        return connect_helper(self.connect_right,pos)
     
+    
+    def __hash__(self):
+        return hash((self.road['name'], self.laneindex))
+    
+    def __eq__(self, other):
+        return self.road['name'] == other.road['name'] and self.laneindex == other.laneindex
+    
+    def __ne__(self, other):
+        return not(self is other)
+    
+    
+def connect_helper(connect, pos):
+    out = connect[-1][1] #default to last lane for edge case or case when there is only one possible connection 
+    for i in range(len(connect)-1):
+        if pos < connect[i+1][0]:
+            out = connect[i+1][1]
+            break
+    return out 

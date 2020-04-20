@@ -33,7 +33,6 @@ def IDM_free(p, state):
 
 def IDM_eql(p, v):
     #input is p = parameters, v = velocity, output is s = headway corresponding to eql soln
-    
     s = ((p[2]+p[1]*v)**2/(1- (v/p[0])**4))**.5
     return s 
 
@@ -54,7 +53,7 @@ def mobil(lc_actions, veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timei
     lincentive = rincentive = -math.inf
     
     if not userelax_cur and veh.in_relax: 
-        cura = veh.call_cf(lead, veh.lane, timeind, dt, False)
+        cura = veh.call_cf(lead, lane, timeind, dt, False)
     else: 
         cura = veh.action #more generally could use a method to return acceleration 
     
