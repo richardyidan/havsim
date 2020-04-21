@@ -118,4 +118,23 @@ start = time.time()
 for i in range(64):
     out = testenv.step(tf.convert_to_tensor(0), 0, 0, False)
 print('time to run environment step method outside training is is '+str(time.time()-start))
+
+
+#testenv = debugenv(vehicles) #from toysimulation(1).py
+#agent = ACagent(PolicyModel(num_actions= 3), ValueModel())
+#times4=[]
+#out4 = []
+#for _ in range(5):
+#    start = time.time()
+#    agent.train(testenv, updates=1)
+#    end = time.time()
+#    times4.append(end-start)
+#    out4.append(agent.timecounter)
+#print("Average time over 5 runs is {:.4f}".format(np.mean(times4)))  #25.1353 eager
+#print('average time to run environment step method is '+str(np.mean(out4)))
+#testenv.reset()
+#start = time.time()
+#for i in range(64):
+#    out = testenv.step(tf.convert_to_tensor(0), 0, 0, False)
+#print('time to run environment step method outside training is is '+str(time.time()-start))
  
