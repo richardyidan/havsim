@@ -1234,7 +1234,7 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
                 continue
             if veh.cf_parameters == None:  
                 lead = veh.lead
-                if lead is not None and ((lead.lane is lane and lead.pos < pos) or pos + lane.roadlen[(lead.lane.road, lane.road)]-lead.pos > 0):
+                if lead is not None and ((lead.lane is lane and lead.pos < pos) or lane.roadlen[lead.road]+lead.pos - pos < 0):
                     lane.merge_anchors[i][0] = lead
                     
             elif veh in lc_actions: 
@@ -1317,7 +1317,7 @@ def new_relaxation(veh,timeind, dt):
 #naive way would be like having to do something like keep a sorted list, every time we want lfol/rfol
 #we have to do log(n) dist computes, where n is the number of vehicles in the current lane. 
 #whenever a vehicle changes lanes, you need to remove from the current list and add to the new, 
-#so it is log(n) dist computations + 2n index updates. Thus this implementation is definitely much better than the naive way. 
+#so it is log(n) dist computations + 2n for searching/updating the 2 lists. Thus the current implementation is definitely much better than the naive way. 
     
 #Another option you could do is to only store lfol/rfol, to keep it updated you would have to 
 #do 2 dist calculations per side per timestep (do a call of leadfol find where we already have either a follower or leader as guess). 
@@ -1325,10 +1325,11 @@ def new_relaxation(veh,timeind, dt):
 #in lfol/rfol update, you know there was a lane change if your fol is in the wrong lane (need a way to check that). Then can get a new guess for the fol from the dict. 
 #This strategy would have higher costs per timestep to keep lfol/rfol updated, but would be simpler to update when there is a lane change. 
 #Thus it might be more efficient if the timesteps are long relative to the number of lane changes. 
-#Overall I doubt there would be much practical difference between this option and the first option. 
+#Overall I doubt there would be much practical difference between this option and the first option unless the timesteps are very long (~10-15 sec) and changes very often (every ~30 seconds)
 def update_change(veh, timeind): 
     #logic for updating - logic is complicated because we avoid doing any sorts - faster this way 
-    #no check for vehicles moving into same gap
+    
+    #no check for vehicles moving into same gap // TO DO but low priority 
     #no cooperative tactical components 
     
     #initialization 
@@ -1382,14 +1383,15 @@ def update_change(veh, timeind):
     veh.leadmem.append((lclead, timeind+1))
     veh.lanemem.append((lcsidelane, timeind+1))
     veh.lane = lcsidelane
+    veh.road = lcsidelane.road
     if lclead is not None: 
         lclead.fol = veh
     #update for new left/right leaders - opside first 
     newleads = set()
     oldleads = getattr(lcfol, opsidelead)
     for j in oldleads.copy(): 
-        curdist = lane.get_dist(j, veh)
-        if curdist < 0: 
+        curdist = lane.get_dist(veh,j)
+        if curdist > 0: 
             setattr(j, lcsidefol, veh)
             newleads.add(j)
             oldleads.remove(j)
@@ -1397,16 +1399,16 @@ def update_change(veh, timeind):
     #lcside 
     newleads = set()
     oldleads = getattr(lcfol, lcsidelead)
-    maxdist = -math.inf
+    mindist = math.inf
     minveh = None
     for j in oldleads.copy():
-        curdist = lane.get_dist(j, veh)
-        if curdist < 0: 
+        curdist = lane.get_dist(veh, j)
+        if curdist > 0: 
             setattr(j, opsidefol, veh)
             newleads.add(j)
             oldleads.remove(j)
-            if curdist > maxdist: 
-                maxdist = curdist 
+            if curdist < mindist: 
+                mindist = curdist 
                 minveh = j #minveh is the leader of new lc side follower 
     setattr(veh, lcsidelead, newleads)
     #update new lcside 
@@ -1724,8 +1726,9 @@ class vehicle:
             
     def update(self, timeind, dt): 
         #update state
-        self.pos += self.speed*dt
-        self.speed += self.action*dt
+        temp = self.action*dt
+        self.pos += self.speed*dt + .5*temp*dt
+        self.speed += temp
         
         #update memory and relax
         self.posmem.append(self.pos)
@@ -1738,30 +1741,63 @@ class vehicle:
     
             
 
-def downstream_wrapper(speed_fun = None, method = 'speed', congested = True):
+def downstream_wrapper(speed_fun = None, method = 'speed', congested = True, 
+                       mergeside = 'l', merge_anchor_ind = None, anchor = None, shift = 1):
     #downstream function -> method of lane, takes in (veh, timeind, dt)
     #and returns action (acceleration) for the vehicle 
     
-    if method == 'speed':
+    if method == 'speed': #specify a function speedfun which takes in time and returns the speed
         @staticmethod
         def call_downstream(veh, timeind, dt):
             speed = speed_fun(timeind)
             return (speed - veh.speed)/dt
         return call_downstream
     
-    elif method == 'free':
+    elif method == 'free': #use free flow method of the vehicle 
         @staticmethod
         def free_downstream(veh, *args):
             return veh.free_cf(veh.cf_parameters, veh.speed)
         return free_downstream
     
-    elif method == 'flow':
+    elif method == 'flow': #specify a function which gives the flow, we invert the flow to obtain speed
         @staticmethod
         def call_downstream(veh, timeind, dt):
             flow = speed_fun(timeind)
             speed = veh.inv_flow(flow, output_type = 'v', congested = congested)
             return (speed - veh.speed)/dt
         return call_downstream
+    
+     #this is meant to give a longitudinal update in congested conditions 
+     #when on a bottleneck (on ramp or lane ending) and you have no leader 
+     #not because you are leaving the network but because the lane is ending and you need to move over
+    elif method == 'merge':
+        #first try to get a vehicle and use its shifted speed. By default use the l/rfol (controlled by mergeside)
+        #can also try using the merge anchor (if merge_anchor_ind is not None) or another anchor's lead (if anchor is not None)
+        #it has to be a vehicle (not an anchor vehicle) as we want its speedmem
+        #if we fail to find such a vehicle and speed_fun is not None, we will use that; 
+        #otherwise we will use the vehicle's free_cf method
+        if mergeside == 'l': 
+            folside = 'lfol'
+        elif mergeside == 'r':
+            folside = 'rfol'
+        def call_downstream(self, veh, timeind, dt): 
+            fol = getattr(veh, folside) #first check if we can use your current change side follower
+            if fol.cf_parameters == None: 
+                fol = fol.lead
+                if fol == None and merge_anchor_ind != None:
+                    fol = self.merge_anchor[merge_anchor_ind][0]
+                    if fol.cf_parameters == None: 
+                        fol = fol.lead
+                        if fol == None and anchor != None: 
+                            fol = anchor.lead
+            if fol != None: 
+                speed = shift_speed(fol.speedmem, shift, dt)
+            elif speed_fun != None:
+                speed = speed_fun(timeind)
+            else: 
+                return veh.free_cf(veh.cf_parameters, veh.speed)
+            return (speed - veh.speed)/dt
+                
     
 #def free_downstream_wrapper(free_cf_model):
 #    #this only works if all vehicles have same model - needs to call something vehicle specific
@@ -1864,11 +1900,7 @@ def shifted_speed_inflow(lane, dt, shift = 1, accel_bound = -2):
     #must be greater than the accel_bound. Otherwise, no such bound is enforced
     lead = lane.anchor.lead
     hd = lane.get_headway(lane.anchor, lead)
-    if len(lead.speedmem)*dt < shift: 
-        spd = lead.speedmem[0]
-    else:
-        ind = math.ceil(shift/dt)
-        spd = lead.speedmem[-ind]
+    spd = shift_speed(lead.speedmem, shift, dt)
         
     if accel_bound is not None: 
         newveh = lane.newveh
@@ -1882,6 +1914,17 @@ def shifted_speed_inflow(lane, dt, shift = 1, accel_bound = -2):
             return None
     
     return 0, spd, hd
+
+def shift_speed(speedseries, shift, dt):
+    #speedseries is timeseries with a constant discretization of dt
+    #we want the measurement from shift time ago
+    #outputs speed
+    ind = shift // dt 
+    if ind+1 > len(speedseries):
+        return speedseries[0]
+    remainder = shift - ind*dt
+    spd = (speedseries[-ind-1]*(dt - remainder) + speedseries[-ind]*remainder)/dt #weighted average
+    return spd
 
 def speed_inflow(lane, speed_fun, timeind, dt, accel_bound = -2):
     #gives the first speed based on the shifted speed of the lead vehicle (similar to newell model)
@@ -2032,16 +2075,18 @@ class lane:
     
     def get_headway(self, veh, lead): 
         #distance from front of vehicle to back of lead
+        #assumes veh.road = self.road
         hd = lead.pos - veh.pos - lead.length
         if self.road != lead.road: 
-            hd += self.roadlen[(self.road, lead.road)]
+            hd += self.roadlen[lead.road]
         return hd 
     
     def get_dist(self, veh, lead): 
         #distance from front of vehicle to front of lead
+        #assumes veh.lane.road = self.road
         dist = lead.pos-veh.pos
         if self.road != lead.road: 
-            dist += self.roadlen[(self.road, lead.road)]
+            dist += self.roadlen[lead.road]
         return dist
             
     def dist_to_end(self, veh):
@@ -2052,34 +2097,34 @@ class lane:
         #given guess vehicle which is 'close' to veh, returns the leader, follower
         #in that order in the same lane as guess 
         #used to initialize the new lc side follower/leader when new lanes become available
-        if guess == None: 
+        if guess == None: #I don't remember what case this is for or if its even still necessary or useful 
             return None, None
         else: 
             get_dist = self.get_dist
-            hd = get_dist(guess, veh)
-            if hd > 0: 
+            hd = get_dist(veh,guess)
+            if hd < 0: 
                 nextguess = guess.lead 
                 if nextguess == None:  #None -> reached end of network
                     return nextguess, guess
-                nexthd = get_dist(nextguess, veh)
-                while nexthd > 0: 
+                nexthd = get_dist(veh, nextguess)
+                while nexthd < 0: 
                     guess = nextguess 
                     nextguess = guess.lead
                     if nextguess == None:
                         return nextguess, guess
-                    nexthd = get_dist(nextguess, veh)
+                    nexthd = get_dist(veh, nextguess)
                 return nextguess, guess
             else: 
                 nextguess = guess.fol
                 if nextguess == None:
                     return guess, nextguess
-                nexthd = get_dist(nextguess, veh)
-                while nexthd < 0:
+                nexthd = get_dist(veh, nextguess)
+                while nexthd > 0:
                     guess = nextguess
                     nextguess = guess.fol
                     if nextguess.cf_parameters == None: #reached anchor -> beginning of network
                         return guess, nextguess
-                    nexthd = get_dist(nextguess,veh)
+                    nexthd = get_dist(veh, nextguess)
                 return guess, nextguess
         
         
