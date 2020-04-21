@@ -68,15 +68,15 @@ plt.plot(avtraj[:,2])
 '''#%% Performance optimization
 
 #For some set batch size (e.g. 64) time how long it takes to do that many steps in the simulate baseline method for the circular environment.
-testingtime = 64
-
-times=[]
-for _ in range(5):
-    start = time.time()
-    testenv.simulate_baseline(FS,[2,.4,.4,3,3,7,15,2], testingtime)
-    end = time.time()
-    times.append(end-start)
-print("Average over 5 runs is {:.4f}".format(np.mean(times)))   #0.0115
+#testingtime = 64
+#
+#times=[]
+#for _ in range(5):
+#    start = time.time()
+#    testenv.simulate_baseline(FS,[2,.4,.4,3,3,7,15,2], testingtime)
+#    end = time.time()
+#    times.append(end-start)
+#print("Average over 5 runs is {:.4f}".format(np.mean(times)))   #0.0115
 ##
 ###For the same batch size, time how long it takes to do that many steps in training for cart pole.
 env = gym.make('CartPole-v0')
@@ -91,13 +91,13 @@ for _ in range(5):
     end = time.time()
     times2.append(end-start)
     out2.append(agent.timecounter)
-print("Average over 5 runs is {:.4f}".format(np.mean(times2)))  #5.8304 eager
-print(np.mean(out2))
+print("Average time over 5 runs is {:.4f}".format(np.mean(times2)))  #5.8304 eager
+print('average time to run environment step method in training is '+str(np.mean(out2)))
 testenv.reset()
 start = time.time()
 for i in range(64):
     out = testenv.step(tf.convert_to_tensor(0), 0, 0, False)
-print(time.time()-start)
+print('time to run environment step method outside training is is '+str(time.time()-start))
 
 #Using the same neural network for the agent, and same batch size, time how long it takes to do the training for the circular environment.
 testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward8,dt = .25)
@@ -111,6 +111,11 @@ for _ in range(5):
     end = time.time()
     times3.append(end-start)
     out3.append(agent.timecounter)
-print("Average over 5 runs is {:.4f}".format(np.mean(times3)))  #25.1353 eager
-print(np.mean(out3))
+print("Average time over 5 runs is {:.4f}".format(np.mean(times3)))  #25.1353 eager
+print('average time to run environment step method is '+str(np.mean(out3)))
+testenv.reset()
+start = time.time()
+for i in range(64):
+    out = testenv.step(tf.convert_to_tensor(0), 0, 0, False)
+print('time to run environment step method outside training is is '+str(time.time()-start))
  
