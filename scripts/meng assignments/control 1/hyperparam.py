@@ -46,6 +46,24 @@ def exp_setup():
     exp_params["sm"] = statemem_vals[0]
     return exp_params
 
+def exp_setup_rand():
+    def rand_val(arr):
+        return np.random.randint(len(arr))
+    exp_params = {}
+    exp_params["lr"] = lr_vals[rand_val(lr_vals)]
+    exp_params["ev"] = entropy_vals[rand_val(entropy_vals)]
+    exp_params["nstep"] = nstep_vals[rand_val(nstep_vals)]
+    exp_params["netdP"] = netdepths[rand_val(netdepths)]
+    exp_params["nneurP"] = numneuron_vals[rand_val(numneuron_vals)]
+    exp_params["actPidx"] = rand_val(activations)
+    exp_params["actP"] = activations[exp_params["actPidx"]]
+    exp_params["netdV"] = netdepths[rand_val(netdepths)]
+    exp_params["nneurV"] = numneuron_vals[rand_val(numneuron_vals)]
+    exp_params["actVidx"] = rand_val(activations)
+    exp_params["actV"] = activations[exp_params["actVidx"]]
+    exp_params["sm"] = statemem_vals[rand_val(statemem_vals)]
+    return exp_params
+
 def exp_procedure(exp_params, hyperparam):
     agent = ACagent(exp_params["polmodel"], exp_params["valmodel"], lr=exp_params["lr"], entropy_const = exp_params["ev"])
     totreward, testlen = traintest(agent, exp_params["testenv"], exp_params["nstep"])
@@ -60,7 +78,7 @@ def boxed_section(title):
     text += div_str
     return text
 
-def hyperparam_selection(exp_params, hyperparam_choices, exp_params_key, title, activation = False, resetP = False, resetV = False, resetEnv = False):
+def grid_hyperparam_selection(exp_params, hyperparam_choices, exp_params_key, title, activation = False, resetP = False, resetV = False, resetEnv = False):
     rewards = [] 
     intermediate_res = boxed_section(title)
     for idx, hyperparam in enumerate(hyperparam_choices):
@@ -77,7 +95,7 @@ def hyperparam_selection(exp_params, hyperparam_choices, exp_params_key, title, 
                                                 activationlayer=exp_params["actV"])
         
         if resetEnv:
-            testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward8,dt = .25,statemem=exp_params["sm"])
+            exp_params["testenv"] = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward8,dt = .25,statemem=exp_params["sm"])
         
         
         totreward, res_fmt = exp_procedure(exp_params, ['relu','leaky relu','tanh'][idx] if activation else hyperparam) #"{:.4f}".format(hyperparam))
@@ -92,44 +110,78 @@ def hyperparam_selection(exp_params, hyperparam_choices, exp_params_key, title, 
     print(intermediate_res)
     return intermediate_res
 
-# Experiment loop starts here    
-exp_params = exp_setup()
-res = ''''''
-for i in range(1):
-    # Record which iteration
-    res+= div_str + str.ljust("| Iter: {}".format(i),43) + "|\n"
-    print("\n".join(res.splitlines()[-2:]))
+# Experiment loop starts here   
+def grid_search(): 
+    exp_params = exp_setup()
+    res = ''''''
+    for i in range(1):
+        # Record which iteration
+        res+= div_str + str.ljust("| Iter: {}".format(i),43) + "|\n"
+        print("\n".join(res.splitlines()[-2:]))
+        
+        # Reset policy model, value model, and test environment
+        exp_params["polmodel"], exp_params["valmodel"] = resetPolVal(exp_params)
+        exp_params["testenv"] = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward8,dt = .25,statemem=exp_params["sm"])
+        
+        # Learning Rate
+        res += grid_hyperparam_selection(exp_params, lr_vals, "lr", "Learning rate")
+           
+        # Entropy
+        res += grid_hyperparam_selection(exp_params, entropy_vals, "ev", "Entropy")
+        
+        # Nstep for TD errors
+        res += grid_hyperparam_selection(exp_params, nstep_vals, "nstep", "Nstep for TD errors")
+        
+        # Policy Depth
+        res += grid_hyperparam_selection(exp_params, netdepths, "netdP", "Depth (Policy)", resetP=True)
+        
+        # Policy Num Neurons
+        res += grid_hyperparam_selection(exp_params, numneuron_vals, "nneurP", "Number of neurons in each layer (Policy)", resetP=True)
+        
+        # Policy Activation
+        res += grid_hyperparam_selection(exp_params, activations, "actP", "Activation (Policy)", activation=True, resetP=True)
+        
+        # Value Depth
+        res += grid_hyperparam_selection(exp_params, netdepths, "netdV", "Depth (Value)", resetV=True)
+        
+        # Value Num Neurons
+        res += grid_hyperparam_selection(exp_params, numneuron_vals, "nneurV", "Number of neurons in each layer (Value)", resetV=True)
+        
+        # Value Activation
+        res += grid_hyperparam_selection(exp_params, activations, "actV", "Activation (Value)", activation=True, resetV=True)
+        
+        # State Memory
+        res += grid_hyperparam_selection(exp_params, statemem_vals, "sm", "State memory", resetEnv = True)
+    return res
+
+def rand_search(niters = 5):
+    log_results = {}
     
-    # Reset policy model, value model, and test environment
-    exp_params["polmodel"], exp_params["valmodel"] = resetPolVal(exp_params)
-    exp_params["testenv"] = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward8,dt = .25,statemem=exp_params["sm"])
-    
-    # Learning Rate
-    res += hyperparam_selection(exp_params, lr_vals, "lr", "Learning rate")
-       
-    # Entropy
-    res += hyperparam_selection(exp_params, entropy_vals, "ev", "Entropy")
-    
-    # Nstep for TD errors
-    res += hyperparam_selection(exp_params, nstep_vals, "nstep", "Nstep for TD errors")
-    
-    # Policy Depth
-    res += hyperparam_selection(exp_params, netdepths, "netdP", "Depth (Policy)", resetP=True)
-    
-    # Policy Num Neurons
-    res += hyperparam_selection(exp_params, numneuron_vals, "nneurP", "Number of neurons in each layer (Policy)", resetP=True)
-    
-    # Policy Activation
-    res += hyperparam_selection(exp_params, activations, "actP", "Activation (Policy)", activation=True, resetP=True)
-    
-    # Value Depth
-    res += hyperparam_selection(exp_params, netdepths, "netdV", "Depth (Value)", resetV=True)
-    
-    # Value Num Neurons
-    res += hyperparam_selection(exp_params, numneuron_vals, "nneurV", "Number of neurons in each layer (Value)", resetV=True)
-    
-    # Value Activation
-    res += hyperparam_selection(exp_params, activations, "actV", "Activation (Value)", activation=True, resetV=True)
-    
-    # State Memory
-    res += hyperparam_selection(exp_params, statemem_vals, "sm", "State memory", resetEnv = True)
+    def log_format(config):
+        config.pop('polmodel',None)
+        config.pop('valmodel',None)
+        config.pop('testenv',None)
+        actPidx = config.pop("actPidx", None)
+        actVidx = config.pop("actVidx", None)
+        config["actP"] = ['relu','leaky relu','tanh'][actPidx]
+        config["actV"] = ['relu','leaky relu','tanh'][actVidx]
+        
+        return config
+        
+    for i in range(niters):
+        exp_params = exp_setup_rand()
+        exp_params["polmodel"], exp_params["valmodel"] = resetPolVal(exp_params)
+        exp_params["testenv"] = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward8,dt = .25,statemem=exp_params["sm"])
+        
+        agent = ACagent(exp_params["polmodel"], exp_params["valmodel"], lr=exp_params["lr"], entropy_const = exp_params["ev"])
+        totreward, testlen = traintest(agent, exp_params["testenv"], exp_params["nstep"])
+
+        log_results[i] = log_format(exp_params)
+        log_results[i]["Total Reward"] = totreward
+        log_results[i]["Test length"] = testlen
+        
+    return log_results, max(log_results.items(), key = lambda x: x[1]["Total Reward"])
+
+
+
+
