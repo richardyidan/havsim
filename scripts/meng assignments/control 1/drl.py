@@ -363,7 +363,8 @@ class circ_singleav: #example of single AV environment
     def get_acceleration(self,action,curstate):
         #action from NN gives a scalar, we convert it to the quantized acceleration
 #        acc = tf.cast(action,tf.float32)*.1-1.5 #30 integer actions -> between -1.5 and 1.4 in increments of .1
-        acc = tf.cast(action, tf.float32) - 1
+#        acc = tf.cast(action, tf.float32) - 1
+        acc = float(action - 1)
         
         nextspeed = curstate[self.avid][1] + self.dt*acc
         if nextspeed < 0:
@@ -371,7 +372,7 @@ class circ_singleav: #example of single AV environment
         
         return acc
     
-    def step(self, action, iter, timesteps, save_state = True, baseline = False): #basically just a wrapper for simulate step to get the next timestep
+    def step(self, action, niter, timesteps, save_state = True, baseline = False): #basically just a wrapper for simulate step to get the next timestep
         #simulate_step does all the updating; first line is just a hack which can be cleaned later
         if baseline:
             acc = action
