@@ -1277,9 +1277,17 @@ def plotvhd(meas, sim, platooninfo, my_id, show_sim=True, show_meas=True, effect
     return
 
 ##################################
-def plotvhd_v2(meas, sim, platooninfo, vehicle_id, draw_arrows=False, effective_headway=False, rp=None, h=.1,
+def plotvhd_v2(meas, sim, platooninfo, vehicle_id, draw_arrow=False, arrow_interval=20, effective_headway=False, rp=None, h=.1,
             datalen=9, timerange=[None, None], lane=None, delay=0, newfig=True):
-    #draw_arrow is not fully implemented 
+    # draw_arrow = True: draw arrows (indicating direction) along with trajectories; False: plot the trajectories only
+    # effective_headway = False - if True, computes the relaxation amounts using rp, and then uses the headway + relaxation amount to plot instead of just the headway
+    # rp = None - effective headway is true, rp is a float which is the parameter for the relaxation amount
+    # h = .1 - data discretization
+    # datalen = 9
+    # timerange = [None, None] indicates the start and end timestamps that the plot limits
+    # lane = None, the lane number that need highlighted: Trajectories in all other lanes would be plotted with opacity
+    # delay = 0 - gets starting time for newell model
+    # newfig = True - if True will create a new figure, otherwise it will use the current figure
 
     ####plotting
     if newfig:
@@ -1291,31 +1299,32 @@ def plotvhd_v2(meas, sim, platooninfo, vehicle_id, draw_arrows=False, effective_
         title_text = title_text + ' on lane ' + str(lane)
     plt.title(title_text)
     ax = plt.gca()
+    artist_list = []
 
     if sim is None:
         # If sim is None, plot meas for all vehicles in vehicle_id
         for my_id in vehicle_id:
-            plot_one_vehicle(plt, ax, False, meas, sim, platooninfo, my_id, timerange, lane, effective_headway, rp, h, datalen, delay)
+            ret_list = process_one_vehicle(ax, meas, sim, platooninfo, my_id, timerange, lane, effective_headway, rp, h, datalen, delay)
+            artist_list.extend(ret_list)
     else:
         # If both meas and sim are provided,
         # will plot both simulation and measurement data for the first vehicle in vehicle_id
         if len(vehicle_id) > 1: 
             print('plotting first vehicle '+str(vehicle_id[0])+' only')
-        plot_one_vehicle(plt, ax, False, meas, sim, platooninfo, vehicle_id[0], timerange, lane, effective_headway, rp, h, datalen, delay)
+        ret_list = process_one_vehicle(ax, meas, sim, platooninfo, vehicle_id[0], timerange, lane, effective_headway, rp, h, datalen, delay)
+        artist_list.extend(ret_list)
 
-    organize_legends(plt)
+    organize_legends()
 
-    if draw_arrows:
-        if sim is None:
-            for my_id in vehicle_id:
-                plot_one_vehicle(plt, ax, True, meas, sim, platooninfo, my_id, timerange, lane, effective_headway, rp, h, datalen, delay)
-        else:
-            plot_one_vehicle(plt, ax, True, meas, sim, platooninfo, vehicle_id[0], timerange, lane, effective_headway, rp, h, datalen, delay)
+    if draw_arrow:
+        for art in artist_list:
+            add_arrow(art[0], arrow_interval)
     return
 
-
-def plot_one_vehicle(plt, ax, draw_arrow, meas, sim, platooninfo, my_id, timerange, lane, effective_headway=False, rp=None, h=.1, datalen=9, delay=0):
-    # draw_arrow = True: draw arrows; False: plot the actual trajectories
+# This function will process and prepare xy-coordinates, color, labels, etc. 
+# necessary to plot trajectories for a given vehicle and then invoke plot_one_vehicle() function to do the plotting
+def process_one_vehicle(ax, meas, sim, platooninfo, my_id, timerange, lane, effective_headway=False, rp=None, h=.1, datalen=9, delay=0):
+    artist_list = []
     if effective_headway:
         leadinfo, folinfo, rinfo = helper.makeleadfolinfo([my_id], platooninfo, meas)
     else:
@@ -1335,16 +1344,18 @@ def plot_one_vehicle(plt, ax, draw_arrow, meas, sim, platooninfo, my_id, timeran
         headway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, sim, my_id, relax)
         sim_color = next(ax._get_lines.prop_cycler)['color']
         meas_label = 'Measurements'
-        plot_one_vehicle_with_leader_change(plt, draw_arrow, headway[:end + 1 - start], sim[my_id][start - t_nstar:end + 1 - t_nstar, 3], 
+        ret_list = plot_one_vehicle(headway[:end + 1 - start], sim[my_id][start - t_nstar:end + 1 - t_nstar, 3], 
                                             sim[my_id][start - t_nstar:end + 1 - t_nstar, 7], lane, leadinfo, start, 'Simulation', sim_color)
+        artist_list.extend(ret_list)
         
     trueheadway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, meas, my_id, relax)
     meas_color = next(ax._get_lines.prop_cycler)['color']
-    plot_one_vehicle_with_leader_change(plt, draw_arrow, trueheadway[:end + 1 - start], meas[my_id][start - t_nstar:end + 1 - t_nstar, 3], 
+    ret_list = plot_one_vehicle(trueheadway[:end + 1 - start], meas[my_id][start - t_nstar:end + 1 - t_nstar, 3], 
                                         meas[my_id][start - t_nstar:end + 1 - t_nstar, 7], lane, leadinfo, start, meas_label, meas_color)
-    return
+    artist_list.extend(ret_list)
+    return artist_list
 
-def plot_one_vehicle_with_leader_change(plt, draw_arrow, x_coordinates, y_coordinates, lane_numbers, target_lane, leadinfo, start, label, color, opacity=.4):
+def plot_one_vehicle(x_coordinates, y_coordinates, lane_numbers, target_lane, leadinfo, start, label, color, opacity=.4):
     # If there is at least a leader change,
     # we want to separate data into multiple sets otherwise there will be horizontal lines that have no meanings
     # x_coordinates and y_coordinates will have the same length,
@@ -1352,38 +1363,33 @@ def plot_one_vehicle_with_leader_change(plt, draw_arrow, x_coordinates, y_coordi
     # lane_numbers list has corresponding lane number for every single y_coordinates (speed)
     temp_start = 0
     leader_id = leadinfo[0][0][0]
+    artist_list = []
 
     for index in range(0, len(x_coordinates)):
         current_leader_id = find_current_leader(start + index, leadinfo[0])
         if current_leader_id != leader_id:
             # Detected a leader change, plot the previous set
             leader_id = current_leader_id
-#            if draw_arrow:
-#                plot_arrow_directions(x_coordinates[temp_start:index], y_coordinates[temp_start:index], color)
-#            else:
             kwargs = {}
             # Check if lane changed as well, if yes, plot opaque lines instead
             if lane_numbers[temp_start] != target_lane and target_lane is not None:
                 kwargs = {'alpha': opacity}  # .4 opacity (60% see through)
             art = plt.plot(x_coordinates[temp_start:index], y_coordinates[temp_start:index], label=label, color=color, **kwargs)
-            if draw_arrow:
-                add_arrow(art[0])
+            artist_list.append(art)
 
             temp_start = index
 
     # Plot the very last set, if there is one
-#    if draw_arrow:
-#        plot_arrow_directions(x_coordinates[temp_start:], y_coordinates[temp_start:], color)
-#    else:
     kwargs = {}
     if lane_numbers[temp_start] != target_lane and target_lane is not None:
         kwargs = {'alpha': opacity}  # .4 opacity (60% see through)
     art = plt.plot(x_coordinates[temp_start:], y_coordinates[temp_start:], label=label, color=color, **kwargs)
-    if draw_arrow:
-        add_arrow(art[0])
-    return
+    artist_list.append(art)
+    return artist_list
 
-def organize_legends(plt):
+# This function is used to merge legends (when necessary) especially the same vehicle has multiple trajectories sections
+# due to leader or lane changes
+def organize_legends():
     handles, labels = plt.gca().get_legend_handles_labels()
     newLabels, newHandles = [], []
     for handle, label in zip(handles, labels):
@@ -1427,15 +1433,16 @@ def plot_arrow_directions(x_coordinates, y_coordinates, color, arrowinterval=15,
 
     return
 
-def add_arrow(line, position=None, direction='right', size=15, color=None):
+def add_arrow(line, arrow_interval=20, direction='right', size=15, color=None):
     """
     add an arrow to a line.
 
-    line:       Line2D object
-    position:   x-position of the arrow. If None, mean of xdata is taken
-    direction:  'left' or 'right'
-    size:       size of the arrow in fontsize points
-    color:      if None, line color is taken.
+    line:           Line2D object
+    arrow_interval: the min length on x-axis between two arrows, given a list of xdata,
+                    this can determine the number of arrows to be drawn
+    direction:      'left' or 'right'
+    size:           size of the arrow in fontsize points
+    color:          if None, line color is taken.
     """
     if color is None:
         color = line.get_color()
@@ -1443,21 +1450,32 @@ def add_arrow(line, position=None, direction='right', size=15, color=None):
     xdata = line.get_xdata()
     ydata = line.get_ydata()
 
-    if position is None:
-        position = xdata.mean()
-    # find closest index
-    start_ind = np.argmin(np.absolute(xdata - position))
-    if direction == 'right':
-        end_ind = start_ind + 1
-    else:
-        end_ind = start_ind - 1
+    x_max = max(xdata)
+    x_min = min(xdata)
+    num_arrows = math.floor((x_max - x_min) / arrow_interval)
 
-    line.axes.annotate('',
-        xytext=(xdata[start_ind], ydata[start_ind]),
-        xy=(xdata[end_ind], ydata[end_ind]),
-        arrowprops=dict(arrowstyle="->", color=color),
-        size=size
-    )
+    for i in range(0, num_arrows):
+        position = x_min + i * arrow_interval
+
+        # find closest index
+        start_ind = np.argmin(np.absolute(xdata - position))
+
+        # To avoid index out of bounds, skip if
+        # start_ind is either index 0, or xdata.length - 1
+        if start_ind == 0 or start_ind == len(xdata) - 1:
+            continue
+
+        if direction == 'right':
+            end_ind = start_ind + 1
+        else:
+            end_ind = start_ind - 1
+
+        line.axes.annotate('',
+            xytext=(xdata[start_ind], ydata[start_ind]),
+            xy=(xdata[end_ind], ydata[end_ind]),
+            arrowprops=dict(arrowstyle="->", color=color),
+            size=size
+        )
 
 ##################################
 
