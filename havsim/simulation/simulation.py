@@ -1248,10 +1248,85 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
                     lane.merge_anchors[i][0] = veh.fol
                     
     #update roads and routes last
+    for veh in vehicles: 
+        #call to update road route
+        #call to update vehicles route 
+        pass
                     
     return 
 
+
+
+def make_cur_route(p, lane, nextroadname): 
+    #generates route events with parameters p in lane lane 
+    #p - parameters - currently len 2 list with constant, p[0] is a constant which is a like a safety buffer, and p[1]
+    #controls the distance you need for a change (also a constant)
+    #lane- lane object that the route events start on 
+    #nextroad - once you leave lane.road, you want to end up on nextroad
+    
+    #output - dictionary where keys are lanes, values are the route events a vehicle with 
+    #parameters p needs to follow on that lane. 
+    
+    #explanation of current model - 
+    #if  you need to be in lane '2' by position 'x' and start in lane '1', 
+    #then starting at x - p[0] - 2*p[1] you will end discretionary changing into lane '0'
+    #at x - p[0] - p[1] you wil begin mandatory changing into lane '2'
+    #at x - p[0] your mandatory change will have urgency of 100% which will always force cooperation of your l/rfol 
+    #for merging onto/off an on-ramp which begins at 'x' and ends at 'y', you will start mandatory at 'x' always, 
+    #reaching 100% cooperation by 'y' - p[0]
+    
+    curroad = lane.road
+    curlaneind = lane.laneind
+    #position, str, tuple of 2 ints, str, dict for the next road
+    pos, change_type, laneind, side, nextroad  = curroad['connect to'][nextroadname][:]
+    
+    cur_route = {}
+    
+    if change_type == 'continue': #-> vehicle needs to reach end of lane to transition to next road 
+        #initialize for lanes which vehicle needs to continue on 
+        for i in range(laneind[0], laneind[1]+1):
+            cur_route[curroad[i]] = []
+            
+        templane = curroad[laneind[0]]
+        cur_route[templane].append({'pos': templane.end - p[0] - p[1], 'event': 'end discretionary', 'side': 'l'})
         
+        templane = curroad[laneind[1]]
+        cur_route[templane].append({'pos': templane.end - p[0] - p[1], 'event': 'end discretionary', 'side': 'r'})
+        
+        if curlaneind >= laneind[0] and curlaneind <= laneind[1]: #if on correct lane(s) already, do no more work 
+            return cur_route
+        
+        #believe all this logic can be put into a helper function 
+        if curlaneind < laneind[0]: #need to change right possibly multiple times
+            curind = laneind[0] - 1
+            curpos, mincurpos = curroad[laneind[0]].end, curroad[laneind[0]].start
+            templane = curroad[curind]
+            cur_route[templane] = []
+            while not (curind < curlaneind):
+                #determine curpos = where the mandatory change starts 
+                if templane.end < curpos: 
+                    curpos = templane.end
+                curpos += -p[0] - p[1]
+                curpos = max(mincurpos, curpos)
+                enddiscpos = curpos - p[0] - p[1]
+                
+                #append the two events - end discretionary and being mandatory 
+                cur_route[templane].append({'pos': enddiscpos, 'event': 'end discretionary', 'side': 'l'})
+                cur_route[templane].append({'pos': curpos, 'event': 'mandatory', 'side': 'r'})
+                
+                #update iteration 
+                mincurpos = templane.start
+                curind += -1 
+                templane = curroad[curind]
+                
+        elif curlaneind > laneind[1]:
+            pass
+    elif change_type =='merge':
+        pass
+        
+def add_lane_to_cur_route():
+    pass
+
 def update_lrfol(veh):
     lfol, rfol = veh.lfol, veh.rfol
     if lfol == '':
@@ -1776,6 +1851,10 @@ def downstream_wrapper(speed_fun = None, method = 'speed', congested = True,
         #it has to be a vehicle (not an anchor vehicle) as we want its speedmem
         #if we fail to find such a vehicle and speed_fun is not None, we will use that; 
         #otherwise we will use the vehicle's free_cf method
+        
+        #the vehicle won't slow down if approaching the end of the lane
+        #would be simple to add this modification - at end of function do a check if youre getting close, 
+        #then can just use the car following model with the headway to the end 
         if mergeside == 'l': 
             folside = 'lfol'
         elif mergeside == 'r':
@@ -2024,7 +2103,7 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -2
                 newveh.rfol = rightanchor
                 rightanchor.llead.add(newveh)
             
-            #initaialize route // TO DO
+            #initaialize route // TO DO #also some of the initialization above will need to be changed as well
             
             self.inflow_buffer += -1
             vehicles.add(newveh)
