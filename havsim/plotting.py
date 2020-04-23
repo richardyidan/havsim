@@ -1278,7 +1278,7 @@ def plotvhd(meas, sim, platooninfo, my_id, show_sim=True, show_meas=True, effect
 
 ##################################
 def plotvhd_v2(meas, sim, platooninfo, vehicle_id, draw_arrow=False, arrow_interval=20, effective_headway=False, rp=None, h=.1,
-            datalen=9, timerange=[None, None], lane=None, delay=0, newfig=True):
+            datalen=9, timerange=[None, None], lane=None, delay=0, newfig=True, plot_color_line=False):
     # draw_arrow = True: draw arrows (indicating direction) along with trajectories; False: plot the trajectories only
     # effective_headway = False - if True, computes the relaxation amounts using rp, and then uses the headway + relaxation amount to plot instead of just the headway
     # rp = None - effective headway is true, rp is a float which is the parameter for the relaxation amount
@@ -1288,6 +1288,7 @@ def plotvhd_v2(meas, sim, platooninfo, vehicle_id, draw_arrow=False, arrow_inter
     # lane = None, the lane number that need highlighted: Trajectories in all other lanes would be plotted with opacity
     # delay = 0 - gets starting time for newell model
     # newfig = True - if True will create a new figure, otherwise it will use the current figure
+    # plot_color_line = False; If set to true, plot all trajectories using colored lines based on timestamp
 
     ####plotting
     if newfig:
@@ -1304,26 +1305,31 @@ def plotvhd_v2(meas, sim, platooninfo, vehicle_id, draw_arrow=False, arrow_inter
     if sim is None:
         # If sim is None, plot meas for all vehicles in vehicle_id
         for my_id in vehicle_id:
-            ret_list = process_one_vehicle(ax, meas, sim, platooninfo, my_id, timerange, lane, effective_headway, rp, h, datalen, delay)
+            ret_list = process_one_vehicle(ax, meas, sim, platooninfo, my_id, timerange, lane, plot_color_line, effective_headway, rp, h, datalen, delay)
             artist_list.extend(ret_list)
     else:
         # If both meas and sim are provided,
         # will plot both simulation and measurement data for the first vehicle in vehicle_id
         if len(vehicle_id) > 1: 
             print('plotting first vehicle '+str(vehicle_id[0])+' only')
-        ret_list = process_one_vehicle(ax, meas, sim, platooninfo, vehicle_id[0], timerange, lane, effective_headway, rp, h, datalen, delay)
+        ret_list = process_one_vehicle(ax, meas, sim, platooninfo, vehicle_id[0], timerange, lane, plot_color_line, effective_headway, rp, h, datalen, delay)
         artist_list.extend(ret_list)
 
-    organize_legends()
+    if plot_color_line:
+        ax.autoscale(axis = 'x')
+        ax.autoscale(axis = 'y')
+    else:
+        organize_legends()
 
     if draw_arrow:
         for art in artist_list:
             add_arrow(art[0], arrow_interval)
+
     return
 
 # This function will process and prepare xy-coordinates, color, labels, etc. 
 # necessary to plot trajectories for a given vehicle and then invoke plot_one_vehicle() function to do the plotting
-def process_one_vehicle(ax, meas, sim, platooninfo, my_id, timerange, lane, effective_headway=False, rp=None, h=.1, datalen=9, delay=0):
+def process_one_vehicle(ax, meas, sim, platooninfo, my_id, timerange, lane, plot_color_line, effective_headway=False, rp=None, h=.1, datalen=9, delay=0):
     artist_list = []
     if effective_headway:
         leadinfo, folinfo, rinfo = helper.makeleadfolinfo([my_id], platooninfo, meas)
@@ -1344,18 +1350,22 @@ def process_one_vehicle(ax, meas, sim, platooninfo, my_id, timerange, lane, effe
         headway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, sim, my_id, relax)
         sim_color = next(ax._get_lines.prop_cycler)['color']
         meas_label = 'Measurements'
-        ret_list = plot_one_vehicle(headway[:end + 1 - start], sim[my_id][start - t_nstar:end + 1 - t_nstar, 3], 
-                                            sim[my_id][start - t_nstar:end + 1 - t_nstar, 7], lane, leadinfo, start, 'Simulation', sim_color)
+        ret_list = plot_one_vehicle(headway[:end + 1 - start], sim[my_id][start - t_nstar:end + 1 - t_nstar, 3],
+                                            sim[my_id][start - t_nstar:end + 1 - t_nstar, 1],
+                                            sim[my_id][start - t_nstar:end + 1 - t_nstar, 7],
+                                            lane, plot_color_line, leadinfo, start, end, 'Simulation', sim_color)
         artist_list.extend(ret_list)
         
     trueheadway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, meas, my_id, relax)
     meas_color = next(ax._get_lines.prop_cycler)['color']
-    ret_list = plot_one_vehicle(trueheadway[:end + 1 - start], meas[my_id][start - t_nstar:end + 1 - t_nstar, 3], 
-                                        meas[my_id][start - t_nstar:end + 1 - t_nstar, 7], lane, leadinfo, start, meas_label, meas_color)
+    ret_list = plot_one_vehicle(trueheadway[:end + 1 - start], meas[my_id][start - t_nstar:end + 1 - t_nstar, 3],
+                                            meas[my_id][start - t_nstar:end + 1 - t_nstar, 1], 
+                                            meas[my_id][start - t_nstar:end + 1 - t_nstar, 7],
+                                            lane, plot_color_line, leadinfo, start, end, meas_label, meas_color)
     artist_list.extend(ret_list)
     return artist_list
 
-def plot_one_vehicle(x_coordinates, y_coordinates, lane_numbers, target_lane, leadinfo, start, label, color, opacity=.4):
+def plot_one_vehicle(x_coordinates, y_coordinates, timestamps, lane_numbers, target_lane, plot_color_line, leadinfo, start, end, label, color, opacity=.4):
     # If there is at least a leader change,
     # we want to separate data into multiple sets otherwise there will be horizontal lines that have no meanings
     # x_coordinates and y_coordinates will have the same length,
@@ -1365,26 +1375,40 @@ def plot_one_vehicle(x_coordinates, y_coordinates, lane_numbers, target_lane, le
     leader_id = leadinfo[0][0][0]
     artist_list = []
 
+    ##############################
+#    if plot_color_line:
+#        lines = plotColorLines(x_coordinates, y_coordinates, timestamps, [timestamps[0], timestamps[-1]])
+#        return artist_list
+    ##############################
+
     for index in range(0, len(x_coordinates)):
         current_leader_id = find_current_leader(start + index, leadinfo[0])
         if current_leader_id != leader_id:
             # Detected a leader change, plot the previous set
             leader_id = current_leader_id
-            kwargs = {}
-            # Check if lane changed as well, if yes, plot opaque lines instead
-            if lane_numbers[temp_start] != target_lane and target_lane is not None:
-                kwargs = {'alpha': opacity}  # .4 opacity (60% see through)
-            art = plt.plot(x_coordinates[temp_start:index], y_coordinates[temp_start:index], label=label, color=color, **kwargs)
-            artist_list.append(art)
+
+            # Check if should do color line plotting
+            if plot_color_line:
+                lines = plotColorLines(x_coordinates[temp_start:index], y_coordinates[temp_start:index], timestamps[temp_start:index], [timestamps[temp_start], timestamps[index]])
+            else:
+                kwargs = {}
+                # Check if lane changed as well, if yes, plot opaque lines instead
+                if lane_numbers[temp_start] != target_lane and target_lane is not None:
+                    kwargs = {'alpha': opacity}  # .4 opacity (60% see through)
+                art = plt.plot(x_coordinates[temp_start:index], y_coordinates[temp_start:index], label=label, color=color, **kwargs)
+                artist_list.append(art)
 
             temp_start = index
 
     # Plot the very last set, if there is one
-    kwargs = {}
-    if lane_numbers[temp_start] != target_lane and target_lane is not None:
-        kwargs = {'alpha': opacity}  # .4 opacity (60% see through)
-    art = plt.plot(x_coordinates[temp_start:], y_coordinates[temp_start:], label=label, color=color, **kwargs)
-    artist_list.append(art)
+    if plot_color_line:
+        lines = plotColorLines(x_coordinates[temp_start:], y_coordinates[temp_start:], timestamps[temp_start:], [timestamps[temp_start], timestamps[-1]])
+    else:
+        kwargs = {}
+        if lane_numbers[temp_start] != target_lane and target_lane is not None:
+            kwargs = {'alpha': opacity}  # .4 opacity (60% see through)
+        art = plt.plot(x_coordinates[temp_start:], y_coordinates[temp_start:], label=label, color=color, **kwargs)
+        artist_list.append(art)
     return artist_list
 
 # This function is used to merge legends (when necessary) especially the same vehicle has multiple trajectories sections

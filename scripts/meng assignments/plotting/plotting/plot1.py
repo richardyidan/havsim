@@ -50,7 +50,8 @@ platoonplot(meas, sim, platooninfo, platoon = testplatoon[0:2], colorcode = Fals
 
 
 #%% plotvhd and animatevhd\_list
-plotvhd_v2(meas,None,platooninfo,[928,931,967],draw_arrow=True, arrow_interval=10)
+#plotvhd_v2(meas,None,platooninfo,[928,931,967],draw_arrow=True, arrow_interval=10)
+plotvhd_v2(meas,None,platooninfo,[928,931,967],plot_color_line=True)
 
 
 #animatevhd(meas, None, platooninfo, [928, 931, 967])
