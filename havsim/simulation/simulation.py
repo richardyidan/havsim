@@ -1275,6 +1275,8 @@ def make_cur_route(p, lane, nextroadname):
     #for merging onto/off an on-ramp which begins at 'x' and ends at 'y', you will start mandatory at 'x' always, 
     #reaching 100% cooperation by 'y' - p[0]
     
+    #we only get the route for the current road - no look ahead to take into account future roads. // TO DO low priority 
+    
     curroad = lane.road
     curlaneind = lane.laneind
     #position, str, tuple of 2 ints, str, dict for the next road
@@ -1296,33 +1298,43 @@ def make_cur_route(p, lane, nextroadname):
         if curlaneind >= laneind[0] and curlaneind <= laneind[1]: #if on correct lane(s) already, do no more work 
             return cur_route
         
-        #believe all this logic can be put into a helper function 
         if curlaneind < laneind[0]: #need to change right possibly multiple times
-            curind = laneind[0] - 1
-            curpos, mincurpos = curroad[laneind[0]].end, curroad[laneind[0]].start
-            templane = curroad[curind]
-            cur_route[templane] = []
-            while not (curind < curlaneind):
-                #determine curpos = where the mandatory change starts 
-                if templane.end < curpos: 
-                    curpos = templane.end
-                curpos += -p[0] - p[1]
-                curpos = max(mincurpos, curpos)
-                enddiscpos = curpos - p[0] - p[1]
-                
-                #append the two events - end discretionary and being mandatory 
-                cur_route[templane].append({'pos': enddiscpos, 'event': 'end discretionary', 'side': 'l'})
-                cur_route[templane].append({'pos': curpos, 'event': 'mandatory', 'side': 'r'})
-                
-                #update iteration 
-                mincurpos = templane.start
-                curind += -1 
-                templane = curroad[curind]
+            cur_route = make_route_helper(p, cur_route, curroad, curlaneind, laneind[0], curroad[laneind[0]].end, curroad[laneind[0]].start, 'l')
                 
         elif curlaneind > laneind[1]:
-            pass
+            cur_route = make_route_helper(p, cur_route, curroad, curlaneind, laneind[1], curroad[laneind[1]].end, curroad[laneind[1]].start, 'r')
+            
+            
     elif change_type =='merge':
         pass
+    
+def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos, mincurpos, side):
+    if side == 'l':
+        curind = laneind - 1
+        templane = curroad[curind]
+        cur_route[templane] = []
+        while not (curind < curlaneind):
+            #determine curpos = where the mandatory change starts 
+            if templane.end < curpos: 
+                curpos = templane.end
+            curpos += -p[0] - p[1]
+            curpos = max(mincurpos, curpos)
+            enddiscpos = curpos - p[0] - p[1]
+            
+            #append the two events - end discretionary and being mandatory 
+            cur_route[templane].append({'pos': enddiscpos, 'event': 'end discretionary', 'side': 'l'})
+            cur_route[templane].append({'pos': curpos, 'event': 'mandatory', 'side': 'r'})
+            
+            #update iteration 
+            mincurpos = templane.start
+            curind += -1 
+            templane = curroad[curind]
+            
+        
+    elif curlaneind > laneind:
+        pass
+    
+    return cur_route
         
 def add_lane_to_cur_route():
     pass
