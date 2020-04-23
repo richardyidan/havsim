@@ -17,7 +17,7 @@ from havsim.calibration.opt import platoonobjfn_obj, platoonobjfn_objder
 from havsim.simulation.simulation import eq_circular, simulate_cir, update2nd_cir, update_cir
 from havsim.simulation.models import IDM_b3, IDM_b3_eql
 #plotting 
-from havsim.plotting import platoonplot, platoonplot_v2, plotflows, animatevhd, plotvhd, plotvhd_v2, animatevhd_list, animatevhd_list_v2, animatetraj, animatetraj_v2, meanspeedplot, optplot, selectoscillation, plotformat, selectvehID
+from havsim.plotting import platoonplot, plotflows, animatevhd, plotvhd, animatevhd_list, animatetraj, meanspeedplot, optplot, selectoscillation, plotformat, selectvehID
 #data processing
 from havsim.calibration.algs import makeplatoonlist
 #%% #load data
@@ -42,7 +42,7 @@ sim = obj_helper(out,OVM,OVMadjsys,OVMadj,meas,sim,platooninfo,testplatoon,makel
 #platoonplot(meas,None, platooninfo, platoon = testplatoon[0], colorcode=True, speed_limit=[20,35]) #single platoon, can specify colorcoding speeds
 #platoonplot(meas,None,platooninfo, platoon=platoonlist[48:60], colorcode = True) #list of platoons
 #platoonplot(meas,None,platooninfo, platoon=platoonlist[48:60], colorcode = True, lane = 2, opacity = .1) #list of platoons with specific lane
-platoonplot_v2(meas,None,platooninfo, platoon=platoonlist[48:60], colorcode = False, lane = 2, opacity = .1, fulltraj=False, timerange=[2800,3250]) #list of platoons with specific lane
+platoonplot(meas,None,platooninfo, platoon=platoonlist[48:60], colorcode = False, lane = 2, opacity = .1, fulltraj=False, timerange=[2800,3250]) #list of platoons with specific lane
 
 #other main call signature is when you give meas and sim, and then you can compare the two
 platoonplot(meas, sim, platooninfo, platoon = testplatoon[0:2], colorcode = False, lane = 4 )
@@ -50,14 +50,14 @@ platoonplot(meas, sim, platooninfo, platoon = testplatoon[0:2], colorcode = Fals
 
 
 #%% plotvhd and animatevhd\_list
-#plotvhd_v2(meas,None,platooninfo,[928,931,967],draw_arrow=True, arrow_interval=10)
-plotvhd_v2(meas,None,platooninfo,[928,931,967],plot_color_line=True)
+plotvhd(meas,None,platooninfo,[928,931,967],draw_arrow=True, arrow_interval=10)
+#plotvhd(meas,None,platooninfo,[928,931,967],plot_color_line=True)
 
 
 #animatevhd(meas, None, platooninfo, [928, 931, 967])
 
 #animatetraj(meas, platooninfo, platoon = testplatoon[0])
-#animatetraj_v2(meas, platooninfo, platoon = testplatoon[0], interval = 10)
+#animatetraj(meas, platooninfo, platoon = testplatoon[0], interval = 10)
 
 
 #%%
