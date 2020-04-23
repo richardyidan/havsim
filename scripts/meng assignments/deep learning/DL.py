@@ -41,11 +41,12 @@ def create_input(statemem, j, lead, headway, curmeas, vspeed = False):
     return curx, cury
 
 def normalization_input(xinput, maxheadway, maxvelocity, statemem):
-    if len(xinput[0]) == 10:
+    if len(xinput[0]) == statemem*2:
         xinput[:,:statemem] = xinput[:,:statemem]/maxvelocity
         xinput[:,statemem:statemem*2] = xinput[:,statemem:statemem*2]/maxheadway
-    if len(xinput[0]) == 15:
-        xinput[:,:statemem*2] = xinput[:,:statemem*2]/maxvelocity
+    if len(xinput[0]) == statemem * 3:
+        xinput[:,:statemem] = xinput[:,:statemem]/maxvelocity
+        xinput[:,statemem:statemem*2] = xinput[:,statemem:statemem*2]/maxcurrvelocity
         xinput[:,statemem*2:statemem*3] = xinput[:,statemem*2:statemem*3]/maxheadway
     return xinput
 
@@ -57,11 +58,11 @@ path_highd26 = '/Users/nathanbala/Desktop/meng_project/data/highd26.pkl'
 #path_highd26 = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/highd26.pkl'
 
 # reconstructed ngsim data
-with open(path_reconngsim, 'rb') as f:
-    data = pickle.load(f)[0]
+# with open(path_reconngsim, 'rb') as f:
+#     data = pickle.load(f)[0]
 # highd data
-#with open(path_highd26, 'rb') as f:
-#    data = pickle.load(f)[0]
+with open(path_highd26, 'rb') as f:
+   data = pickle.load(f)[0]
 
 meas, platooninfo = makeplatoonlist(data,1, False)
 
@@ -83,14 +84,10 @@ maxheadway = 0
 #define how the state should look
 statemem = 5
 
+maxcurrvelocity = 0
+
 xtrain, ytrain, xtest, ytest = [], [], [], []
 for count, i in enumerate(meas.keys()):
-    if len(platooninfo[i][4]) != 1:
-        continue
-    if count > 100:
-        break
-
-
     t_nstar, t_n, T_nm1, T_n = platooninfo[i][:4]
     leadinfo, folinfo, rinfo = havsim.calibration.helper.makeleadfolinfo([i], platooninfo, meas)
     relax = havsim.calibration.opt.r_constant(rinfo[0], [t_n, T_nm1], T_n, 5, False)
@@ -106,6 +103,7 @@ for count, i in enumerate(meas.keys()):
     curmeas = meas[i][t_n-t_nstar:T_nm1+1-t_nstar,[2,3,8]] #columns are position, speed, acceleration
     headway = lead[:,0] - curmeas[:,0] - lead[:,2] #headway is distance between front bumper to rear bumper of leader
     headway = np.array(headway) + np.array(relax[0][:T_nm1-t_n+1])
+    # headway = np.array(headway)
 
 
 
@@ -118,10 +116,15 @@ for count, i in enumerate(meas.keys()):
         if temp > maxvelocity:
             maxvelocity = temp
 
+        temp = max(curmeas[:,1])
+        if temp > maxcurrvelocity:
+            maxcurrvelocity = temp
+
+
     #form samples for the current vehicle
     for j in range(T_nm1-t_n):
 
-        curx, cury = create_input(statemem, j, lead, headway, curmeas, False)
+        curx, cury = create_input(statemem, j, lead, headway, curmeas, True)
         if train_or_test[count]:
             xtrain.append(curx)
             ytrain.append(cury)
@@ -235,7 +238,8 @@ def test(dataset, minacc, maxacc):
 #
 #    return curmeas, headway
 
-def create_output2(xtest, minoutput, maxoutput, maxvelocity, maxheadway, headway, lead, curmeas, j, dt=.1):
+def create_output2(xtest, minoutput, maxoutput, maxvelocity, maxheadway, headway, lead, curmeas, j, model, dt=.04):
+
     #create_output2 is the new version which assumes the output is next speed and inputs include the vehicle's own speed
 
     #vector to put into NN
@@ -249,23 +253,23 @@ def create_output2(xtest, minoutput, maxoutput, maxvelocity, maxheadway, headway
     ############
     #add some extra constraints on acceleration
     acc = (simulated_speed - curmeas[j,1])/dt
-    if acc > 4*3.3: 
-        simulated_speed = curmeas[j,1] + 4*3.3*dt
-    elif acc < -6*3.3:
-        simulated_speed = curmeas[j,1] - 6*3.3*dt
+    if acc > 4:
+        simulated_speed = curmeas[j,1] + 4*dt
+    elif acc < -6:
+        simulated_speed = curmeas[j,1] - 6*dt
     #speeds must be non negative
-    if simulated_speed < 0: 
+    if simulated_speed < 0:
         simulated_speed = 0
     curmeas[j+1,1] = simulated_speed
-    
-    headway[j+1] += lead[j+1,0] - curmeas[j+1,0] - lead[j+1,2] #headway is really relax + headway 
 
-    return curmeas, headway 
+    headway[j+1] += lead[j+1,0] - curmeas[j+1,0] - lead[j+1,2] #headway is really relax + headway
 
-
+    return curmeas, headway
 
 
-def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutput, minaoutput, maxvelocity, maxheadway, previous_sim_traj):
+
+
+def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutput, minaoutput, maxvelocity, maxheadway, v_speed):
     #how many samples we should look back
     statemem = 5
 
@@ -274,7 +278,7 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutp
     #obtain t_n and T-nm1 for vehicle_id
     t_nstar, t_n, T_nm1, T_n = input_platooninfo[vehicle_id][:4]
     if T_nm1 - t_n ==0:
-        return None, None, None
+        return None, None, None, None, None, None
     #obtain leadinfo for vehicle_id
     leadinfo, folinfo, rinfo = havsim.calibration.helper.makeleadfolinfo([vehicle_id], input_platooninfo, input_meas)
 
@@ -287,75 +291,79 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutp
         curleadid = j[0]
         leadt_nstar = input_platooninfo[curleadid][0]
         lead[j[1]-t_n:j[2]+1-t_n,:] = meas[curleadid][j[1]-leadt_nstar:j[2]+1-leadt_nstar,[2,3,6]]
-        
+
     headway = (relax[0][:T_nm1-t_n+1])
+    # headway = np.zeros(len(lead[:,0]))
     first_headway = lead[0,0] - meas[vehicle_id][t_n - t_nstar,2] - lead[0,2] #headway is distance between front bumper to rear bumper of leader
 
     headway[0] += first_headway
     curmeas = np.zeros((T_nm1-t_n+1, 3))
-    curmeas[0,:] = meas[vehicle_id][0,[2,3,8]]
+    first_vals = meas[vehicle_id][t_n-t_nstar:T_nm1+1-t_nstar,[2,3,8]]
+    curmeas[0,:] = first_vals[0,:]
+
 
     #iterating through simulated times
     for j in range(T_nm1 - t_n):
-        curx, unused = create_input(statemem, j, lead, headway, curmeas, False)
-        curmeas, headway = create_output2(curx, minoutput, maxoutput, maxvelocity, maxheadway, headway, lead, curmeas, j)
+        curx, unused = create_input(statemem, j, lead, headway, curmeas, v_speed)
+        curmeas, headway = create_output2(curx, minoutput, maxoutput, maxvelocity, maxheadway, headway, lead, curmeas, j, model)
 
 
     x = curmeas[:,0]
     x_hat = (meas[vehicle_id][t_n-t_nstar:T_nm1+1-t_nstar,2])
     error = (tf.sqrt(tf.losses.mean_squared_error(x, x_hat)))
 
-    return x, x_hat, error
+    fir = t_n-t_nstar
+    sec = T_nm1+1-t_nstar
+    return x, x_hat, error, curmeas, fir, sec
 
 
 
 
 
 
-#%% training and testing
+
 # m = test(test_ds,minoutput,maxoutput)
 # m2 = test(train_ds, minoutput,maxoutput)
 # print('before training rmse on test dataset is '+str(tf.cast(m,tf.float32))+' rmse on train dataset is '+str(m2))
 
+#
+# for epoch in range(5):
+#     for x, yhat in train_ds:
+#         train_step(x,yhat,loss_fn, optimizer)
+#     m = test(test_ds,minoutput,maxoutput)
+#     m2 = test(train_ds, minoutput,maxoutput)
+#     print('epoch '+str(epoch)+' rmse on test dataset is '+str(m)+' rmse on train dataset is '+str(m2))
+#
+#
+# tf.saved_model.save(model,'./DLmodelhighd_3input_relax.h5')
 
-for epoch in range(5):
-    for x, yhat in train_ds:
-        train_step(x,yhat,loss_fn, optimizer)
-    m = test(test_ds,minoutput,maxoutput)
-    m2 = test(train_ds, minoutput,maxoutput)
-    print('epoch '+str(epoch)+' rmse on test dataset is '+str(m)+' rmse on train dataset is '+str(m2))
+
+# restored_saved_model = tf.keras.models.load_model('./DLmodel3_relax.h5')
+
+restored_saved_model = tf.keras.models.load_model('./DLmodelhighd_relax.h5')
 
 
 
-
+sim = {}
+sim_info = {}
 # RMSE calculationg
-total_error = 0
-total_count = 0
-
-lane_error = 0
-lane_count =0
 for count, i in enumerate(meas.keys()):
-    if count > 500:
-        break
-    if len(platooninfo[i][4]) != 1:
-        pred_traj, acc_traj, rmse = predict_trajectory(model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, None)
-        print(pred_traj)
-        print(acc_traj)
-        print(rmse)
-        if tf.is_tensor(rmse):
-            total_error += rmse
-            total_count += 1
+    pred_traj, acc_traj, rmse, vec_meas,fir, sec = predict_trajectory(restored_saved_model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, False)
+
+    if vec_meas is None:
+        continue
+    sim[i] = vec_meas
+    if len(platooninfo[i][4]) == 1:
+        lane_change = False
     else:
-        pred_traj, acc_traj, rmse = predict_trajectory(model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, None)
-        print(pred_traj)
-        print(acc_traj)
-        print(rmse)
-        if tf.is_tensor(rmse):
-            lane_error += rmse
-            lane_count += 1
+        lane_change = True
+    sim_info[i] = (rmse, lane_change)
+    print(rmse)
 
-print("------------THIS IS THE FINAL RMSE FOR LANE CHANGE CARS-------------")
-print(total_error/total_count)
 
-print("------------THIS IS THE FINAL RMSE FOR None LANE CHANGE CARS-------------")
-print(lane_error/lane_count)
+
+with open('simhighd3_relax.pickle', 'wb') as handle:
+    pickle.dump(sim, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+with open('simhighd3_info_relax.pickle', 'wb') as handle:
+    pickle.dump(sim_info, handle, protocol=pickle.HIGHEST_PROTOCOL)
