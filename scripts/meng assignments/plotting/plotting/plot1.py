@@ -50,8 +50,11 @@ platoonplot(meas, sim, platooninfo, platoon = testplatoon[0:2], colorcode = Fals
 
 
 #%% plotvhd and animatevhd\_list
-plotvhd(meas,None,platooninfo,[928,931,967],draw_arrow=True, arrow_interval=10)
-#plotvhd(meas,None,platooninfo,[928,931,967],plot_color_line=True)
+#meas, platooninfo, platoonlist = makeplatoonlist(data,10) #this takes like 3 minutes to run
+
+#plotvhd(meas,None,platooninfo,[928,931,967],draw_arrow=True, arrow_interval=20)
+plotvhd(meas,None,platooninfo,platoonlist[50][:4],plot_color_line=True, draw_arrow = True, arrow_interval = 20)
+#plotvhd(meas,None,platooninfo,platoonlist[50][:4],draw_arrow=True, arrow_interval=10)
 
 
 #animatevhd(meas, None, platooninfo, [928, 931, 967])
@@ -78,6 +81,8 @@ plotvhd(meas,None,platooninfo,[928,931,967],draw_arrow=True, arrow_interval=10)
 #%% #for selectoscillation/selectvehID
 #option 1 - select rectangular area, press n to call selectvehID with chosen region (will automatically get vehicles in chosen region top left vertex)
 times, x, lane, veh = selectoscillation(data,50,20,lane=3)
+#make box, press n to enter selectvehID
+#a and z keys add vehicles before and after, respecitvely
 
 #option 2 - call selectvehID directly, but need to specify a starting vehicle list and also the rectangular region 
 #gives error? 
