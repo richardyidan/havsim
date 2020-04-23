@@ -64,11 +64,11 @@ def benchmark(meas, platooninfo, platoonlist, budget = 3, usemodel = 'IDM', orde
 #benchmark(meas,platooninfo,[[1133]]) #sometimes it can be very low 
 #benchmark(meas,platooninfo,[[1137]]) #sometimes the problem is using larger platoons causes algorithm to get stuck in local minimum 
     
-out = benchmark(meas,platooninfo,[[1013]],usemodel='OVM')
+out = benchmark(meas,platooninfo,[[2222]],usemodel='OVM')
 #here is trajectories in speed/headway plane - maybe you find it interesting to look at trajectories this way 
 #plotvhd(meas,out[1], platooninfo,1013) #like the below but no animation - in case animation is laggy 
-ani = animatevhd_list(meas,out[1],platooninfo,[1013])
-
-out = benchmark(meas,platooninfo,[[1013]],usemodel='LWR')
-ani2 = animatevhd_list(meas,out[1],platooninfo,[1013])
+#ani = animatevhd_list(meas,out[1],platooninfo,[1013])
+#
+#out = benchmark(meas,platooninfo,[[1013]],usemodel='LWR')
+#ani2 = animatevhd_list(meas,out[1],platooninfo,[1013])
 

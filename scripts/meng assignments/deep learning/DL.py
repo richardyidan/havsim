@@ -50,19 +50,19 @@ def normalization_input(xinput, maxheadway, maxvelocity, statemem):
         xinput[:,statemem*2:statemem*3] = xinput[:,statemem*2:statemem*3]/maxheadway
     return xinput
 
-
+#
 #comment out and replace with path to pickle files on your computer
-path_reconngsim = '/Users/nathanbala/Desktop/meng_project/data/reconngsim.pkl'
-path_highd26 = '/Users/nathanbala/Desktop/meng_project/data/highd26.pkl'
-#path_reconngsim = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/reconngsim.pkl'
-#path_highd26 = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/highd26.pkl'
+#path_reconngsim = '/Users/nathanbala/Desktop/meng_project/data/reconngsim.pkl'
+#path_highd26 = '/Users/nathanbala/Desktop/meng_project/data/highd26.pkl'
+path_reconngsim = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/reconngsim.pkl'
+path_highd26 = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/highd26.pkl'
 
 # reconstructed ngsim data
-# with open(path_reconngsim, 'rb') as f:
-#     data = pickle.load(f)[0]
+with open(path_reconngsim, 'rb') as f:
+    data = pickle.load(f)[0]
 # highd data
-with open(path_highd26, 'rb') as f:
-   data = pickle.load(f)[0]
+#with open(path_highd26, 'rb') as f:
+#   data = pickle.load(f)[0]
 
 meas, platooninfo = makeplatoonlist(data,1, False)
 
@@ -90,7 +90,7 @@ xtrain, ytrain, xtest, ytest = [], [], [], []
 for count, i in enumerate(meas.keys()):
     t_nstar, t_n, T_nm1, T_n = platooninfo[i][:4]
     leadinfo, folinfo, rinfo = havsim.calibration.helper.makeleadfolinfo([i], platooninfo, meas)
-    relax = havsim.calibration.opt.r_constant(rinfo[0], [t_n, T_nm1], T_n, 5, False)
+    relax = havsim.calibration.opt.r_constant(rinfo[0], [t_n, T_nm1], T_n, 12, False)
 
     if T_nm1 - t_n ==0:
         continue
@@ -362,8 +362,17 @@ for count, i in enumerate(meas.keys()):
 
 
 
-with open('simhighd3_relax.pickle', 'wb') as handle:
-    pickle.dump(sim, handle, protocol=pickle.HIGHEST_PROTOCOL)
+#with open('simhighd3_relax.pickle', 'wb') as handle:
+#    pickle.dump(sim, handle, protocol=pickle.HIGHEST_PROTOCOL)
+#
+#with open('simhighd3_info_relax.pickle', 'wb') as handle:
+#    pickle.dump(sim_info, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    
+with open('sim_info_relax.pickle', 'rb') as handle:
+    sim_info = pickle.load(handle)
+    
+with open('sim_relax.pickle', 'rb') as handle:
+    sim = pickle.load(handle)
+    
+    
 
-with open('simhighd3_info_relax.pickle', 'wb') as handle:
-    pickle.dump(sim_info, handle, protocol=pickle.HIGHEST_PROTOCOL)
