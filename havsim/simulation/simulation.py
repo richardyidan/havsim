@@ -1211,8 +1211,11 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
         #apply relaxation 
         new_relaxation(veh, timeind, dt)
         
-        #update a vehicle's road events here (and add cooperative/tactical to update_change)
+        #update a vehicle's road events here // TO DO
+        #add cooperative/tactical to update_change // TO DO 
+        
         #update a vehicle's route events, adding new events if necessary 
+        set_new_route(veh)
     
     #update all states, memory and headway 
     for veh in vehicles: 
@@ -1220,16 +1223,14 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
     for veh in vehicles:
         if veh.lead is not None: 
             veh.hd = veh.lane.get_headway(veh, veh.lead)
+        else: #don't actually need this but for robustness
+            veh.hd = None
         
     #update left and right followers
     for veh in vehicles:
         update_lrfol(veh)
-        
-    #inflow goes here
-    for lane in inflow_lanes: 
-        vehid = lane.increment_inflow(vehicles, vehid, timeind, dt)
     
-    #update merge_anchors
+    #update merge_anchors // TO DO update this 
     for lane in merge_lanes:
         for i in range(len(lane.merge_anchors)):
             veh, pos = lane.merge_anchors[i]
@@ -1250,15 +1251,34 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
                 if veh.pos > pos: 
                     lane.merge_anchors[i][0] = veh.fol
                     
+    #inflow goes here
+    for lane in inflow_lanes: 
+        vehid = lane.increment_inflow(vehicles, vehid, timeind, dt)
+                    
     #update roads and routes last
     for veh in vehicles: 
         #check vehicle's lane events and act if necessary 
         #check vehicle's route events and act if neccessary
+        update_route(veh)
         pass
                     
     return 
 
+def update_route(veh):
+    #will check a vehicle's current route events and see if we need to do anything 
+    #returns True if we make a change, False otherwise
+    curevent = veh.route_events[0]
+    if veh.pos > curevent['pos']:
+        if curevent['event'] == 'end discretionary': 
+            setattr(veh, curevent['side'],None)
+        elif curevent['event'] == 'mandatory': 
+            setattr(veh, curevent['side'],'mandatory')
+        veh.route_events.pop(0)
+        return True
+    return False
 
+def update_lane_events(veh): 
+    curevent = veh.lane_events[0]
 
 def make_cur_route(p, lane, nextroadname): 
     #generates route events with parameters p in lane lane 
@@ -1282,7 +1302,7 @@ def make_cur_route(p, lane, nextroadname):
     
     curroad = lane.road
     curlaneind = lane.laneind
-    #position, str, tuple of 2 ints, str, dict for the next road
+    #position, str, tuple of 2 ints or single int, str, dict for the next road
     pos, change_type, laneind, side, nextroad  = curroad['connect to'][nextroadname][:]
     
     cur_route = {}
@@ -1302,27 +1322,39 @@ def make_cur_route(p, lane, nextroadname):
             return cur_route
         
         elif curlaneind < laneind[0]: #need to change right possibly multiple times
-            cur_route = make_route_helper(p, cur_route, curroad, curlaneind, laneind[0], curroad[laneind[0]].end, curroad[laneind[0]].start, 'l')
-                
-        elif curlaneind > laneind[1]:
-            cur_route = make_route_helper(p, cur_route, curroad, curlaneind, laneind[1], curroad[laneind[1]].end, curroad[laneind[1]].start, 'r')
+            uselaneind = laneind[0]
+        else: 
+            uselaneind = laneind[1]
             
+        cur_route = make_route_helper(p, cur_route, curroad, curlaneind, uselaneind, curroad[uselaneind].end, curroad[uselaneind].start)
+                
             
     elif change_type =='merge': #logic is similar and also uses make_route_helper
-        pass
+        if side == 'l': 
+            opside = 'r'
+        else: 
+            opside= 'l'
+            
+        templane = curroad[laneind]
+        cur_route[templane].append({'pos': pos -p[0] - p[1], 'event':'end discretionary', 'side':opside})
+        cur_route[templane].append({'pos': pos, 'event':'mandatory', 'side':side})
+        
+        cur_route = make_route_helper(p, cur_route, curroad, curlaneind, laneind, pos, templane.start)
     
-def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos, mincurpos, side):
+    return cur_route
+    
+def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos, mincurpos):
     #p - parameters for route 
     #cur_route - dictionary to add entries to 
     #curroad - current road 
     #curlaneind - current index of lane you start in 
     #laneind, curpos - index of lane you want to be in by position curpos 
     #mincurpos - for edge case to prevent you from changing onto lane before it starts 
-    #side - if curlaneind < laneind the side is 'l'
     
     #starting on curroad in lane with index curlaneind, and wanting to be in laneind by curpos position, 
-    #generates routes cur all roads in (curlaneind, laneind)
-    if side == 'l':
+    #generates routes cur all roads in [curlaneind, laneind)
+    #assumes you already have the route for laneind
+    if curlaneind < laneind:
         curind = laneind - 1
         templane = curroad[curind]
         cur_route[templane] = []
@@ -1344,7 +1376,7 @@ def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos, mincur
             templane = curroad[curind]
             
         
-    elif side == 'r': 
+    elif curlaneind > laneind: 
         curind = laneind +1
         templane = curroad[curind]
         cur_route[templane] = []
@@ -1367,9 +1399,31 @@ def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos, mincur
 
     return cur_route
         
-def add_lane_to_cur_route():
-    #wrapper to fill in when vehicle changes to a new lane
-    pass
+def set_new_route(veh):
+    
+    
+    #get new route events if they are stored in memory already 
+    newlane = veh.lane 
+    if newlane in veh.cur_route: 
+        veh.route_events = veh.cur_route[newlane].copy() #use shallow copy - copy references only
+    #otherwise we will make it 
+    else:
+        p = veh.route_parameters
+        prevlane = veh.lanemem[-2][0]
+        if prevlane.road is newlane.road: #on same road - we can just use helper function to update cur_route
+            curpos = veh.cur_route[prevlane][0]['pos'] + p[0] + p[1]
+            make_route_helper(veh.route_parameters, veh.cur_route, veh.road, newlane.laneind, prevlane.laneind, curpos,prevlane.start)
+        else: #on new road - we need to generate new cur_route
+            veh.cur_route = make_cur_route(p, newlane, veh.route.pop(0))
+        
+        veh.route_events = veh.cur_route[newlane].copy()
+    
+    curbool = True
+    while curbool: 
+        curbool = update_route(veh)
+        
+    return 
+    
 
 def update_lrfol(veh):
     lfol, rfol = veh.lfol, veh.rfol
@@ -1386,14 +1440,14 @@ def update_lrfol(veh):
         
     if rfol == '':
         pass
-    elif veh.lane.get_dist(veh,lfol) > 0: 
-        veh.lfol = lfol.fol
-        veh.lfol.rlead.add(veh)
-        lfol.rlead.remove(veh)
+    elif veh.lane.get_dist(veh,rfol) > 0: 
+        veh.rfol = rfol.fol
+        veh.rfol.llead.add(veh)
+        rfol.llead.remove(veh)
         
-        lfol.rfol.llead.remove(lfol)
-        lfol.rfol = veh
-        veh.llead.add(lfol)
+        rfol.lfol.rlead.remove(rfol)
+        rfol.lfol = veh
+        veh.rlead.add(rfol)
         
         
         
@@ -1532,6 +1586,7 @@ def update_change(veh, timeind):
                 minveh = j #minveh is the leader of new lc side follower 
     setattr(veh, lcsidelead, newleads)
     #update new lcside 
+    #THIS MAY HAVE BUGS 
     if newlcsidelane: #new lcside is None
         setattr(veh, lcsidefol, '')
     else: 
@@ -1550,6 +1605,7 @@ def update_change(veh, timeind):
         
 def get_guess(lcfol, lclead, veh, lcsidefol, newlcsidelane):
     #need to find new lcside follower for veh
+    #not sure if this is going to behave properly 
     guess = getattr(lcfol, lcsidefol)
     anchor = newlcsidelane.anchor
     if guess == '' or guess.lane.anchor is not anchor: 
