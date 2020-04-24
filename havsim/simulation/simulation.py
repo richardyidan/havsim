@@ -1207,9 +1207,12 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
     #update followers/leaders for all lane changes 
     for veh in lc_actions.keys(): 
         update_change(veh, timeind) #this cannot be done in parralel
-        
+    
         #apply relaxation 
         new_relaxation(veh, timeind, dt)
+        
+        #update a vehicle's road events here (and add cooperative/tactical to update_change)
+        #update a vehicle's route events, adding new events if necessary 
     
     #update all states, memory and headway 
     for veh in vehicles: 
@@ -1249,8 +1252,8 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
                     
     #update roads and routes last
     for veh in vehicles: 
-        #call to update road route
-        #call to update vehicles route 
+        #check vehicle's lane events and act if necessary 
+        #check vehicle's route events and act if neccessary
         pass
                     
     return 
@@ -1298,17 +1301,27 @@ def make_cur_route(p, lane, nextroadname):
         if curlaneind >= laneind[0] and curlaneind <= laneind[1]: #if on correct lane(s) already, do no more work 
             return cur_route
         
-        if curlaneind < laneind[0]: #need to change right possibly multiple times
+        elif curlaneind < laneind[0]: #need to change right possibly multiple times
             cur_route = make_route_helper(p, cur_route, curroad, curlaneind, laneind[0], curroad[laneind[0]].end, curroad[laneind[0]].start, 'l')
                 
         elif curlaneind > laneind[1]:
             cur_route = make_route_helper(p, cur_route, curroad, curlaneind, laneind[1], curroad[laneind[1]].end, curroad[laneind[1]].start, 'r')
             
             
-    elif change_type =='merge':
+    elif change_type =='merge': #logic is similar and also uses make_route_helper
         pass
     
 def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos, mincurpos, side):
+    #p - parameters for route 
+    #cur_route - dictionary to add entries to 
+    #curroad - current road 
+    #curlaneind - current index of lane you start in 
+    #laneind, curpos - index of lane you want to be in by position curpos 
+    #mincurpos - for edge case to prevent you from changing onto lane before it starts 
+    #side - if curlaneind < laneind the side is 'l'
+    
+    #starting on curroad in lane with index curlaneind, and wanting to be in laneind by curpos position, 
+    #generates routes cur all roads in (curlaneind, laneind)
     if side == 'l':
         curind = laneind - 1
         templane = curroad[curind]
@@ -1331,12 +1344,31 @@ def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos, mincur
             templane = curroad[curind]
             
         
-    elif curlaneind > laneind:
-        pass
-    
+    elif side == 'r': 
+        curind = laneind +1
+        templane = curroad[curind]
+        cur_route[templane] = []
+        while not (curind > curlaneind):
+            #determine curpos = where the mandatory change starts 
+            if templane.end < curpos: 
+                curpos = templane.end
+            curpos += -p[0] - p[1]
+            curpos = max(mincurpos, curpos)
+            enddiscpos = curpos - p[0] - p[1]
+            
+            #append the two events - end discretionary and being mandatory 
+            cur_route[templane].append({'pos': enddiscpos, 'event': 'end discretionary', 'side': 'r'})
+            cur_route[templane].append({'pos': curpos, 'event': 'mandatory', 'side': 'l'})
+            
+            #update iteration 
+            mincurpos = templane.start
+            curind += -1 
+            templane = curroad[curind]
+
     return cur_route
         
 def add_lane_to_cur_route():
+    #wrapper to fill in when vehicle changes to a new lane
     pass
 
 def update_lrfol(veh):
@@ -1418,6 +1450,7 @@ def update_change(veh, timeind):
     
     #no check for vehicles moving into same gap // TO DO but low priority 
     #no cooperative tactical components 
+    #need to update a vehicle's road events when changing lanes 
     
     #initialization 
     lane = veh.lane
