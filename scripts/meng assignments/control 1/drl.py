@@ -7,6 +7,10 @@ import tensorflow as tf
 import tensorflow.keras.layers as kl
 import tensorflow.keras.losses as kls
 import matplotlib.pyplot as plt
+import math
+import os
+from tqdm import tqdm
+from scipy.interpolate import interp1d
 
 
 #disable gpu 
@@ -23,17 +27,10 @@ except:
 
 
 import havsim
-from havsim.simulation.simulation import simulate_step, eq_circular, simulate_cir, update_cir, update2nd_cir
-from havsim.simulation.models import drl_reward8, IDM_b3, IDM_b3_eql, FS
+from havsim.simulation.simulationold2 import simulate_step, update_cir
 from havsim.plotting import plotformat, platoonplot
 
-import copy
-import math
-import gym
-import os
-from tqdm import tqdm
-from scipy.interpolate import interp1d
-import time
+
 #to start we will just use a quantized action space since continuous actions is more complicated
 #%%
 class ProbabilityDistribution(tf.keras.Model):
@@ -41,7 +38,7 @@ class ProbabilityDistribution(tf.keras.Model):
         return tf.squeeze(tf.random.categorical(logits, 1), axis=-1)
 
 class PolicyModel(tf.keras.Model):
-  def __init__(self, num_actions, num_hiddenlayers = 3, num_neurons = 32, activationlayer = kl.Activation('tanh')):
+  def __init__(self, num_actions, num_hiddenlayers = 3, num_neurons = 32, activationlayer = kl.Activation(kl.LeakyReLU)):
     super().__init__('mlp_policy')
     self.num_hiddenlayers=num_hiddenlayers
     self.activationlayer = activationlayer
@@ -76,8 +73,34 @@ class PolicyModel(tf.keras.Model):
     action = self.dist.predict_on_batch(logits)
     return tf.squeeze(action, axis=-1)
 
+class PolicyModel2(tf.keras.Model):
+  def __init__(self, num_actions, num_hiddenlayers = 2, num_neurons = 32, activationlayer = kl.LeakyReLU):
+    super().__init__('mlp_policy')
+
+    self.hidden1 = kl.Dense(num_neurons, activation = activationlayer, kernel_regularizer = tf.keras.regularizers.l2(l=.1)) #hidden layer for actions (policy)
+    self.norm1 = kl.BatchNormalization()
+    self.hidden11 = kl.Dense(num_neurons, activation = activationlayer, kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+    self.norm11 = kl.BatchNormalization()
+
+    # Logits are unnormalized log probabilities
+    self.logits = kl.Dense(num_actions, name = 'policy_logits')
+    self.dist = ProbabilityDistribution()
+    
+  def call(self, inputs, training = True, **kwargs):
+    x = tf.convert_to_tensor(inputs)
+    hidden_logs = self.hidden1(x)
+    hidden_logs = self.norm1(hidden_logs, training = training)
+    hidden_logs = self.hidden11(hidden_logs)
+    hidden_logs = self.norm11(hidden_logs, training = training)
+    return self.logits(hidden_logs)
+
+  def action(self, obs):
+    logits = self.call(obs)
+    action = self.dist(logits)
+    return tf.squeeze(action, axis=-1)
+
 class ValueModel(tf.keras.Model):
-  def __init__(self, num_hiddenlayers = 3, num_neurons=32, activationlayer = kl.Activation('tanh')):
+  def __init__(self, num_hiddenlayers = 3, num_neurons=64, activationlayer = kl.Activation(kl.LeakyReLU)):
     super().__init__('mlp_policy')
     self.num_hiddenlayers=num_hiddenlayers
     self.activationlayer = activationlayer
@@ -109,7 +132,29 @@ class ValueModel(tf.keras.Model):
     value = self.predict_on_batch(obs)
     return tf.squeeze(value, axis=-1)
 
-class ValueModelReinforce(tf.keras.Model):
+class ValueModel2(tf.keras.Model):
+  def __init__(self, num_hiddenlayers = 3, num_neurons=64, activationlayer = kl.LeakyReLU):
+    super().__init__('mlp_policy')
+    self.hidden2 = kl.Dense(num_neurons, activation = activationlayer, kernel_regularizer = tf.keras.regularizers.l2(l=.1)) #hidden layer for state-value
+    self.norm2 = kl.BatchNormalization()
+    self.hidden22 = kl.Dense(num_neurons,activation = activationlayer, kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+    self.norm22 = kl.BatchNormalization()
+       
+    self.val = kl.Dense(1, name = 'value') 
+
+  def call(self, inputs, training = True, **kwargs):
+    x = tf.convert_to_tensor(inputs)
+    hidden_vals = self.hidden2(x)
+    hidden_vals = self.norm2(hidden_vals, training = training)
+    hidden_vals = self.hidden22(hidden_vals)
+    hidden_vals = self.norm22(hidden_vals, training = training)
+    return self.val(hidden_vals)
+
+  def value(self, obs):
+    value = self.call(obs)
+    return tf.squeeze(value, axis=-1)
+
+class ValueModelReinforce(tf.keras.Model): #?What is this for? 
   def __init__(self):
     super().__init__('mlp_policy')
     self.hidden = kl.Dense(1)
@@ -130,9 +175,8 @@ class ValueModelLinearBaseline(tf.keras.Model):
     value = self.predict_on_batch(obs)
     return tf.squeeze(value, axis=-1)
     
-optimizer = tf.keras.optimizers.RMSprop(learning_rate = 9e-4)
 class ACagent:
-    def __init__(self,policymodel, valuemodel, batch_sz=64, eps = 0.05, lr = 7e-3, entropy_const = 1e-4):
+    def __init__(self,policymodel, valuemodel, batch_sz=64, eps = 0.05, lr = 9e-4, entropy_const = 1e-5):
         #self.model = model
         self.policymodel = policymodel
         self.valuemodel = valuemodel
@@ -144,11 +188,11 @@ class ACagent:
                 loss = [self._logits_loss, self._value_loss])
         '''
         self.policymodel.compile(
-                optimizer = tf.keras.optimizers.RMSprop(lr), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
+                optimizer = tf.keras.optimizers.RMSprop(lr), 
                 #optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
                 loss = [self._logits_loss])
         self.valuemodel.compile(
-                optimizer = tf.keras.optimizers.RMSprop(lr), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
+                optimizer = tf.keras.optimizers.RMSprop(lr),
                 #optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
                 loss = [self._value_loss])
         
@@ -203,7 +247,7 @@ class ACagent:
             run += 1
         return rewardslist, eplenlist
     
-    def train(self, env, updates=250, by_eps = False, numeps = 1, nTDsteps = -1):   
+    def train(self, env, updates=250, by_eps = False, numeps = 1, nTDsteps = 5):   
         curstate = self.reset(env)
         self.timecounter = 0
         
@@ -229,9 +273,7 @@ class ACagent:
             for bstep in range(batch_sz):
                 statemem[bstep] = curstate
                 
-                start = time.time()
                 nextstate, reward, done = env.step(action,self.counter,self.simlen, False)
-                self.timecounter += time.time() - start
                 nextaction, nextvalue = self.action_value(nextstate)
                 env.totloss += reward
                 self.counter += 1
@@ -311,7 +353,7 @@ class circ_singleav: #example of single AV environment
     #avid = id of AV
     #simulates on a circular road
     
-    def __init__(self, initstate,auxinfo,roadinfo,avid,rewardfn,updatefun=update_cir,dt=.25,statemem=4):
+    def __init__(self, initstate,auxinfo,roadinfo,avid,rewardfn,updatefun=update_cir,dt=.25,statemem=10):
         self.initstate = initstate
         self.auxinfo = auxinfo
         self.auxinfo[avid][6] = NNhelper
@@ -328,6 +370,7 @@ class circ_singleav: #example of single AV environment
         self.statecnt = 0
         self.statememdim = (self.mem+1)*5
         self.interp1d = interp1d((1.84,43.13), (0,1),fill_value = 'extrapolate')
+        self.interp1dspd = interp1d((0,25.32), (0,1), fill_value = 'extrapolate')
         
     def reset(self):
         self.curstate = self.initstate
@@ -344,11 +387,11 @@ class circ_singleav: #example of single AV environment
         avlead = self.auxinfo[self.avid][1]
         avfol = [k for k,v in self.auxinfo.items() if v[1] == self.avid][0] 
         
-        extend_seq = (np.interp(curstate[self.avid][1], (0,25.32), (0,1)),
-                      np.interp(curstate[avlead][1], (0,25.32), (0,1)),
-                     self.interp1d(curstate[self.avid][2])*1,
-                      np.interp(curstate[avfol][1], (0,25.32), (0,1)),
-                      self.interp1d(curstate[avfol][2])*1
+        extend_seq = (self.interpspd(curstate[self.avid][1]),
+                      self.interpspd(curstate[avlead][1]),
+                     self.interp1d(curstate[self.avid][2]),
+                      self.interpspd(curstate[avfol][1]),
+                      self.interp1d(curstate[avfol][2])
                       )
         self.paststates.extend(extend_seq)
         if self.statecnt < self.mem:
@@ -362,8 +405,6 @@ class circ_singleav: #example of single AV environment
     
     def get_acceleration(self,action,curstate):
         #action from NN gives a scalar, we convert it to the quantized acceleration
-#        acc = tf.cast(action,tf.float32)*.1-1.5 #30 integer actions -> between -1.5 and 1.4 in increments of .1
-#        acc = tf.cast(action, tf.float32) - 1
         acc = float(action - 1)
         
         nextspeed = curstate[self.avid][1] + self.dt*acc
@@ -420,6 +461,24 @@ class circ_singleav: #example of single AV environment
     def savestate(self):
         for j in self.curstate.keys():
             self.sim[j].append(self.curstate[j])
+            
+    def plot(self): 
+        myplot(self.sim, self.auxinfo, self.roadinfo)
+        
+    def trajplot(self, vehid = None):
+        if vehid == None: 
+            vehid = self.avid
+        avtraj = np.asarray(self.sim[vehid])
+        plt.figure() #plots, in order, position, speed, and headway time series.
+        plt.subplot(1,3,1)
+        plt.plot(avtraj[:,0])
+        plt.ylabel('position')
+        plt.subplot(1,3,2)
+        plt.plot(avtraj[:,1])
+        plt.ylabel('speed')
+        plt.subplot(1,3,3)
+        plt.plot(avtraj[:,2])
+        plt.ylabel('headway')
         
 class gym_env:
     def __init__(self, env):

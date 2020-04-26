@@ -1,6 +1,7 @@
 
 """
 @author: rlk268@cornell.edu
+was just for debugging issue with sparse categorical crossentropy, and has some code for a functino which computes the log probability for an action given the logits
 """
 import numpy as np
 import tensorflow as tf 

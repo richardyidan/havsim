@@ -1,6 +1,7 @@
 
 """
 @author: rlk268@cornell.edu
+for benchmarking/debugging purposes
 """
 import numpy as np 
 
