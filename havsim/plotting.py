@@ -372,10 +372,7 @@ def plotColorLines(X, Y, SPEED, speed_limit):
 
 def plotformat(sim, auxinfo, roadinfo, starttimeind = 0, endtimeind = 3000, density = 2, indlist = [], specialind = 21):
     #get output from simulation into a format we can plot using plotting functions
-    #need to think about how to handle headway, how to handle wraparound for the current plotting api
-    #I think good design is to handle networks in a special way which defines positions so that normal 
-    #plotting api can be used. If the network is extremely complicated then you probably will just want
-    #completely seperate api from what exists currently. 
+    #output format is pretty inefficient in terms of memory usage - all plotting functions use this format though 
     
     #starttimeind = first time to be plotted 
     #endtimeind = last time to be plotted 
