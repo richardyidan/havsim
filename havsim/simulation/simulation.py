@@ -18,11 +18,11 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
         #apply relaxation 
         new_relaxation(veh, timeind, dt)
         
-        #update a vehicle's road events here // TO DO
         #add cooperative/tactical to update_change // TO DO 
         
-        #update a vehicle's route events, adding new events if necessary 
-        set_new_route(veh)
+        #update a vehicle's lane events and route events for the new lane 
+        set_lane_events(veh)
+        set_route_events(veh)
     
     #update all states, memory and headway 
     for veh in vehicles: 
@@ -30,7 +30,7 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
     for veh in vehicles:
         if veh.lead is not None: 
             veh.hd = veh.lane.get_headway(veh, veh.lead)
-        else: #don't actually need this but for robustness
+        else: #for robustness only, should not be needed
             veh.hd = None
         
     #update left and right followers
@@ -38,34 +38,34 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
         update_lrfol(veh)
     
     #update merge_anchors // TO DO update this 
-    for lane in merge_lanes:
-        for i in range(len(lane.merge_anchors)):
-            veh, pos = lane.merge_anchors[i]
+    for curlane in merge_lanes:
+        for i in range(len(curlane.merge_anchors)):
+            veh, pos = curlane.merge_anchors[i][:]
             if pos == None: #some merge anchors may not need to be updated 
                 continue
             if veh.cf_parameters == None:  
                 lead = veh.lead
-                if lead is not None and ((lead.lane is lane and lead.pos < pos) or lane.roadlen[lead.road]+lead.pos - pos < 0):
-                    lane.merge_anchors[i][0] = lead
+                if lead is not None and ((lead.lane is curlane and lead.pos < pos) or curlane.roadlen[lead.road]+lead.pos - pos < 0):
+                    curlane.merge_anchors[i][0] = lead
                     
             elif veh in lc_actions: 
                 if lc_actions[veh] == 'l': 
-                    lane.merge_anchors[i][0] = veh.rfol
+                    curlane.merge_anchors[i][0] = veh.rfol
                 else: 
-                    lane.merge_anchors[i][0] = veh.lfol
+                    curlane.merge_anchors[i][0] = veh.lfol
             
             else:
                 if veh.pos > pos: 
-                    lane.merge_anchors[i][0] = veh.fol
+                    curlane.merge_anchors[i][0] = veh.fol
                     
     #inflow goes here
-    for lane in inflow_lanes: 
-        vehid = lane.increment_inflow(vehicles, vehid, timeind, dt)
+    for curlane in inflow_lanes: 
+        vehid = curlane.increment_inflow(vehicles, vehid, timeind, dt)
                     
     #update roads and routes last
     for veh in vehicles: 
-        #check vehicle's lane events and act if necessary 
-        #check vehicle's route events and act if neccessary
+        #check vehicle's lane events and route events, acting if necessary 
+        update_lane_events(veh, timeind)
         update_route(veh)
         pass
                     
@@ -89,7 +89,7 @@ def update_route(veh):
 def update_lane_events(veh, timeind): 
     curevent = veh.lane_events[0]
     if veh.pos > curevent['pos']:
-        if curevent['event'] == 'new road': 
+        if curevent['event'] == 'new road': #needs 'left', 'left merge', 'right' 'right merge' 'pos'
             #update lane/road/position
             newlane = veh.lane.connect_to
             newroad = newlane.road
@@ -99,43 +99,62 @@ def update_lane_events(veh, timeind):
             veh.lanemem.append((newlane, timeind+1))
             
             #need to update vehicle orders and lane change state
-            if curevent['left'] == 'remove': 
-                veh.lfol.rlead.remove(veh)
-                veh.lfol = None
-                veh.l = None
-            elif curevent['left'] == 'add':
-                newllane = newlane.get_connect_left(curevent['pos'])
-                merge_anchor = newllane.merge_anchors[curevent['left merge']]
-                unused, newfol = newlane.leadfol_find(veh,merge_anchor,'l')
-                
-                veh.lfol = newfol
-                newfol.rlead.add(veh)
-                veh.l = 'discretionary'
+            update_lane_helper(veh, newlane, curevent)
             
-            #same thing for right
-            if curevent['right'] == 'remove: 
-                veh.rfol.llead.remove(veh)
-                veh.rfol = None
-                veh.r = None
-            elif curevent['right'] == 'add': 
-                newrlane  = newlane.get_connect_right(curevent['pos'])
-                merge_anchor = newrlane.merge_anchors[curevent['right merge']]
-                unused, newfol = newlane.leadfol_find(veh, merge_anchor, 'r')
-                
-                veh.rfol = newfol
-                newfol.llead.add(veh)
-                veh.r = 'discretionary'
+            #enter new road/lane = need new lane/route events
+            set_lane_events(veh)
+            set_route_events(veh)
             
-            #update vehicle's routes and lane events 
         
-        elif curevent['event'] == 'add':
-            pass
+        elif curevent['event'] == 'new lanes':
+            update_lane_helper(veh, veh.lane, curevent)
+            veh.lane_events.pop(0) #event is over, move to next 
         
         elif curevent['event'] == 'exit':
             pass
                 
+        
+        
+def update_lane_helper(veh, curlane, curevent):
+    #for a vehicle veh which reaches a point where its curlane.get_connect_left or get_connect_right
+    #go from None to a lane, or a lane to None, there needs to be 'add' or 'remove' events
+    #this handles those events
+    
+    #updates the vehicle orders and defaults the lane change states to the correct behavior 
+    #(enter discretionary by default only if lane is in same road)
+    if curevent['left'] == 'remove': 
+        veh.lfol.rlead.remove(veh)
+        veh.lfol = None
+        veh.l = None
+    elif curevent['left'] == 'add':
+        newllane = curlane.get_connect_left(curevent['pos'])
+        merge_anchor = newllane.merge_anchors[curevent['left merge']]
+        unused, newfol = curlane.leadfol_find(veh,merge_anchor,'l')
+        
+        veh.lfol = newfol
+        newfol.rlead.add(veh)
+        veh.l = 'discretionary'
+    
+    #same thing for right
+    if curevent['right'] == 'remove': 
+        veh.rfol.llead.remove(veh)
+        veh.rfol = None
+        veh.r = None
+    elif curevent['right'] == 'add': 
+        newrlane  = curlane.get_connect_right(curevent['pos'])
+        merge_anchor = newrlane.merge_anchors[curevent['right merge']]
+        unused, newfol = curlane.leadfol_find(veh, merge_anchor, 'r')
+        
+        veh.rfol = newfol
+        newfol.llead.add(veh)
+        veh.r = 'discretionary'
+
 def set_lane_events(veh):
-    pass
+    veh.lane_events = []
+    for i in veh.lane.events: 
+        if i['pos'] > veh.pos: 
+            veh.lane_events.append(i)
+    
 
 def make_cur_route(p, lane, nextroadname): 
     #generates route events with parameters p in lane lane 
@@ -156,7 +175,7 @@ def make_cur_route(p, lane, nextroadname):
     #reaching 100% cooperation by 'y' - p[0]
     
     #we only get the route for the current road - no look ahead to take into account future roads. // TO DO low priority 
-    #nothing to handle cases where LC cannot be completed successfully // TO DO
+    #nothing to handle cases where LC cannot be completed successfully // TO DO (put necessary info into cur_route dict)
     #would need to know latest point when change can take place ('pos' for 'continue' type), 
     #need to add an attribute for 'merge' type giving this 
     #in lane changing model, it would need to check if we are getting too close and act accordingly (e.g. slow down) if so 
@@ -166,6 +185,7 @@ def make_cur_route(p, lane, nextroadname):
     curlaneind = lane.laneind
     #position, str, tuple of 2 ints or single int, str, dict for the next road
     pos, change_type, laneind, side, nextroad  = curroad['connect to'][nextroadname][:]
+    #roads also have 'name', 'length', 'laneinds', all lanes are values with their indexes as keys 
     
     cur_route = {}
     
@@ -261,9 +281,7 @@ def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos, mincur
 
     return cur_route
         
-def set_new_route(veh):
-    
-    
+def set_route_events(veh):
     #get new route events if they are stored in memory already 
     newlane = veh.lane 
     if newlane in veh.cur_route: 
@@ -280,6 +298,8 @@ def set_new_route(veh):
         
         veh.route_events = veh.cur_route[newlane].copy()
     
+    #for route events, past events need to be applied. This is different for lane events, 
+    #where past events are not applied. 
     curbool = True
     while curbool: 
         curbool = update_route(veh)
@@ -289,7 +309,7 @@ def set_new_route(veh):
 
 def update_lrfol(veh):
     lfol, rfol = veh.lfol, veh.rfol
-    if lfol == '':
+    if lfol == None:
         pass
     elif veh.lane.get_dist(veh,lfol) > 0: 
         veh.lfol = lfol.fol
@@ -300,7 +320,7 @@ def update_lrfol(veh):
         lfol.rfol = veh
         veh.llead.add(lfol)
         
-    if rfol == '':
+    if rfol == None:
         pass
     elif veh.lane.get_dist(veh,rfol) > 0: 
         veh.rfol = rfol.fol
@@ -367,27 +387,51 @@ def update_change(veh, timeind):
     #no check for vehicles moving into same gap // TO DO low priority 
     #no cooperative tactical components // TO DO
     
-    #initialization and update l/r attributes
-    lane = veh.lane
+    #initialization, update lane/road/position and update l/r attributes
     if veh.lc == 'l':
+        #define lcside/opside
         lcsidefol, opsidefol, lcsidelead, opsidelead = 'lfol', 'rfol', 'llead', 'rlead'
-        lcsidelane = lane.get_connect_left(veh.pos)
+        #update lane/road/position, and the l/r attributes
+        oldlane = veh.lane
+        lcsidelane = oldlane.get_connect_left(veh.pos)
         newroad = lcsidelane.road
+        if newroad is not veh.road: 
+            veh.pos += - oldlane.roadlen[newroad]
+            veh.road = newroad
+            veh.r = None
+        else:
+            veh.r = 'discretionary'
+        veh.lane = lcsidelane
+        veh.lanemem.append((lcsidelane, timeind+1))
+        #update new lcside lane change attribute
         newlcsidelane = lcsidelane.get_connect_left(veh.pos)
-        veh.r = 'discretionary'
-        if newroad is newlcsidelane.road: 
+        if newlcsidelane != None and newlcsidelane.road is newroad:
             veh.l = 'discretionary'
+        else:
+            veh.l = None
         
     else: 
         lcsidefol, opsidefol, lcsidelead, opsidelead = 'rfol', 'lfol', 'rlead', 'llead'
-        lcsidelane = lane.get_connect_right(veh.pos)
-        newroad = lcsidelane.road
-        newlcsidelane = lcsidelane.get_connect_right(veh.pos)
-        veh.l = 'discretionary'
-        if newroad is newlcsidelane.road: 
-            veh.r = 'discretionary'
         
-    #update all leader/follower relationships###
+        oldlane = veh.lane
+        lcsidelane = oldlane.get_connect_right(veh.pos)
+        newroad = lcsidelane.road
+        if newroad is not veh.road:
+            veh.pos += - veh.lane.roadlen[newroad]
+            veh.road = newroad
+            veh.l = None
+        else:
+            veh.l = 'discretionary'
+        veh.lane = lcsidelane
+        veh.lanemem.append((lcsidelane, timeind+1))
+        
+        newlcsidelane = lcsidelane.get_connect_right(veh.pos)
+        if newlcsidelane != None and newlcsidelane.road is newroad: 
+            veh.r = 'discretionary'
+        else:
+            veh.r = None
+        
+    ######update all leader/follower relationships#####
     
     #update current leader
     lead = veh.lead 
@@ -411,7 +455,7 @@ def update_change(veh, timeind):
     
     #update opposite side for vehicle 
     vehopsidefol = getattr(veh, opsidefol)
-    if vehopsidefol != '': 
+    if vehopsidefol != None: 
         getattr(vehopsidefol, lcsidelead).remove(veh)
     setattr(veh, opsidefol, fol)
     getattr(fol, lcsidelead).add(veh)
@@ -425,14 +469,14 @@ def update_change(veh, timeind):
     lclead = lcfol.lead
     veh.lead = lclead
     veh.leadmem.append((lclead, timeind+1))
-
+    
     if lclead is not None: 
         lclead.fol = veh
     #update for new left/right leaders - opside first 
     newleads = set()
     oldleads = getattr(lcfol, opsidelead)
     for j in oldleads.copy(): 
-        curdist = lane.get_dist(veh,j)
+        curdist = lcsidelane.get_dist(veh,j)
         if curdist > 0: 
             setattr(j, lcsidefol, veh)
             newleads.add(j)
@@ -444,7 +488,7 @@ def update_change(veh, timeind):
     mindist = math.inf
     minveh = None
     for j in oldleads.copy():
-        curdist = lane.get_dist(veh, j)
+        curdist = lcsidelane.get_dist(veh, j)
         if curdist > 0: 
             setattr(j, opsidefol, veh)
             newleads.add(j)
@@ -454,17 +498,9 @@ def update_change(veh, timeind):
                 minveh = j #minveh is the leader of new lc side follower 
     setattr(veh, lcsidelead, newleads)
     
-    #update lane
-    veh.lane = lcsidelane
-    veh.lanemem.append((lcsidelane, timeind+1))
-    #road/position
-    if newroad is not veh.road: 
-        veh.pos += - lane.roadlen[newroad]
-        veh.road = newroad
-    
     #update new lcside leaders/follower
-    if newlcsidelane: #new lcside is None
-        setattr(veh, lcsidefol, '')
+    if newlcsidelane is None: 
+        setattr(veh, lcsidefol, None)
     else: 
         if minveh is not None: 
             setattr(veh, lcsidefol, minveh.fol)
@@ -475,18 +511,15 @@ def update_change(veh, timeind):
             setattr(veh, lcsidefol, newlcsidefol)
             getattr(newlcsidefol, opsidelead).add(veh)
             
-
-            
     return 
         
 def get_guess(lcfol, lclead, veh, lcsidefol, newlcsidelane):
     #need to find new lcside follower for veh
-    #not sure if this is going to behave properly 
     guess = getattr(lcfol, lcsidefol)
     anchor = newlcsidelane.anchor
-    if guess == '' or guess.lane.anchor is not anchor: 
+    if guess == None or guess.lane.anchor is not anchor: 
         guess = getattr(lclead, lcsidefol)
-        if guess == '' or guess.lane.anchor is not anchor: 
+        if guess == None or guess.lane.anchor is not anchor: 
             guess = anchor
     return guess 
 
@@ -1070,14 +1103,14 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -2
             anchor.leadmem.append((newveh, timeind+1))
             anchor.lead = newveh
             if lane.connect_left == None:
-                newveh.lfol = ''
+                newveh.lfol = None
             else:
                 leftanchor = lane.connect_left.anchor
                 newveh.lfol = leftanchor
                 leftanchor.rlead.add(newveh)
             newveh.fol = anchor
             if lane.connect_right == None:
-                newveh.rfol = ''
+                newveh.rfol = None
             else:
                 rightanchor = lane.connect_right.anchor
                 newveh.rfol = rightanchor
