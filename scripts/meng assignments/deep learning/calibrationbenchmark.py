@@ -9,9 +9,10 @@ from havsim.calibration.helper import makeleadfolinfo, obj_helper, calculate_rms
 from havsim.calibration.models import OVM, OVMadjsys, OVMadj, IDM_b3, IDMadjsys_b3, IDMadj_b3, daganzo, daganzoadjsys, daganzoadj
 from havsim.calibration.opt import platoonobjfn_obj, platoonobjfn_objder
 #plotting 
-from havsim.plotting import  platoonplot, plotvhd, animatevhd_list
+from havsim.plotting import  platoonplot, plotvhd, animatevhd
 
 def benchmark(meas, platooninfo, platoonlist, budget = 3, usemodel = 'IDM', order = 1, cutoff = 7.5, cutoff2 = 4.5, lane = None):
+    #does not work for high D because the dt/h is not being passed correctly in calibrate_tnc
     #platoonlist = nested list of platoons e.g. [[1013]] or [[1013, 1019], [1123,124]]
     
     #can decrease budget for speed increase in some instances. default parameters are essentially for state of the art parametric model
@@ -51,7 +52,7 @@ def benchmark(meas, platooninfo, platoonlist, budget = 3, usemodel = 'IDM', orde
     print('vehicles '+str(vehlist))
     print('rmse '+str(rmselist))
     
-    platoonplot(meas,sim,platooninfo,platoonlist,colorcode = False, lane = lane, opacity = .1)
+#    platoonplot(meas,sim,platooninfo,platoonlist,colorcode = False, lane = lane, opacity = .1)
     
     if usemodel == 'LWR':
         re_diff(sim,platooninfo,vehlist)
@@ -64,7 +65,7 @@ def benchmark(meas, platooninfo, platoonlist, budget = 3, usemodel = 'IDM', orde
 #benchmark(meas,platooninfo,[[1133]]) #sometimes it can be very low 
 #benchmark(meas,platooninfo,[[1137]]) #sometimes the problem is using larger platoons causes algorithm to get stuck in local minimum 
     
-out = benchmark(meas,platooninfo,[[2222]],usemodel='OVM')
+#out = benchmark(meas,platooninfo,[[2222]],usemodel='OVM')
 #here is trajectories in speed/headway plane - maybe you find it interesting to look at trajectories this way 
 #plotvhd(meas,out[1], platooninfo,1013) #like the below but no animation - in case animation is laggy 
 #ani = animatevhd_list(meas,out[1],platooninfo,[1013])

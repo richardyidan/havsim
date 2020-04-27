@@ -5,7 +5,7 @@
 
 #assume you have data loaded already, have access to meas and platooninfo
 
-from havsim.plotting import plotvhd_v2
+from havsim.plotting import plotvhd
 import matplotlib.pyplot as plt
 from havsim.calibration.algs import makeplatoonlist
 import pickle
@@ -51,6 +51,6 @@ print(np.mean(stay_error))
 
 
 
-plotvhd_v2(meas,None, platooninfo, [207.0])
+plotvhd(meas,None, platooninfo, [207.0])
 
-plotvhd_v2(meas,None, platooninfo, [2868.0, 2870.0, 2880.0, 2886.0, 2888.0,])
+plotvhd(meas,None, platooninfo, [2868.0, 2870.0, 2880.0, 2886.0, 2888.0,])

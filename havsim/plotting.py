@@ -367,7 +367,7 @@ def plotColorLines(X, Y, SPEED, speed_limit, colormap = 'speeds', ind = 0):
     if colormap =='speeds':
         lc = LineCollection(segments, cmap=palettable.colorbrewer.diverging.RdYlGn_4.mpl_colormap, norm=norm)
     elif colormap =='times': 
-        cmap_list = [palettable.colorbrewer.sequential.Blues_9.mpl_colormap, palettable.colorbrewer.sequential.Reds_9.mpl_colormap, 
+        cmap_list = [palettable.colorbrewer.sequential.Blues_9.mpl_colormap, palettable.colorbrewer.sequential.Oranges_9.mpl_colormap, 
                      palettable.colorbrewer.sequential.Greens_9.mpl_colormap, palettable.colorbrewer.sequential.Greys_9.mpl_colormap]
         
 #        lc = LineCollection(segments, cmap=plt.get_cmap('viridis'), norm=norm)
@@ -565,7 +565,7 @@ def platoonplot(meas, sim, platooninfo, platoon=[], newfig=True, clr=['C0', 'C1'
             veh = sim[i]
             veh = extract_relevant_data(veh, i, platooninfo, fulltraj, timerange)
             
-            if veh == None:
+            if len(veh) == 0:
                 continue
             
             x = veh[:, 1]
@@ -654,7 +654,7 @@ def extract_relevant_data(veh, i, platooninfo, fulltraj, timerange):
             end = timerange[1]
     
     if start == None: 
-        return None
+        return np.zeros((0,8))
     return veh[start-t_nstar:end-t_nstar+1, :]
 
 
