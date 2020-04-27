@@ -30,8 +30,8 @@ print('loss for one AV with parametrized control is '+str(testenv.totloss)+' sta
 #model = Model(num_actions = 3)
 #policymodel = PolicyModel(num_actions = 3, num_hiddenlayers = 2)
 #valuemodel = ValueModel(num_hiddenlayers = 2)
-policymodel = PolicyModel2
-valuemodel = ValueModel2
+policymodel = PolicyModel2(3)
+valuemodel = ValueModel2()
 agent = ACagent(policymodel, valuemodel)
 
 #%% training
@@ -40,7 +40,7 @@ agent.test(testenv,testingtime, nruns = 1)
 print('before training total reward is '+str(testenv.totloss)+' over '+str(len(testenv.sim[testenv.avid]))+' timesteps')
 
 allrewards = []
-for i in range(10):
+for i in range(20):
     rewards = agent.train(testenv, 100)
 #    plt.plot(rewards)
 #    plt.ylabel('rewards')

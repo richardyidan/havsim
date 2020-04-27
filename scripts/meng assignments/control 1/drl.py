@@ -11,6 +11,7 @@ import math
 import os
 from tqdm import tqdm
 from scipy.interpolate import interp1d
+import time
 
 
 #disable gpu 
@@ -38,7 +39,7 @@ class ProbabilityDistribution(tf.keras.Model):
         return tf.squeeze(tf.random.categorical(logits, 1), axis=-1)
 
 class PolicyModel(tf.keras.Model):
-  def __init__(self, num_actions, num_hiddenlayers = 3, num_neurons = 32, activationlayer = kl.Activation(kl.LeakyReLU)):
+  def __init__(self, num_actions, num_hiddenlayers = 3, num_neurons = 32, activationlayer = kl.LeakyReLU()):
     super().__init__('mlp_policy')
     self.num_hiddenlayers=num_hiddenlayers
     self.activationlayer = activationlayer
@@ -74,12 +75,12 @@ class PolicyModel(tf.keras.Model):
     return tf.squeeze(action, axis=-1)
 
 class PolicyModel2(tf.keras.Model):
-  def __init__(self, num_actions, num_hiddenlayers = 2, num_neurons = 32, activationlayer = kl.LeakyReLU):
+  def __init__(self, num_actions, num_hiddenlayers = 2, num_neurons = 32, activationlayer = kl.LeakyReLU()):
     super().__init__('mlp_policy')
-
-    self.hidden1 = kl.Dense(num_neurons, activation = activationlayer, kernel_regularizer = tf.keras.regularizers.l2(l=.1)) #hidden layer for actions (policy)
+    self.activationlayer = activationlayer
+    self.hidden1 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.1)) #hidden layer for actions (policy)
     self.norm1 = kl.BatchNormalization()
-    self.hidden11 = kl.Dense(num_neurons, activation = activationlayer, kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+    self.hidden11 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.1))
     self.norm11 = kl.BatchNormalization()
 
     # Logits are unnormalized log probabilities
@@ -90,8 +91,10 @@ class PolicyModel2(tf.keras.Model):
     x = tf.convert_to_tensor(inputs)
     hidden_logs = self.hidden1(x)
     hidden_logs = self.norm1(hidden_logs, training = training)
+    hidden_logs = self.activationlayer(hidden_logs)
     hidden_logs = self.hidden11(hidden_logs)
     hidden_logs = self.norm11(hidden_logs, training = training)
+    hidden_logs = self.activationlayer(hidden_logs)
     return self.logits(hidden_logs)
 
   def action(self, obs):
@@ -100,7 +103,7 @@ class PolicyModel2(tf.keras.Model):
     return tf.squeeze(action, axis=-1)
 
 class ValueModel(tf.keras.Model):
-  def __init__(self, num_hiddenlayers = 3, num_neurons=64, activationlayer = kl.Activation(kl.LeakyReLU)):
+  def __init__(self, num_hiddenlayers = 3, num_neurons=64, activationlayer = kl.LeakyReLU()):
     super().__init__('mlp_policy')
     self.num_hiddenlayers=num_hiddenlayers
     self.activationlayer = activationlayer
@@ -133,11 +136,12 @@ class ValueModel(tf.keras.Model):
     return tf.squeeze(value, axis=-1)
 
 class ValueModel2(tf.keras.Model):
-  def __init__(self, num_hiddenlayers = 3, num_neurons=64, activationlayer = kl.LeakyReLU):
+  def __init__(self, num_hiddenlayers = 3, num_neurons=64, activationlayer = kl.LeakyReLU()):
     super().__init__('mlp_policy')
-    self.hidden2 = kl.Dense(num_neurons, activation = activationlayer, kernel_regularizer = tf.keras.regularizers.l2(l=.1)) #hidden layer for state-value
+    self.activationlayer = activationlayer
+    self.hidden2 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.1)) #hidden layer for state-value
     self.norm2 = kl.BatchNormalization()
-    self.hidden22 = kl.Dense(num_neurons,activation = activationlayer, kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+    self.hidden22 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.1))
     self.norm22 = kl.BatchNormalization()
        
     self.val = kl.Dense(1, name = 'value') 
@@ -145,9 +149,11 @@ class ValueModel2(tf.keras.Model):
   def call(self, inputs, training = True, **kwargs):
     x = tf.convert_to_tensor(inputs)
     hidden_vals = self.hidden2(x)
+    hidden_vals = self.activationlayer(hidden_vals)
     hidden_vals = self.norm2(hidden_vals, training = training)
     hidden_vals = self.hidden22(hidden_vals)
     hidden_vals = self.norm22(hidden_vals, training = training)
+    hidden_vals = self.activationlayer(hidden_vals)
     return self.val(hidden_vals)
 
   def value(self, obs):
@@ -214,6 +220,7 @@ class ACagent:
         
         self.eps = eps
         self.entropy_const = entropy_const
+        
     
     def action_value(self, obs):
         return self.policymodel.action(obs), self.valuemodel.value(obs)
@@ -232,7 +239,7 @@ class ACagent:
         eplenlist = []
         while (run < nruns):
             for i in range(timesteps):# for i in tqdm(range(timesteps)):
-                action, value = self.action_value(curstate)
+                action, value = self.action_value(curstate) #if using batch normalization may want to pass training = False to the model.call
                 curstate, reward, done = env.step(action, i, timesteps)
                 self.counter += 1
                 rewards.append(reward)
@@ -249,7 +256,7 @@ class ACagent:
     
     def train(self, env, updates=250, by_eps = False, numeps = 1, nTDsteps = 5):   
         curstate = self.reset(env)
-        self.timecounter = 0
+#        self.timecounter = 0
         
         batch_sz = self.simlen * numeps if by_eps else self.batch_sz
         if nTDsteps < 0:
@@ -272,8 +279,9 @@ class ACagent:
             
             for bstep in range(batch_sz):
                 statemem[bstep] = curstate
-                
+#                start = time.time()
                 nextstate, reward, done = env.step(action,self.counter,self.simlen, False)
+#                self.timecounter += time.time() - start
                 nextaction, nextvalue = self.action_value(nextstate)
                 env.totloss += reward
                 self.counter += 1
@@ -300,7 +308,8 @@ class ACagent:
             adj_idx = firstdone + 1 if (firstdone!= -1) else batchlen #update all gammas if no dones in batch
             gamma_adjust[:adj_idx] = self.gamma**gammafactor
             TDerrors = self._TDerrors(rewards[:batchlen], values[:batchlen], dones[:batchlen], nextvalue, gamma_adjust, nTDsteps)
-            TDacc = tf.stack([TDerrors, tf.cast(actions[:batchlen], tf.float32)], axis = 1)
+#            TDacc = tf.stack([TDerrors, tf.cast(actions[:batchlen], tf.float32)], axis = 1)
+            TDacc = np.reshape(np.append(TDerrors, actions[:batchlen]), (batchlen,2), order = 'F')
         
             self.policymodel.train_on_batch(statemem[:batchlen,:], TDacc)
             self.valuemodel.train_on_batch(statemem[:batchlen,:], TDerrors)
@@ -345,7 +354,7 @@ def NNhelper(out, curstate, *args, **kwargs):
 def myplot(sim, auxinfo, roadinfo, platoon= []):
     #note to self: platoon keyword is messed up becauase plotformat is hacky - when vehicles wrap around they get put in new keys
     meas, platooninfo = plotformat(sim,auxinfo,roadinfo, starttimeind = 0, endtimeind = math.inf, density = 1)
-    platoonplot(meas,None,platooninfo,platoon=platoon, lane=1, colorcode= True, speed_limit = [0,25])
+    platoonplot(meas,None,platooninfo,platoon=platoon, lane=None, colorcode= True, speed_limit = [0,25])
     plt.ylim(0,roadinfo[0])
 
 class circ_singleav: #example of single AV environment
@@ -369,8 +378,14 @@ class circ_singleav: #example of single AV environment
         self.paststates = [] #holds sequence of states
         self.statecnt = 0
         self.statememdim = (self.mem+1)*5
-        self.interp1d = interp1d((1.84,43.13), (0,1),fill_value = 'extrapolate')
-        self.interp1dspd = interp1d((0,25.32), (0,1), fill_value = 'extrapolate')
+#        self.interp1d = interp1d((1.84,43.13), (0,1),fill_value = 'extrapolate')
+#        self.interp1dspd = interp1d((0,25.32), (0,1), fill_value = 'extrapolate')
+        self.hd_m = 1/(43.13 - 1.84)
+        self.hd_c = -1.84
+        self.spd_m = 1/(25.32)
+        self.spd_c = 0
+        self.avlead = self.auxinfo[self.avid][1]
+        self.avfol = [k for k,v in self.auxinfo.items() if v[1] == self.avid][0] 
         
     def reset(self):
         self.curstate = self.initstate
@@ -384,24 +399,30 @@ class circ_singleav: #example of single AV environment
         return self.get_state(self.curstate)
 
     def get_state(self, curstate):
-        avlead = self.auxinfo[self.avid][1]
-        avfol = [k for k,v in self.auxinfo.items() if v[1] == self.avid][0] 
         
-        extend_seq = (self.interpspd(curstate[self.avid][1]),
-                      self.interpspd(curstate[avlead][1]),
-                     self.interp1d(curstate[self.avid][2]),
-                      self.interpspd(curstate[avfol][1]),
-                      self.interp1d(curstate[avfol][2])
+        
+#        extend_seq = (self.interp1dspd(curstate[self.avid][1]),
+#                      self.interp1dspd(curstate[avlead][1]),
+#                     self.interp1d(curstate[self.avid][2]),
+#                      self.interp1dspd(curstate[avfol][1]),
+#                      self.interp1d(curstate[avfol][2])
+#                      )
+        extend_seq = ((curstate[self.avid][1]+self.spd_c)*self.spd_m, 
+                      (curstate[self.avlead][1]+self.spd_c)*self.spd_m, 
+                      (curstate[self.avid][2]+self.hd_c)*self.hd_m, 
+                      (curstate[self.avfol][1]+self.spd_c)*self.spd_m, 
+                      (curstate[self.avfol][2]+self.hd_c)*self.hd_m 
                       )
+        
         self.paststates.extend(extend_seq)
         if self.statecnt < self.mem:
-            avstate = list(extend_seq) * int(self.mem + 1)
+            avstate = extend_seq * int(self.mem + 1)
             self.statecnt += 1
         else:
             avstate = self.paststates[-self.statememdim:]
         
-        avstate = tf.convert_to_tensor([avstate])
-        return avstate
+#        avstate = tf.convert_to_tensor([avstate])
+        return np.asarray([avstate])
     
     def get_acceleration(self,action,curstate):
         #action from NN gives a scalar, we convert it to the quantized acceleration

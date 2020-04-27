@@ -11,11 +11,10 @@ import matplotlib.pyplot as plt
 
 
 import havsim
-from havsim.simulation.simulation import simulate_step, eq_circular, simulate_cir, update_cir, update2nd_cir
+from havsim.simulation.simulationold2 import simulate_step, eq_circular, simulate_cir, update_cir, update2nd_cir
 from havsim.simulation.models import drl_reward8, IDM_b3, IDM_b3_eql, FS
 from havsim.plotting import plotformat, platoonplot
 from toysimulation import debugenv
-from drl import * 
 
 import copy
 import math
@@ -39,7 +38,7 @@ times3=[]
 out3 = []
 for _ in range(5):
     start = time.time()
-    agent.train(testenv, updates=1)
+    agent.train(testenv, updates=10)
     end = time.time()
     times3.append(end-start)
     out3.append(agent.timecounter)
@@ -47,6 +46,6 @@ print("Average time over 5 runs is {:.4f}".format(np.mean(times3)))  #25.1353 ea
 print('average time to run environment step method is '+str(np.mean(out3)))
 testenv.reset()
 start = time.time()
-for i in range(64):
-    out = testenv.step(0, 0, 0, False)
+for i in range(64*10):
+    out = testenv.step(2, 0, 0, False)
 print('time to run environment step method outside training is '+str(time.time()-start))

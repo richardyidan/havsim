@@ -430,7 +430,7 @@ def plotformat(sim, auxinfo, roadinfo, starttimeind = 0, endtimeind = 3000, dens
                 meas[idcount][:,3] = vlist
                 #lane just set always to 1
                 meas[idcount][:,7] = 1
-                
+            
                 #reset iteration
                 idcount += 1
                 curtime = endtime
@@ -459,7 +459,7 @@ def plotformat(sim, auxinfo, roadinfo, starttimeind = 0, endtimeind = 3000, dens
         meas[idcount][:,3] = vlist
         #lane just set always to 1
         meas[idcount][:,7] = 1
-        
+        #update iteration
         idcount += 1
             
 
@@ -502,7 +502,7 @@ def platoonplot(meas, sim, platooninfo, platoon=[], newfig=True, clr=['C0', 'C1'
     if platoon != []:
         platooninfo = helper.platoononly(platooninfo, platoon)
     followerlist = list(platooninfo.keys())  # list of vehicle ID
-    if lane is not None: 
+    if lane != None: 
         for i in followerlist.copy(): 
             if lane not in np.unique(meas[i][:,7]):
                 followerlist.remove(i)
@@ -540,7 +540,7 @@ def platoonplot(meas, sim, platooninfo, platoon=[], newfig=True, clr=['C0', 'C1'
 
         for j in range(len(LCind) - 1):
             kwargs = {}
-            if veh[LCind[j], 7] != lane and lane is not None:
+            if veh[LCind[j], 7] != lane and lane != None:
                 kwargs = {'linestyle': '--', 'alpha': opacity}  # dashed line .4 opacity (60% see through)
                 plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[0], **kwargs)
                 artist2veh.append(counter)
@@ -559,13 +559,13 @@ def platoonplot(meas, sim, platooninfo, platoon=[], newfig=True, clr=['C0', 'C1'
         counter += 1
 
 
-    if sim is not None:
+    if sim != None:
         counter = 0
         for i in followerlist:  # iterate over each vehicle
             veh = sim[i]
             veh = extract_relevant_data(veh, i, platooninfo, fulltraj, timerange)
             
-            if veh is None:
+            if veh == None:
                 continue
             
             x = veh[:, 1]
@@ -575,7 +575,7 @@ def platoonplot(meas, sim, platooninfo, platoon=[], newfig=True, clr=['C0', 'C1'
 
             for j in range(len(LCind) - 1):
                 kwargs = {}
-                if veh[LCind[j], 7] != lane and lane is not None:
+                if veh[LCind[j], 7] != lane and lane != None:
                     kwargs = {'linestyle': '--', 'alpha': .4}  # dashed line .4 opacity (60% see through)
                 plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[1], **kwargs)
 
@@ -593,7 +593,7 @@ def platoonplot(meas, sim, platooninfo, platoon=[], newfig=True, clr=['C0', 'C1'
             # deselect old vehicle
             for j in find_artists:
                 ax.lines[j].set_color('C0')
-                if sim is not None: 
+                if sim != None: 
                     ax.lines[j+nartists].set_color('C1')
 
             # select new vehicle
@@ -603,7 +603,7 @@ def platoonplot(meas, sim, platooninfo, platoon=[], newfig=True, clr=['C0', 'C1'
 
             for j in find_artists:
                 ax.lines[j].set_color('C3')
-                if sim is not None:
+                if sim != None:
                     ax.lines[j+nartists].set_color('C3')
             plt.title('Vehicle ID ' + str(list(followerlist)[vehind]))
             plt.draw()
@@ -638,7 +638,7 @@ def extract_relevant_data(veh, i, platooninfo, fulltraj, timerange):
         start = t_n
         end = T_nm1
         
-    if timerange[0] is not None:
+    if timerange[0] != None:
         if timerange[0] <= end:
             if start > timerange[0]:
                 pass
@@ -647,19 +647,19 @@ def extract_relevant_data(veh, i, platooninfo, fulltraj, timerange):
         else:
             start = None
     
-    if timerange[1] is not None: 
+    if timerange[1] != None: 
         if end < timerange[1]:
             pass
         else: 
             end = timerange[1]
     
-    if start is None: 
+    if start == None: 
         return None
-    return veh[start-t_nstar:end-t_nstar, :]
+    return veh[start-t_nstar:end-t_nstar+1, :]
 
 
 def generate_LCind(veh, lane):
-    if lane is not None:
+    if lane != None:
         # LCind is a list of indices where the lane the vehicle is in changes. Note that it includes the first and last index.
         LCind = np.diff(veh[:, 7])
         LCind = np.nonzero(LCind)[0] + 1
@@ -676,7 +676,7 @@ def overlap(interval1, interval2):
     #given two tuples of start - end times, computes overlap between them
     #can pass None as either of values in interval2 to get better data 
     outint = interval1.copy()
-    if interval2[0] is not None: 
+    if interval2[0] != None: 
         if interval2[0] <= interval1[1]:
             if interval2[0] > interval1[0]: 
                 outint[0] = interval2[0]
