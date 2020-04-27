@@ -108,7 +108,7 @@ class ACagent:
 
             # if done:
             #     break
-
+    
     def _value_loss(self, target, value):
         #loss = -\delta * v(s, w) ==> gradient step looks like \delta* \nabla v(s,w)
         return -target*value
@@ -150,130 +150,17 @@ class mdp_env:
     def step(self, action):
         return self.rewardfn(action), np.random.random() <= self.p
 
-class circ_singleav: #example of single AV environment
-    #basically we just wrap the function simulate_step
-    #avid = id of AV
-    #simulates on a circular road
-
-    def __init__(self, initstate,auxinfo,roadinfo,avid,rewardfn,updatefun=update_cir,dt=.25):
-        self.initstate = initstate
-        self.auxinfo = auxinfo
-        self.auxinfo[avid][6] = NNhelper
-        self.roadinfo = roadinfo
-        self.avid = avid
-        self.updatefun = updatefun
-        self.dt = dt
-        self.rewardfn = rewardfn
-
-    def reset(self): #reset to beginning of simulation
-        self.curstate = self.initstate
-        self.sim = {i:[self.curstate[i]] for i in self.initstate.keys()}
-        self.vavg = {i:initstate[i][1]  for i in initstate.keys()}
-        self.totloss = 0
-
-    def step(self, action, iter, timesteps): #basically just a wrapper for simulate step to get the next timestep
-        #simulate_step does all the updating; first line is just a hack which can be cleaned later
-        self.auxinfo[self.avid][5] = action
-        nextstate, _ = simulate_step(self.curstate, self.auxinfo,self.roadinfo,self.updatefun,self.dt)
-
-        allheadways = [ nextstate[i][2] for i in nextstate.keys() ]
-        shouldterminate = np.any(np.array(allheadways) <= 0)
-        if shouldterminate:
-            return nextstate, -15**2 * len(allheadways) * (timesteps - iter - 1), True
-
-        #get reward, update average velocity
-        reward, vavg = self.rewardfn(nextstate,self.vavg)
-        self.vavg = vavg
-        return nextstate, reward, False
-
-    def simulate_baseline(self, CFmodel, p, timesteps): #can insert a CF model and parameters (e.g. put in human model or parametrized control model)
-        #for debugging purposes to verify that timestepping is done correctly
-        #if using deep RL the code to simulate/test is the same except action is chosen from NN
-        self.reset()
-        avlead = self.auxinfo[avid][1]
-        for i in range(timesteps):
-            action = CFmodel(p, self.curstate[avid],self.curstate[avlead], dt = self.dt)
-            nextstate, reward, done = self.step(action[1],i,timesteps)
-            #update state, update cumulative reward
-            self.curstate = nextstate
-            self.totloss += reward
-            #save current state to memory (so we can plot everything)
-            for j in nextstate.keys():
-                self.sim[j].append(nextstate[j])
-            if done:
-                break
-
-
-'''
-#%%
-                #specify simulation
-p = [33.33, 1.2, 2, 1.1, 1.5] #parameters for human drivers
-initstate, auxinfo, roadinfo = eq_circular(p, IDM_b3, update2nd_cir, IDM_b3_eql, 41, length = 2, L = None, v = 15, perturb = 2) #create initial state on road
-sim, curstate, auxinfo = simulate_cir(initstate, auxinfo,roadinfo, update_cir, timesteps = 25000, dt = .25)
-vlist = {i: curstate[i][1] for i in curstate.keys()}
-avid = min(vlist, key=vlist.get)
-
-#create simulation environment
-testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward,dt = .25)
-#%% sanity check
-#test baseline with human AV and with control as a simple check for bugs
-testenv.simulate_baseline(IDM_b3,p,1500) #human model
-print('loss for all human scenario is '+str(testenv.totloss)+' starting from initial with 1500 timesteps')
-myplot(testenv.sim,auxinfo,roadinfo)
-
-testenv.simulate_baseline(FS,[2,.4,.4,3,3,7,15,2], 1500) #control model
-print('loss for one AV with parametrized control is '+str(testenv.totloss)+' starting from initial with 1500 timesteps')
-myplot(testenv.sim,auxinfo,roadinfo)
-'''
-
-    #%% initialize agent (we expect the agent to be awful before training)
+#%% initialize agent (we expect the agent to be awful before training)
 model = Model(num_actions = 4)
 agent = ACagent(model)
 testenv = mdp_env()
 #%%
 agent.test(testenv,200) #200 timesteps
-'''myplot(testenv.sim,auxinfo,roadinfo) #plot of all vehicles
-avtraj = np.asarray(testenv.sim[testenv.avid])
-plt.figure() #plots, in order, position, speed, and headway time series.
-plt.subplot(1,3,1)
-plt.plot(avtraj[:,0])
-plt.subplot(1,3,2)
-plt.plot(avtraj[:,1])
-plt.subplot(1,3,3)
-plt.plot(avtraj[:,2])'''
-# plt.show()
 print('total reward before training is '+str(testenv.totloss)+' starting from initial with 200 timesteps')
-
-#you can see that in the initial random strategy, the speed is basically just doing a random walk around 0,
-#because the accelerations are just uniform in [-1.5,1.4]
-#so pretty soon the follower vehicle is going to 'collide' and at that point
-#the reward is just going to be dominated by the collision term
-
-    #%%
+#%%
     #MWE of training
 for i in range(10):
     for j in range(5):
         agent.train(testenv)
     agent.test(testenv,200)
     print('after episode '+str(i + 1)+' total reward is '+str(testenv.totloss)+' starting from initial with 200 timesteps')
-
-    #a bit more complicated
-    #divided stuff up like this because I don't want to give it
-    #a long episode when the strategy is still in the initial bad state
-#get some different places to train from
-#curstatelist = [curstate]
-#for i in range(7):
-#    testenv.initstate = curstatelist[i]
-#    testenv.simulate_baseline(FS,[2,.4,.4,3,3,7,15,2], 200)
-#    curstatelist.append(testenv.curstate)
-#
-#
-#for i in range(10): #train 10 epochs, each epoch = 5 training sessions on each of the 8 initial states
-#    for j in curstatelist:
-#        testenv.initstate = j
-#        for k in range(5):
-#            agent.train(testenv)
-#
-#    testenv.initstate = curstate
-#    agent.test(testenv, 1500)
-#    print('epoch = '+str(i )+' total reward is '+str(testenv.totloss)+ ' starting from initial with 1500 timesteps')
