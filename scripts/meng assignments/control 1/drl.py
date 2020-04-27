@@ -78,10 +78,15 @@ class PolicyModel2(tf.keras.Model):
   def __init__(self, num_actions, num_hiddenlayers = 2, num_neurons = 32, activationlayer = kl.LeakyReLU()):
     super().__init__('mlp_policy')
     self.activationlayer = activationlayer
-    self.hidden1 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.1)) #hidden layer for actions (policy)
+    self.hidden1 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.01)) #hidden layer for actions (policy)
     self.norm1 = kl.BatchNormalization()
-    self.hidden11 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+    self.hidden11 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.01))
     self.norm11 = kl.BatchNormalization()
+    
+    self.hidden111 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.01))
+    self.norm111 = kl.BatchNormalization()
+    self.hidden1111 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.01))
+    self.norm1111 = kl.BatchNormalization()
 
     # Logits are unnormalized log probabilities
     self.logits = kl.Dense(num_actions, name = 'policy_logits')
@@ -90,11 +95,18 @@ class PolicyModel2(tf.keras.Model):
   def call(self, inputs, training = True, **kwargs):
     x = tf.convert_to_tensor(inputs)
     hidden_logs = self.hidden1(x)
+    hidden_logs = self.activationlayer(hidden_logs)
     hidden_logs = self.norm1(hidden_logs, training = training)
-    hidden_logs = self.activationlayer(hidden_logs)
     hidden_logs = self.hidden11(hidden_logs)
-    hidden_logs = self.norm11(hidden_logs, training = training)
     hidden_logs = self.activationlayer(hidden_logs)
+    hidden_logs = self.norm11(hidden_logs, training = training)
+    
+    hidden_logs = self.hidden111(hidden_logs)
+    hidden_logs = self.activationlayer(hidden_logs)
+    hidden_logs = self.norm111(hidden_logs, training = training)
+    hidden_logs = self.hidden1111(hidden_logs)
+    hidden_logs = self.activationlayer(hidden_logs)
+    hidden_logs = self.norm1111(hidden_logs, training = training)
     return self.logits(hidden_logs)
 
   def action(self, obs):
@@ -139,10 +151,11 @@ class ValueModel2(tf.keras.Model):
   def __init__(self, num_hiddenlayers = 3, num_neurons=64, activationlayer = kl.LeakyReLU()):
     super().__init__('mlp_policy')
     self.activationlayer = activationlayer
-    self.hidden2 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.1)) #hidden layer for state-value
+    self.hidden2 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.01)) #hidden layer for state-value
     self.norm2 = kl.BatchNormalization()
-    self.hidden22 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+    self.hidden22 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.01))
     self.norm22 = kl.BatchNormalization()
+    
        
     self.val = kl.Dense(1, name = 'value') 
 
@@ -152,8 +165,8 @@ class ValueModel2(tf.keras.Model):
     hidden_vals = self.activationlayer(hidden_vals)
     hidden_vals = self.norm2(hidden_vals, training = training)
     hidden_vals = self.hidden22(hidden_vals)
-    hidden_vals = self.norm22(hidden_vals, training = training)
     hidden_vals = self.activationlayer(hidden_vals)
+    hidden_vals = self.norm22(hidden_vals, training = training)
     return self.val(hidden_vals)
 
   def value(self, obs):
@@ -182,7 +195,7 @@ class ValueModelLinearBaseline(tf.keras.Model):
     return tf.squeeze(value, axis=-1)
     
 class ACagent:
-    def __init__(self,policymodel, valuemodel, batch_sz=64, eps = 0.05, lr = 9e-4, entropy_const = 1e-5):
+    def __init__(self,policymodel, valuemodel, simlen = 1500, batch_sz=64, eps = 0.05, lr = 1e-3, entropy_const = 1e-5):
         #self.model = model
         self.policymodel = policymodel
         self.valuemodel = valuemodel
@@ -194,11 +207,11 @@ class ACagent:
                 loss = [self._logits_loss, self._value_loss])
         '''
         self.policymodel.compile(
-                optimizer = tf.keras.optimizers.RMSprop(lr), 
+                optimizer = tf.keras.optimizers.RMSprop(learning_rate = lr, clipnorm = .5, centered =True), 
                 #optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
                 loss = [self._logits_loss])
         self.valuemodel.compile(
-                optimizer = tf.keras.optimizers.RMSprop(lr),
+                optimizer = tf.keras.optimizers.RMSprop(learning_rate = lr, clipnorm = .5, centered = True),
                 #optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
                 loss = [self._value_loss])
         
@@ -212,7 +225,7 @@ class ACagent:
         #keep track of discounting 
         self.I = 1
         #goal for how long we want the simulation to be ideally (with no early termination)
-        self.simlen = 1500
+        self.simlen = simlen
         
         #Weight Checkpoints
         self.checkpoint_path = "trainingcp/cp-{version:04d}.ckpt"
@@ -380,9 +393,9 @@ class circ_singleav: #example of single AV environment
         self.statememdim = (self.mem+1)*5
 #        self.interp1d = interp1d((1.84,43.13), (0,1),fill_value = 'extrapolate')
 #        self.interp1dspd = interp1d((0,25.32), (0,1), fill_value = 'extrapolate')
-        self.hd_m = 1/(43.13 - 1.84)
-        self.hd_c = -1.84
-        self.spd_m = 1/(25.32)
+        self.hd_m = 1/(50 - 0)
+        self.hd_c = 0
+        self.spd_m = 1/(15)
         self.spd_c = 0
         self.avlead = self.auxinfo[self.avid][1]
         self.avfol = [k for k,v in self.auxinfo.items() if v[1] == self.avid][0] 

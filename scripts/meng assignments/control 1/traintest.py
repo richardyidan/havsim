@@ -2,7 +2,7 @@
 """
 @author: rlk268@cornell.edu
 """
-
+import matplotlib.pyplot as plt
 from havsim.simulation.models import drl_reward88, drl_reward8, drl_reward9, IDM_b3, IDM_b3_eql, FS
 from havsim.simulation.simulationold2 import update2nd_cir, eq_circular, simulate_cir, update_cir
 
@@ -15,7 +15,7 @@ vlist = {i: curstate[i][1] for i in curstate.keys()}
 avid = min(vlist, key=vlist.get)
 testingtime = 1500
 #create simulation environment
-testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward88,dt = .25)
+testenv = circ_singleav(curstate, auxinfo, roadinfo, avid, drl_reward8,dt = .25)
 
 #%% test baseline with human AV and with control as a simple check for bugs and to compare with agent performance 
 
@@ -32,7 +32,7 @@ print('loss for one AV with parametrized control is '+str(testenv.totloss)+' sta
 #valuemodel = ValueModel(num_hiddenlayers = 2)
 policymodel = PolicyModel2(3)
 valuemodel = ValueModel2()
-agent = ACagent(policymodel, valuemodel)
+agent = ACagent(policymodel, valuemodel, simlen = 1500, batch_sz = 256)
 
 #%% training
 
@@ -40,8 +40,8 @@ agent.test(testenv,testingtime, nruns = 1)
 print('before training total reward is '+str(testenv.totloss)+' over '+str(len(testenv.sim[testenv.avid]))+' timesteps')
 
 allrewards = []
-for i in range(20):
-    rewards = agent.train(testenv, 100)
+for i in range(40):
+    rewards = agent.train(testenv, 25, by_eps = True)
 #    plt.plot(rewards)
 #    plt.ylabel('rewards')
 #    plt.xlabel('episode')
