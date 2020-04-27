@@ -38,7 +38,7 @@ def IDM_eql(p, v):
 
 
 def mobil(lc_actions, veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,
-          lfol, llead, rfol, rlead, fol, lead, lane, userelax_cur = True, userelax_new = False):
+          lfol, llead, rfol, rlead, fol, lead, curlane, userelax_cur = True, userelax_new = False):
     #LC parameters 
     #0 - safety criterion
     #1 - incentive criteria 
@@ -53,7 +53,7 @@ def mobil(lc_actions, veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timei
     lincentive = rincentive = -math.inf
     
     if not userelax_cur and veh.in_relax: 
-        cura = veh.call_cf(lead, lane, timeind, dt, False)
+        cura = veh.call_cf(lead, curlane, timeind, dt, False)
     else: 
         cura = veh.action #more generally could use a method to return acceleration 
     
@@ -65,7 +65,7 @@ def mobil(lc_actions, veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timei
         userelax = userelax_new and veh.in_relax
         curhd = veh.hd
         veh.hd = newlhd
-        newla = veh.call_cf(llead, lane.connect_left, timeind, dt, userelax)
+        newla = veh.call_cf(llead, curlane.connect_left, timeind, dt, userelax)
         veh.hd = curhd
         
         
@@ -77,7 +77,7 @@ def mobil(lc_actions, veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timei
         userelax = userelax_new and veh.in_relax
         curhd = veh.hd
         veh.hd = newrhd
-        newra = veh.call_cf(rlead, lane.connect_right, timeind, dt, userelax)
+        newra = veh.call_cf(rlead, curlane.connect_right, timeind, dt, userelax)
         veh.hd = curhd
         
         rincentive = newra - cura + p[2]*(newrfola - rfola + newfola - fola) + p[4]

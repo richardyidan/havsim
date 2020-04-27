@@ -156,7 +156,7 @@ def set_lane_events(veh):
             veh.lane_events.append(i)
     
 
-def make_cur_route(p, lane, nextroadname): 
+def make_cur_route(p, curlane, nextroadname): 
     #generates route events with parameters p in lane lane 
     #p - parameters - currently len 2 list with constant, p[0] is a constant which is a like a safety buffer, and p[1]
     #controls the distance you need for a change (also a constant)
@@ -181,8 +181,8 @@ def make_cur_route(p, lane, nextroadname):
     #in lane changing model, it would need to check if we are getting too close and act accordingly (e.g. slow down) if so 
     #in this function, would need to add events if you miss the change, and in that case you would need to be given a new route 
     
-    curroad = lane.road
-    curlaneind = lane.laneind
+    curroad = curlane.road
+    curlaneind = curlane.laneind
     #position, str, tuple of 2 ints or single int, str, dict for the next road
     pos, change_type, laneind, side, nextroad  = curroad['connect to'][nextroadname][:]
     #roads also have 'name', 'length', 'laneinds', all lanes are values with their indexes as keys 
@@ -641,9 +641,9 @@ def CF_wrapper(cfmodel, acc_bounds = [-7,3]):
     #assumes a second order model which has inputs of (p, state), where state
     #is a list of all values needed, p is a list of parameters, and
     #output is a float giving the acceleration 
-    def call_cf(self, lead, lane, timeind, dt, userelax): 
+    def call_cf(self, lead, curlane, timeind, dt, userelax): 
         if lead is None: 
-            acc = lane.call_downstream(self, timeind, dt)
+            acc = curlane.call_downstream(self, timeind, dt)
             
         else:
             if userelax:
@@ -696,7 +696,7 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
     #don't think anchor vehicles should give a 0 headway either, should just be None? 
     
     def call_lc(self, chk_lc, timeind, dt):
-        lfol, rfol, lane = self.lane = self.lfol, self.rfol, self.lane
+        lfol, rfol, curlane = self.lane = self.lfol, self.rfol, self.lane
         if lfol== '' and rfol == '':
             return 
         
@@ -708,12 +708,12 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
             return 
         
         if lfol != '': 
-            llead, newlfolhd, newlhd = call_lc_helper(lfol, self, lane.get_connect_left(self.pos))
+            llead, newlfolhd, newlhd = call_lc_helper(lfol, self, curlane.get_connect_left(self.pos))
         else:
             llead = newlfolhd = newlhd = None
         
         if rfol != '': 
-            rlead, newrfolhd, newrhd = call_lc_helper(rfol, self, lane.get_connect_right(self.pos))
+            rlead, newrfolhd, newrhd = call_lc_helper(rfol, self, curlane.get_connect_right(self.pos))
         else:
             rlead = newrfolhd = newrhd = None
             
@@ -728,10 +728,10 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
                 
             #do model call now 
             lcmodel(self, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt, 
-                    lfol, llead, rfol, rlead, fol, lead, lane, **kwargs)
+                    lfol, llead, rfol, rlead, fol, lead, curlane, **kwargs)
         else: 
             lcmodel(self, newlfolhd, newlhd, newrfolhd, newrhd, timeind, dt, 
-                    lfol, llead, rfol, rlead, lane, **kwargs)
+                    lfol, llead, rfol, rlead, curlane, **kwargs)
             
     return call_lc
 
@@ -745,12 +745,12 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
     #(also possible that you may use the decorators for your own custom methods)
 class vehicle: 
     
-    def __init__(self, vehid,lane, p, lcp, length = 2, relaxp = None,
+    def __init__(self, vehid,curlane, p, lcp, length = 2, relaxp = None,
                  cfmodel = None, free_cf = None, lcmodel = None, eqlfun = None, check_lc = .25,
                  eql_kwargs = {}): 
         self.vehid = vehid
-        self.lane = lane
-        self.road = lane.road
+        self.lane = curlane
+        self.road = curlane.road
 
         #model parameters
         self.cf_parameters = p
@@ -835,20 +835,17 @@ def downstream_wrapper(speed_fun = None, method = 'speed', congested = True,
     #and returns action (acceleration) for the vehicle 
     
     if method == 'speed': #specify a function speedfun which takes in time and returns the speed
-        @staticmethod
         def call_downstream(veh, timeind, dt):
             speed = speed_fun(timeind)
             return (speed - veh.speed)/dt
         return call_downstream
     
     elif method == 'free': #use free flow method of the vehicle 
-        @staticmethod
         def free_downstream(veh, *args):
             return veh.free_cf(veh.cf_parameters, veh.speed)
         return free_downstream
     
     elif method == 'flow': #specify a function which gives the flow, we invert the flow to obtain speed
-        @staticmethod
         def call_downstream(veh, timeind, dt):
             flow = speed_fun(timeind)
             speed = veh.inv_flow(flow, output_type = 'v', congested = congested)
@@ -900,10 +897,10 @@ def downstream_wrapper(speed_fun = None, method = 'speed', congested = True,
         
 class anchor_vehicle:
     #anchor vehicles have cf_parameters as None 
-    def __init__(self, lane, time, lfol = None, rfol = None, lead = None, rlead = set(), llead = set()):
+    def __init__(self, curlane, time, lfol = None, rfol = None, lead = None, rlead = set(), llead = set()):
         self.cf_parameters = None 
-        self.lane = lane
-        self.road = lane.road
+        self.lane = curlane
+        self.road = curlane.road
         
         self.lfol = lfol #I think anchor vehicles just need the lead/llead/rlead attributes and none of the fol attributes
         self.rfol = rfol
@@ -958,48 +955,48 @@ def timeseries_wrapper(timeseries, starttimeind = 0):
         return timeseries[timeind-starttimeind]
     return out
     
-def eql_inflow_congested(lane, inflow, c = .8, check_gap = True):
+def eql_inflow_congested(curlane, inflow, c = .8, check_gap = True):
     #suggested by treiber for congested conditions, requires to invert the inflow to obtain 
     #the steady state headway. the actual headway on the road must be at least c * the steady state headway 
     #for the vehicle to be added. 
     #if check_gap is False, we don't have to invert the flow, we will always just add at the equilibrium speed
     #the vehicle is added with a speed obtained from the equilibrium speed with the current headway 
     
-    lead = lane.anchor.lead
-    hd = lane.get_headway(lane.anchor, lead)
+    lead = curlane.anchor.lead
+    hd = curlane.get_headway(curlane.anchor, lead)
     if check_gap == True:
-        se = lane.newveh.inv_flow(inflow, leadlen = lead.len, output_type = 's') #headway corresponding to current flow
+        se = curlane.newveh.inv_flow(inflow, leadlen = lead.len, output_type = 's') #headway corresponding to current flow
     else:
         se = -math.inf
     if hd > c*se: #condition met
-        spd = lane.veh.get_eql(hd, input_type = 's')
+        spd = curlane.veh.get_eql(hd, input_type = 's')
         return 0, spd, hd
     else:
         return None
     
-def eql_inflow_free(lane, inflow):
+def eql_inflow_free(curlane, inflow):
     #suggested by treiber for free conditions, requires to invert the inflow to obtain 
     #the velocity 
-    lead = lane.anchor.lead
-    hd = lane.get_headway(lane.anchor, lead)
-    spd = lane.newveh.inv_flow(inflow, leadlen = lead.len, output_type = 'v', congested = False) #speed corresponding to current flow
+    lead = curlane.anchor.lead
+    hd = curlane.get_headway(curlane.anchor, lead)
+    spd = curlane.newveh.inv_flow(inflow, leadlen = lead.len, output_type = 'v', congested = False) #speed corresponding to current flow
     return 0, spd, hd
 
-def shifted_speed_inflow(lane, dt, shift = 1, accel_bound = -2):
+def shifted_speed_inflow(curlane, dt, shift = 1, accel_bound = -2):
     #gives the first speed based on the shifted speed of the lead vehicle (similar to newell model)
     #shift = 1 - shift in time, measured in real time 
     #accel_bound = -2 - if not None, the acceleration of the vehicle 
     #must be greater than the accel_bound. Otherwise, no such bound is enforced
-    lead = lane.anchor.lead
-    hd = lane.get_headway(lane.anchor, lead)
+    lead = curlane.anchor.lead
+    hd = curlane.get_headway(curlane.anchor, lead)
     spd = shift_speed(lead.speedmem, shift, dt)
         
     if accel_bound is not None: 
-        newveh = lane.newveh
+        newveh = curlane.newveh
         newveh.pos = 0
         newveh.spd = spd
         newveh.hd = hd
-        acc = newveh.call_cf(lead, lane, None, dt, False)
+        acc = newveh.call_cf(lead, curlane, None, dt, False)
         if acc > accel_bound: 
             return 0, spd, hd
         else: 
@@ -1018,21 +1015,21 @@ def shift_speed(speedseries, shift, dt):
     spd = (speedseries[-ind-1]*(dt - remainder) + speedseries[-ind]*remainder)/dt #weighted average
     return spd
 
-def speed_inflow(lane, speed_fun, timeind, dt, accel_bound = -2):
+def speed_inflow(curlane, speed_fun, timeind, dt, accel_bound = -2):
     #gives the first speed based on the shifted speed of the lead vehicle (similar to newell model)
     #shift = 1 - shift in time, measured in real time 
     #accel_bound = -2 - if not None, the acceleration of the vehicle 
     #must be greater than the accel_bound. Otherwise, no such bound is enforced
-    lead = lane.anchor.lead
-    hd = lane.get_headway(lane.anchor, lead)
+    lead = curlane.anchor.lead
+    hd = curlane.get_headway(curlane.anchor, lead)
     spd = speed_fun(timeind)
         
     if accel_bound is not None: 
-        newveh = lane.newveh
+        newveh = curlane.newveh
         newveh.pos = 0
         newveh.spd = spd
         newveh.hd = hd
-        acc = newveh.call_cf(lead, lane, None, dt, False)
+        acc = newveh.call_cf(lead, curlane, None, dt, False)
         if acc > accel_bound: 
             return 0, spd, hd
         else: 
@@ -1069,7 +1066,7 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -2
             
             if out == None:  
                 return
-            #add vehicle with the given initial conditions
+            #add vehicle with the given initial conditions ????????? the lane is self, the vehicle is newveh = self.newveh 
             pos, speed, hd = out[0], out[1], out[2]
             newveh = lane.newveh
             lead = self.anchor.lead
