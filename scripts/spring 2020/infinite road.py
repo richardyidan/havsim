@@ -4,27 +4,33 @@
 """
 import numpy as np
 import matplotlib.pyplot as plt
-from havsim.simulation.simulation import vehicle, downstream_wrapper, timeseries_wrapper #Note only 'speed' method needed for downstream wrapper
+from havsim.simulation.simulation import vehicle
 from havsim.simulation.models import IDM, IDM_eql
 
 class lane:
     def __init__(self, speedfun):
-        self.call_downstream = downstream_wrapper(speed_fun = speedfun, method = 'speed')
+#        self.call_downstream = downstream_wrapper(speed_fun = speedfun, method = 'speed')
+        self.timeseries = speedfun
         self.road = None
     def get_headway(self, veh, lead):
         return lead.pos-veh.pos - lead.length
     
+    def call_downstream(self, veh, timeind, dt):
+        speed = self.timeseries[timeind]
+        return (speed - veh.speed)/dt
+    
 
 #number of timesteps and timestep length
-simlen = 2500 
+simlen = 2000 
 dt = .25
-nveh = 50 #number of vehicles
+nveh = 100 #number of vehicles
 #seed initial disturbance/create 'network'
 timeseries = [30 for i in range(simlen)]
 timeseries[:200] = [1/10*(.1*i-10)**2 +20 for i in range(200)]
 timeseries = np.asarray(timeseries) - 10
-speedfun = timeseries_wrapper(timeseries)
-curlane = lane(speedfun)
+#speedfun = timeseries_wrapper(timeseries)
+#curlane = lane(speedfun)
+curlane = lane(timeseries)
 #only parameters needed are for cf call
 p =  [33.33, 1.1, 2, .9, 1.5]
 initspeed = timeseries[0]
@@ -32,7 +38,8 @@ length = 2
 # build simulation
 vehicles = set()
 veh = vehicle(-1, curlane, p, None, length = length, cfmodel = IDM, eqlfun = IDM_eql)
-eql_hd = veh.get_eql(veh, initspeed) - length #not supposed to have to get_eql like (veh, initspeed) should be able to call (initspeed) only 
+#eql_hd = veh.get_eql(veh, initspeed) - length #eql_hd = IDM_eql(p, initspeed) - length 
+eql_hd = IDM_eql(p, initspeed) - length 
 curpos = 0
 veh.pos, veh.speed = curpos, initspeed
 veh.posmem.append(curpos), veh.speedmem.append(initspeed)
@@ -64,5 +71,7 @@ test_cf(vehicles, simlen, dt)
 plt.figure()
 for veh in vehicles: 
     plt.plot(veh.posmem)
+    
+
 
 
