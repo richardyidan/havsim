@@ -21,7 +21,7 @@ with open(path_highd26, 'rb') as f:
 meas, platooninfo = makeplatoonlist(data,1, False)
 
 
-with open("simhighd_info_relax.pickle", 'rb') as f:
+with open("./data/simhighd_info_speedconvd.pickle", 'rb') as f:
     data = pickle.load(f)
 
 high_error = []
@@ -46,11 +46,3 @@ for i in data:
 
 print(np.mean(lange_change_error))
 print(np.mean(stay_error))
-
-
-
-
-
-plotvhd(meas,None, platooninfo, [207.0])
-
-plotvhd(meas,None, platooninfo, [2868.0, 2870.0, 2880.0, 2886.0, 2888.0,])

@@ -15,7 +15,7 @@ import havsim
 
 
 
-def create_input(statemem, j, lead, headway, curmeas, vspeed = False):
+def create_input(statemem, j, lead, headway, curmeas, vspeed = False, predict="speed"):
     if vspeed == False:
         if j+1 < statemem:
             leadv = np.append(np.tile(lead[0,1],statemem-j-1),lead[:j+1,1])
@@ -37,7 +37,10 @@ def create_input(statemem, j, lead, headway, curmeas, vspeed = False):
         curx = list(leadv)
         curx.extend(list(vehv))
         curx.extend(list(hd))
-    cury = [curmeas[j+1,1]]
+    if predict == "speed":
+        cury = [curmeas[j+1,1]]
+    else:
+        cury = [headway[j+1]]
     return curx, cury
 
 def normalization_input(xinput, maxheadway, maxvelocity, statemem):
@@ -52,17 +55,17 @@ def normalization_input(xinput, maxheadway, maxvelocity, statemem):
 
 #
 #comment out and replace with path to pickle files on your computer
-#path_reconngsim = '/Users/nathanbala/Desktop/meng_project/data/reconngsim.pkl'
-#path_highd26 = '/Users/nathanbala/Desktop/meng_project/data/highd26.pkl'
-path_reconngsim = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/reconngsim.pkl'
-path_highd26 = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/highd26.pkl'
+path_reconngsim = '/Users/nathanbala/Desktop/meng_project/data/reconngsim.pkl'
+path_highd26 = '/Users/nathanbala/Desktop/meng_project/data/highd26.pkl'
+# path_reconngsim = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/reconngsim.pkl'
+# path_highd26 = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/highd26.pkl'
 
 # reconstructed ngsim data
-with open(path_reconngsim, 'rb') as f:
-    data = pickle.load(f)[0]
+# with open(path_reconngsim, 'rb') as f:
+#     data = pickle.load(f)[0]
 # highd data
-#with open(path_highd26, 'rb') as f:
-#   data = pickle.load(f)[0]
+with open(path_highd26, 'rb') as f:
+  data = pickle.load(f)[0]
 
 meas, platooninfo = makeplatoonlist(data,1, False)
 
@@ -124,7 +127,7 @@ for count, i in enumerate(meas.keys()):
     #form samples for the current vehicle
     for j in range(T_nm1-t_n):
 
-        curx, cury = create_input(statemem, j, lead, headway, curmeas, True)
+        curx, cury = create_input(statemem, j, lead, headway, curmeas, False, predict="headway")
         if train_or_test[count]:
             xtrain.append(curx)
             ytrain.append(cury)
@@ -161,26 +164,34 @@ class Model(tf.keras.Model):
         super().__init__('simple_mlp')
         self.conv1 = kls.Conv1D(32, 3, activation='relu', input_shape=(5, 1))
         self.conv2 = kls.Conv1D(32, 3, activation='relu', input_shape=(5, 1))
+        self.conv3 = kls.Conv1D(32, 3, activation='relu', input_shape=(5, 1))
         self.hidden1 = kls.Dense(32, activation = 'relu')
         self.hidden2 = kls.Dense(32,activation = 'relu')
-        self.hidden3 = kls.Dense(32)
+        self.hidden3 = kls.Dense(32,activation = 'relu')
+        self.batch = kls.BatchNormalization()
+        self.hidden4 = kls.Dense(32)
         self.flatten = kls.Flatten()
+        self.batch2 = kls.BatchNormalization()
         self.out = kls.Dense(1)
 
     def call(self,x):
-        # x = self.hidden1(x)
-        # x = self.hidden2(x)
-        # x = self.hidden3(x)
-        # fin = self.out(x)
-        # return (fin)
-        y1 = self.conv1(tf.expand_dims(x[:, :5], -1))
-        y2 = self.conv2(tf.expand_dims(x[:, 5:], -1))
-        x1 = self.hidden1(y1)
-        x2 = self.hidden2(y2)
-        con = tf.concat([x1, x2], 1)
-        x = self.hidden3(con)
-        flat = self.flatten(x)
-        return self.out(flat)
+        x = self.hidden1(x)
+        x = self.batch(x)
+        x = self.hidden2(x)
+        x = self.batch2(x)
+        x = self.hidden3(x)
+        fin = self.out(x)
+        return (fin)
+        # y1 = self.conv1(tf.expand_dims(x[:, :5], -1))
+        # y2 = self.conv2(tf.expand_dims(x[:, 5:10], -1))
+        # y3 = self.conv2(tf.expand_dims(x[:, 10:], -1))
+        # x1 = self.hidden1(y1)
+        # x2 = self.hidden2(y2)
+        # x3 = self.hidden3(y3)
+        # con = tf.concat([x1, x2, x3], 1)
+        # x = self.hidden4(con)
+        # flat = self.flatten(x)
+        # return self.out(flat)
 
 model = Model()
 
@@ -238,7 +249,7 @@ def test(dataset, minacc, maxacc):
 #
 #    return curmeas, headway
 
-def create_output2(xtest, minoutput, maxoutput, maxvelocity, maxheadway, headway, lead, curmeas, j, model, dt=.04):
+def create_output2(xtest, minoutput, maxoutput, maxvelocity, maxheadway, headway, lead, curmeas, j, model, dt=.04, predict="speed"):
 
     #create_output2 is the new version which assumes the output is next speed and inputs include the vehicle's own speed
 
@@ -247,22 +258,29 @@ def create_output2(xtest, minoutput, maxoutput, maxvelocity, maxheadway, headway
     xtest = normalization_input(xtest, maxheadway, maxvelocity, 5)
     predicted = model(xtest)
 
+    if predict == "speed":
+        simulated_speed = (predicted.numpy()[0][0]) * (maxoutput - minoutput) - minoutput
+        curmeas[j+1,0] = curmeas[j,0] + dt*curmeas[j,1]
+        ############
+        #add some extra constraints on acceleration
+        acc = (simulated_speed - curmeas[j,1])/dt
+        if acc > 4:
+            simulated_speed = curmeas[j,1] + 4*dt
+        elif acc < -6:
+            simulated_speed = curmeas[j,1] - 6*dt
+        #speeds must be non negative
+        if simulated_speed < 0:
+            simulated_speed = 0
+        curmeas[j+1,1] = simulated_speed
 
-    simulated_speed = (predicted.numpy()[0][0]) * (maxoutput - minoutput) - minoutput
-    curmeas[j+1,0] = curmeas[j,0] + dt*curmeas[j,1]
-    ############
-    #add some extra constraints on acceleration
-    acc = (simulated_speed - curmeas[j,1])/dt
-    if acc > 4:
-        simulated_speed = curmeas[j,1] + 4*dt
-    elif acc < -6:
-        simulated_speed = curmeas[j,1] - 6*dt
-    #speeds must be non negative
-    if simulated_speed < 0:
-        simulated_speed = 0
-    curmeas[j+1,1] = simulated_speed
-
-    headway[j+1] += lead[j+1,0] - curmeas[j+1,0] - lead[j+1,2] #headway is really relax + headway
+        headway[j+1] += lead[j+1,0] - curmeas[j+1,0] - lead[j+1,2] #headway is really relax + headway
+    else:
+        simulated_headway = (predicted.numpy()[0][0]) * (maxoutput - minoutput) - minoutput
+        simulated_trajectory = lead[j+1,0] - lead[j+1,2] - simulated_headway
+        headway[j+1] += simulated_headway
+        curmeas[j+1, 0] = simulated_trajectory
+        prev_speed = (simulated_trajectory - curmeas[j,0]) / dt
+        curmeas[j,1] = prev_speed
 
     return curmeas, headway
 
@@ -304,8 +322,8 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutp
 
     #iterating through simulated times
     for j in range(T_nm1 - t_n):
-        curx, unused = create_input(statemem, j, lead, headway, curmeas, v_speed)
-        curmeas, headway = create_output2(curx, minoutput, maxoutput, maxvelocity, maxheadway, headway, lead, curmeas, j, model)
+        curx, unused = create_input(statemem, j, lead, headway, curmeas, v_speed, predict="headway")
+        curmeas, headway = create_output2(curx, minoutput, maxoutput, maxvelocity, maxheadway, headway, lead, curmeas, j, model, predict="headway")
 
 
     x = curmeas[:,0]
@@ -326,21 +344,21 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutp
 # m2 = test(train_ds, minoutput,maxoutput)
 # print('before training rmse on test dataset is '+str(tf.cast(m,tf.float32))+' rmse on train dataset is '+str(m2))
 
-#
-# for epoch in range(5):
-#     for x, yhat in train_ds:
-#         train_step(x,yhat,loss_fn, optimizer)
-#     m = test(test_ds,minoutput,maxoutput)
-#     m2 = test(train_ds, minoutput,maxoutput)
-#     print('epoch '+str(epoch)+' rmse on test dataset is '+str(m)+' rmse on train dataset is '+str(m2))
-#
-#
-# tf.saved_model.save(model,'./DLmodelhighd_3input_relax.h5')
+
+for epoch in range(4):
+    for x, yhat in train_ds:
+        train_step(x,yhat,loss_fn, optimizer)
+    m = test(test_ds,minoutput,maxoutput)
+    m2 = test(train_ds, minoutput,maxoutput)
+    print('epoch '+str(epoch)+' rmse on test dataset is '+str(m)+' rmse on train dataset is '+str(m2))
 
 
-# restored_saved_model = tf.keras.models.load_model('./DLmodel3_relax.h5')
-
-restored_saved_model = tf.keras.models.load_model('./DLmodelhighd_relax.h5')
+# tf.saved_model.save(model,'./highd_speed3convd.h5')
+#
+#
+# # restored_saved_model = tf.keras.models.load_model('./DLmodel3_relax.h5')
+#
+# restored_saved_model = tf.keras.models.load_model('./highd_speed3convd.h5')
 
 
 
@@ -348,7 +366,7 @@ sim = {}
 sim_info = {}
 # RMSE calculationg
 for count, i in enumerate(meas.keys()):
-    pred_traj, acc_traj, rmse, vec_meas,fir, sec = predict_trajectory(restored_saved_model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, False)
+    pred_traj, acc_traj, rmse, vec_meas,fir, sec = predict_trajectory(model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, False)
 
     if vec_meas is None:
         continue
@@ -362,17 +380,15 @@ for count, i in enumerate(meas.keys()):
 
 
 
-#with open('simhighd3_relax.pickle', 'wb') as handle:
-#    pickle.dump(sim, handle, protocol=pickle.HIGHEST_PROTOCOL)
-#
-#with open('simhighd3_info_relax.pickle', 'wb') as handle:
-#    pickle.dump(sim_info, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    
-with open('sim_info_relax.pickle', 'rb') as handle:
-    sim_info = pickle.load(handle)
-    
-with open('sim_relax.pickle', 'rb') as handle:
-    sim = pickle.load(handle)
-    
-    
 
+with open('simhighd3_headway2.pickle', 'wb') as handle:
+   pickle.dump(sim, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+with open('simhighd3_info_headway2.pickle', 'wb') as handle:
+   pickle.dump(sim_info, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+# with open('sim_info_relax.pickle', 'rb') as handle:
+#     sim_info = pickle.load(handle)
+#
+# with open('sim_relax.pickle', 'rb') as handle:
+#     sim = pickle.load(handle)
