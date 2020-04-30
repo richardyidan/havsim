@@ -18,8 +18,6 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
         #apply relaxation 
         new_relaxation(veh, timeind, dt)
         
-        #add cooperative/tactical to update_change // TO DO 
-        
         #update a vehicle's lane events and route events for the new lane 
         set_lane_events(veh)
         set_route_events(veh)
@@ -38,15 +36,40 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
     for veh in vehicles:
         update_lrfol(veh)
     
-    #update merge_anchors // TO DO update this 
+    #update merge_anchors
+    #lanes have lists of merge anchors, they are used to update vehicle order for 'new lane' or 'update lanes' events
+    #merge anchors are defined as (vehicle, position) tuples. If position = None, then the vehicle is an anchor vehicle, and 
+    #corresponds to the situation when a new lane starts, and the merge anchor is the anchor for the new lane. 
+    #if position is not None, then the merge anchor can be either an anchor vehicle or a regular vehicle, and this corresponds 
+    #to the situation where two lanes meet.  The merge anchor is a guess which is in the right track, and should 
+    #ideally be right before pos 
     for curlane in merge_lanes:
-        for i in range(len(curlane.merge_anchors)):
-            veh, pos = curlane.merge_anchors[i][:]
-            if pos == None: #some merge anchors may not need to be updated 
-                continue
-            if veh.cf_parameters == None:  
+        update_merge_anchors(curlane, lc_actions)
+        
+    #update inflow, adding vehicles if necessary 
+    for curlane in inflow_lanes: 
+        vehid = curlane.increment_inflow(vehicles, vehid, timeind, dt)
+                    
+    #update roads (lane events) and routes last
+    remove_vehicles = []
+    for veh in vehicles: 
+        #check vehicle's lane events and route events, acting if necessary 
+        update_lane_events(veh, timeind, remove_vehicles)
+        update_route(veh)
+    for veh in remove_vehicles: 
+        vehicles.remove(veh)
+                    
+    return 
+
+def update_merge_anchors(curlane, lc_actions):
+    for i in range(len(curlane.merge_anchors)):
+        veh, pos = curlane.merge_anchors[i][:]
+        if pos == None: #merge anchor is always an anchor, it just needs to have its lfol/rfol updated
+            update_lrfol(veh)
+        else:
+            if veh.cf_parameters == None:  #veh is an anchor -> we see if we can make its leader the new merge anchor
                 lead = veh.lead
-                if lead is not None and ((lead.lane is curlane and lead.pos < pos) or curlane.roadlen[lead.road]+lead.pos - pos < 0):
+                if lead is not None and curlane.roadlen[lead.road]+lead.pos - pos < 0:
                     curlane.merge_anchors[i][0] = lead
                     
             elif veh in lc_actions: 
@@ -55,22 +78,8 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
                 else: 
                     curlane.merge_anchors[i][0] = veh.lfol
             
-            else:
-                if veh.pos > pos: 
-                    curlane.merge_anchors[i][0] = veh.fol
-                    
-    #inflow goes here
-    for curlane in inflow_lanes: 
-        vehid = curlane.increment_inflow(vehicles, vehid, timeind, dt)
-                    
-    #update roads and routes last
-    for veh in vehicles: 
-        #check vehicle's lane events and route events, acting if necessary 
-        update_lane_events(veh, timeind)
-        update_route(veh)
-        pass
-                    
-    return 
+            elif curlane.roadlen[lead.road]+lead.pos - pos > 0:
+                curlane.merge_anchors[i][0] = veh.fol
 
 def update_route(veh):
     #will check a vehicle's current route events and see if we need to do anything 
@@ -89,7 +98,7 @@ def update_route(veh):
         return True
     return False
 
-def update_lane_events(veh, timeind): 
+def update_lane_events(veh, timeind, remove_vehicles): 
     if len(veh.lane_events) == 0: 
         return
     curevent = veh.lane_events[0]
@@ -107,12 +116,34 @@ def update_lane_events(veh, timeind):
             set_route_events(veh)
             
         
-        elif curevent['event'] == 'new lanes':
+        elif curevent['event'] == 'update lanes': #needs 'left', 'left merge', 'right' 'right merge' 'pos'
             update_lane_helper(veh, veh.lane, curevent)
             veh.lane_events.pop(0) #event is over, move to next 
         
         elif curevent['event'] == 'exit':
-            pass
+            #update vehicle orders
+            #there shouldn't be any leaders but we will check anyway
+            fol = veh.fol
+            if veh.lead is not None:
+                veh.lead.fol = fol
+            for i in veh.llead:
+                i.rfol = fol
+            for i in veh.rlead: 
+                i.lfol = fol
+                
+            #update followers
+            fol.lead = None
+            fol.leadmem.append((None, timeind+1))
+            if veh.lfol != None: 
+                veh.lfol.rlead.remove(veh)
+            if veh.rfol != None: 
+                veh.rfol.llead.remove(veh)
+            
+            #to remove the vehicle set its endtime and put it in the remove_vehicles
+            veh.endtime = timeind
+            remove_vehicles.append(veh)
+    return
+            
                 
         
         
@@ -129,7 +160,7 @@ def update_lane_helper(veh, curlane, curevent):
         veh.l = None
     elif curevent['left'] == 'add':
         newllane = curlane.get_connect_left(curevent['pos'])
-        merge_anchor = newllane.merge_anchors[curevent['left merge']]
+        merge_anchor = newllane.merge_anchors[curevent['left merge']][0]
         unused, newfol = curlane.leadfol_find(veh,merge_anchor,'l')
         
         veh.lfol = newfol
@@ -144,7 +175,7 @@ def update_lane_helper(veh, curlane, curevent):
         veh.r = None
     elif curevent['right'] == 'add': 
         newrlane  = curlane.get_connect_right(curevent['pos'])
-        merge_anchor = newrlane.merge_anchors[curevent['right merge']]
+        merge_anchor = newrlane.merge_anchors[curevent['right merge']][0]
         unused, newfol = curlane.leadfol_find(veh, merge_anchor, 'r')
         
         veh.rfol = newfol
@@ -170,7 +201,7 @@ def make_cur_route(p, curlane, nextroadname):
     
     #explanation of current model - 
     #if  you need to be in lane '2' by position 'x' and start in lane '1', 
-    #then starting at x - p[0] - 2*p[1] you will end discretionary changing into lane '0'
+    #then starting at x - 2*p[0] - 2*p[1] you will end discretionary changing into lane '0'
     #at x - p[0] - p[1] you wil begin mandatory changing into lane '2'
     #at x - p[0] your mandatory change will have urgency of 100% which will always force cooperation of your l/rfol 
     #for merging onto/off an on-ramp which begins at 'x' and ends at 'y', you will start mandatory at 'x' always, 
@@ -178,7 +209,7 @@ def make_cur_route(p, curlane, nextroadname):
     
     #we only get the route for the current road - no look ahead to take into account future roads. // TO DO low priority 
     #nothing to handle cases where LC cannot be completed successfully // TO DO medium priority (put necessary info into cur_route dict) 
-    ####if you fail to follow your route, you need to be given a new route, and the code which does this can also be used in vehicle.set_state####
+    ####if you fail to follow your route, you need to be given a new route, and the code which does this can also be used in vehicle.set_state if route = None at initialization####
     #would need to know latest point when change can take place ('pos' for 'continue' type), 
     #need to add an attribute for 'merge' type giving this 
     #in lane changing model, it would need to check if we are getting too close and act accordingly (e.g. slow down) if so 
@@ -1218,10 +1249,6 @@ class lane:
         if self.road != lead.road: 
             dist += self.roadlen[lead.road]
         return dist
-            
-    def dist_to_end(self, veh):
-        #distance from front of vehicle to end of network 
-        return self.enddist - veh.pos
     
     def leadfol_find(self, veh, guess, side):
         #given guess vehicle which is 'close' to veh
@@ -1296,6 +1323,6 @@ def connect_helper(connect, pos):
     out = connect[-1][1] #default to last lane for edge case or case when there is only one possible connection 
     for i in range(len(connect)-1):
         if pos < connect[i+1][0]:
-            out = connect[i+1][1]
+            out = connect[i][1]
             break
     return out 
