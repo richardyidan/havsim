@@ -45,6 +45,7 @@ def mobil(lc_actions, veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timei
     #2 - politeness
     #3 - bias on left side 
     #4 - bias on right side
+    #5 - probability of checking LC while in discretionary state
     
     #naming convention - l/r = left/right respectively, current lane if no l/r
     #new indicates that it would be the configuration after potential change 
@@ -53,7 +54,7 @@ def mobil(lc_actions, veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timei
     lincentive = rincentive = -math.inf
     
     if not userelax_cur and veh.in_relax: 
-        cura = veh.call_cf(lead, curlane, timeind, dt, False)
+        cura = veh.call_cf_helper(lead, curlane, timeind, dt, False)
     else: 
         cura = veh.action #more generally could use a method to return acceleration 
     
@@ -65,7 +66,7 @@ def mobil(lc_actions, veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timei
         userelax = userelax_new and veh.in_relax
         curhd = veh.hd
         veh.hd = newlhd
-        newla = veh.call_cf(llead, curlane.connect_left, timeind, dt, userelax)
+        newla = veh.call_cf_helper(llead, curlane.connect_left, timeind, dt, userelax)
         veh.hd = curhd
         
         
@@ -77,7 +78,7 @@ def mobil(lc_actions, veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timei
         userelax = userelax_new and veh.in_relax
         curhd = veh.hd
         veh.hd = newrhd
-        newra = veh.call_cf(rlead, curlane.connect_right, timeind, dt, userelax)
+        newra = veh.call_cf_helper(rlead, curlane.connect_right, timeind, dt, userelax)
         veh.hd = curhd
         
         rincentive = newra - cura + p[2]*(newrfola - rfola + newfola - fola) + p[4]
@@ -112,14 +113,14 @@ def mobil_helper(fol, curlead, newlead, newhd, timeind, dt, userelax_cur, userel
         newfola = 0
     else: 
         if not userelax_cur and fol.in_relax:
-            fola = fol.call_cf(curlead, fol.lane, timeind, dt, False)
+            fola = fol.call_cf_helper(curlead, fol.lane, timeind, dt, False)
         else: 
             fola = fol.acc
             
         userelax = userelax_new and fol.in_relax
         curhd = fol.hd
         fol.hd = newhd
-        newfola = fol.call_cf(newlead, fol.lane, timeind, dt, userelax)
+        newfola = fol.call_cf_helper(newlead, fol.lane, timeind, dt, userelax)
         fol.hd = curhd
         
     return  fola, newfola
@@ -129,15 +130,15 @@ def generate_IDM_parameters(*args):
     cf_parameters = [27, 1.2, 2, 1.1, 1.5] #note speed is supposed to be in m/s
 #    cf_parameters[0] += np.random.rand()*6
     cf_parameters[0] += np.random.rand()*25-15 #give vehicles very different speeds for testing purposes
-    lc_parameters = [-2, .1, .2, .2, 0]
+    lc_parameters = [-2, .1, .2, .2, 0, .25]
     
-    kwargs = {'length':2,
+    kwargs = {'length':3,
               'relaxp': 15, 
               'cfmodel': IDM, 
               'free_cf': IDM_free, 
               'lcmodel' : mobil, 
-              'eqlfun' : IDM_eql, 
-              'check_lc': .25}
+              'eqlfun' : IDM_eql 
+              }
     
     return cf_parameters, lc_parameters, kwargs
     

@@ -23,6 +23,7 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
         #update a vehicle's lane events and route events for the new lane 
         set_lane_events(veh)
         set_route_events(veh)
+        
     
     #update all states, memory and headway 
     for veh in vehicles: 
@@ -76,6 +77,8 @@ def update_route(veh):
     #returns True if we make a change, False otherwise
     #expect a list of dictionarys, each dict is an event with keys of pos, event, side 
     #giving the position when the event occurs, event type, and side of the event 
+    if len(veh.lane_events) == 0:
+        return False
     curevent = veh.route_events[0]
     if veh.pos > curevent['pos']:
         if curevent['event'] == 'end discretionary': 
@@ -87,16 +90,14 @@ def update_route(veh):
     return False
 
 def update_lane_events(veh, timeind): 
+    if len(veh.lane_events) == 0: 
+        return
     curevent = veh.lane_events[0]
     if veh.pos > curevent['pos']:
-        if curevent['event'] == 'new road': #needs 'left', 'left merge', 'right' 'right merge' 'pos'
+        if curevent['event'] == 'new lane': #needs 'left', 'left merge', 'right' 'right merge' 'pos'
             #update lane/road/position
             newlane = veh.lane.connect_to
-            newroad = newlane.road
-            veh.pos += -veh.lane.roadlen[newroad]
-            veh.lane = newlane
-            veh.road = newroad
-            veh.lanemem.append((newlane, timeind+1))
+            update_veh_lane(veh, veh.lane, newlane, timeind+1)
             
             #need to update vehicle orders and lane change state
             update_lane_helper(veh, newlane, curevent)
@@ -134,6 +135,7 @@ def update_lane_helper(veh, curlane, curevent):
         veh.lfol = newfol
         newfol.rlead.add(veh)
         veh.l = 'discretionary'
+        
     
     #same thing for right
     if curevent['right'] == 'remove': 
@@ -175,7 +177,8 @@ def make_cur_route(p, curlane, nextroadname):
     #reaching 100% cooperation by 'y' - p[0]
     
     #we only get the route for the current road - no look ahead to take into account future roads. // TO DO low priority 
-    #nothing to handle cases where LC cannot be completed successfully // TO DO (put necessary info into cur_route dict)
+    #nothing to handle cases where LC cannot be completed successfully // TO DO medium priority (put necessary info into cur_route dict) 
+    ####if you fail to follow your route, you need to be given a new route, and the code which does this can also be used in vehicle.set_state####
     #would need to know latest point when change can take place ('pos' for 'continue' type), 
     #need to add an attribute for 'merge' type giving this 
     #in lane changing model, it would need to check if we are getting too close and act accordingly (e.g. slow down) if so 
@@ -257,7 +260,7 @@ def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos, mincur
             curind += -1 
             templane = curroad[curind]
             
-        
+    #same code but for opposite side 
     elif curlaneind > laneind: 
         curind = laneind +1
         templane = curroad[curind]
@@ -282,17 +285,25 @@ def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos, mincur
     return cur_route
         
 def set_route_events(veh):
+    #when a vehicle enters a new road, they will initialize lane events for a number of lanes on the road (stored in cur_route dict)
+    #cur_route is created by make_route_helper - at that point we also pop from the veh.route
+    #if a vehicle enters a lane on the same road, which is not in cur_route, the make_route_helper adds the lane events for the new lane
+    
     #get new route events if they are stored in memory already 
     newlane = veh.lane 
     if newlane in veh.cur_route: 
         veh.route_events = veh.cur_route[newlane].copy() #use shallow copy - copy references only
     #otherwise we will make it 
+    elif len(veh.lanemem) == 1: #only possible when vehicle first enters simulation
+        veh.cur_route = make_cur_route(veh.route_parameters, newlane, veh.route.pop())
+        
+        veh.route_events = veh.cur_route[veh.lane].copy()
     else:
         p = veh.route_parameters
         prevlane = veh.lanemem[-2][0]
         if prevlane.road is newlane.road: #on same road - we can just use helper function to update cur_route
             curpos = veh.cur_route[prevlane][0]['pos'] + p[0] + p[1]
-            make_route_helper(veh.route_parameters, veh.cur_route, veh.road, newlane.laneind, prevlane.laneind, curpos,prevlane.start)
+            make_route_helper(p, veh.cur_route, veh.road, newlane.laneind, prevlane.laneind, curpos,prevlane.start)
         else: #on new road - we need to generate new cur_route and update the vehicle's route
             veh.cur_route = make_cur_route(p, newlane, veh.route.pop(0))
         
@@ -362,6 +373,29 @@ def new_relaxation(veh,timeind, dt):
     
     return
 
+def update_veh_lane(veh, oldlane, newlane, timeind, side = None):
+    #for veh which was previously on oldlane and moves to newlane at timeind, 
+    #updates road, lane, lanemem, position, 
+    #if side is not None, also updates the 'r'/'l' attributes (if a vehicle changes to left, you need to update r attribute)
+    #by default, the l/r attributes are set to discretionary only if the corresponding lane is in the same road 
+    #changes to different roads are controlled by route events
+    
+    newroad = newlane.road 
+    if side == None:
+        if newroad is not veh.road: 
+            veh.pos += -oldlane.roadlen[newroad]
+            veh.road = newroad
+    else: 
+        if newroad is not veh.road: 
+            veh.pos += -oldlane.roadlen[newroad]
+            veh.road = newroad
+            setattr(veh,side,None)
+        else: 
+            setattr(veh,side,'discretionary')
+    veh.lane = newlane
+    veh.lanemem.append((newlane, timeind))
+    return
+
 #in current logic, main cost per timestep is just one distance compute in update_lrfol
 #whenever there is a lane change, there are a fair number of extra updates we have to do to keep all 
 #of the rlead/llead updated. Also, whenever an lfol/rfol changes, there are two rlead/lead attributes 
@@ -392,20 +426,11 @@ def update_change(veh, timeind):
         #define lcside/opside
         lcsidefol, opsidefol, lcsidelead, opsidelead = 'lfol', 'rfol', 'llead', 'rlead'
         #update lane/road/position, and the l/r attributes
-        oldlane = veh.lane
-        lcsidelane = oldlane.get_connect_left(veh.pos)
-        newroad = lcsidelane.road
-        if newroad is not veh.road: 
-            veh.pos += - oldlane.roadlen[newroad]
-            veh.road = newroad
-            veh.r = None
-        else:
-            veh.r = 'discretionary'
-        veh.lane = lcsidelane
-        veh.lanemem.append((lcsidelane, timeind+1))
+        lcsidelane = veh.lane.get_connect_left(veh.pos)
+        update_veh_lane(veh, veh.lane, lcsidelane, timeind+1, 'r')
         #update new lcside lane change attribute
         newlcsidelane = lcsidelane.get_connect_left(veh.pos)
-        if newlcsidelane != None and newlcsidelane.road is newroad:
+        if newlcsidelane != None and newlcsidelane.road is veh.road:
             veh.l = 'discretionary'
         else:
             veh.l = None
@@ -413,20 +438,11 @@ def update_change(veh, timeind):
     else: 
         lcsidefol, opsidefol, lcsidelead, opsidelead = 'rfol', 'lfol', 'rlead', 'llead'
         
-        oldlane = veh.lane
-        lcsidelane = oldlane.get_connect_right(veh.pos)
-        newroad = lcsidelane.road
-        if newroad is not veh.road:
-            veh.pos += - veh.lane.roadlen[newroad]
-            veh.road = newroad
-            veh.l = None
-        else:
-            veh.l = 'discretionary'
-        veh.lane = lcsidelane
-        veh.lanemem.append((lcsidelane, timeind+1))
+        lcsidelane = veh.lane.get_connect_right(veh.pos)
+        update_veh_lane(veh, veh.lane, lcsidelane, timeind+1, 'l')
         
         newlcsidelane = lcsidelane.get_connect_right(veh.pos)
-        if newlcsidelane != None and newlcsidelane.road is newroad: 
+        if newlcsidelane != None and newlcsidelane.road is veh.road: 
             veh.r = 'discretionary'
         else:
             veh.r = None
@@ -531,10 +547,10 @@ class simulation:
         lc_actions = {}
         
         for veh in self.vehicles: 
-            veh.action = veh.call_cf(veh.lead, veh.lane, timeind, dt, veh.in_relax)
+            veh.call_cf(timeind, dt)
             
         for veh in self.vehicles: 
-            veh.call_lc(lc_actions, veh.check_lc, timeind, dt)
+            veh.call_lc(lc_actions, timeind, dt)
             
         #update function goes here 
         
@@ -641,7 +657,7 @@ def CF_wrapper(cfmodel, acc_bounds = [-7,3]):
     #assumes a second order model which has inputs of (p, state), where state
     #is a list of all values needed, p is a list of parameters, and
     #output is a float giving the acceleration 
-    def call_cf(self, lead, curlane, timeind, dt, userelax): 
+    def call_cf_helper(self, lead, curlane, timeind, dt, userelax): 
         if lead is None: 
             acc = curlane.call_downstream(self, timeind, dt)
             
@@ -664,7 +680,7 @@ def CF_wrapper(cfmodel, acc_bounds = [-7,3]):
             
         return acc
     
-    return call_cf
+    return call_cf_helper
 
 def call_lc_helper(lfol, veh, lcsidelane):
     #does headway calculation for new potential follower lfol (works for either side)
@@ -695,11 +711,13 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
     #// TO DO get rid of dist to end, just use None
     #don't think anchor vehicles should give a 0 headway either, should just be None? 
     
-    def call_lc(self, chk_lc, timeind, dt):
+    def call_lc(self, lc_actions, timeind, dt):
         lfol, rfol, curlane = self.lane = self.lfol, self.rfol, self.lane
-        if lfol== '' and rfol == '':
+        if lfol== None and rfol == None:
             return 
         
+        #could put this in model but more efficient to keep it early 
+        chk_lc = self.lc_parameters[-1]
         if chk_lc == 0:
             return
         elif chk_lc == 1:
@@ -707,12 +725,12 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
         elif np.random.rand() > chk_lc: 
             return 
         
-        if lfol != '': 
-            llead, newlfolhd, newlhd = call_lc_helper(lfol, self, curlane.get_connect_left(self.pos))
+        if lfol != None: 
+            llead, newlfolhd, newlhd = call_lc_helper(lfol, self, curlane.get_connect_left(self.pos)) #better to just store left/right lanes
         else:
             llead = newlfolhd = newlhd = None
         
-        if rfol != '': 
+        if rfol != None: 
             rlead, newrfolhd, newrhd = call_lc_helper(rfol, self, curlane.get_connect_right(self.pos))
         else:
             rlead = newrfolhd = newrhd = None
@@ -727,10 +745,10 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
                 newfolhd = fol.lane.get_headway(fol, lead)
                 
             #do model call now 
-            lcmodel(self, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt, 
+            lcmodel(self, lc_actions, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt, 
                     lfol, llead, rfol, rlead, fol, lead, curlane, **kwargs)
         else: 
-            lcmodel(self, newlfolhd, newlhd, newrfolhd, newrhd, timeind, dt, 
+            lcmodel(self, lc_actions, newlfolhd, newlhd, newrfolhd, newrhd, timeind, dt, 
                     lfol, llead, rfol, rlead, curlane, **kwargs)
             
     return call_lc
@@ -745,9 +763,10 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
     #(also possible that you may use the decorators for your own custom methods)
 class vehicle: 
     
-    def __init__(self, vehid,curlane, p, lcp, length = 2, relaxp = None,
-                 cfmodel = None, free_cf = None, lcmodel = None, eqlfun = None, check_lc = .25,
-                 eql_kwargs = {}): 
+    def __init__(self, vehid,curlane, p, lcp, pos, spd, hd, inittime, 
+                 lead = None, fol = None, lfol = None, rfol = None, llead = None, rlead = None,
+                 length = 3, relaxp = None, initialize = True, routep = [30,120], route = None,
+                 cfmodel = None, free_cf = None, lcmodel = None, eqlfun = None, eql_kwargs = {}): 
         self.vehid = vehid
         self.lane = curlane
         self.road = curlane.road
@@ -759,21 +778,15 @@ class vehicle:
         self.lc_parameters = lcp
         
         #leader/follower relationships
-        self.lead = None
-        self.fol = None
-        self.lfol = None
-        self.rfol = None
-        self.llead = None
-        self.rlead = None
-        
-        #state
-        self.pos = None
-        self.speed = None
-        self.hd = None
-        self.action = None
+        self.lead = lead
+        self.fol = fol
+        self.lfol = lfol
+        self.rfol = rfol
+        self.llead = llead
+        self.rlead = rlead
         
         #memory
-        self.inittime= None
+        self.inittime= inittime
         self.endtime = None
         self.leadmem = []
         self.lanemem = []
@@ -783,14 +796,22 @@ class vehicle:
         #will want lfol and rfol memory if you want gradient wrt LC parameters, probably need memory for lc output as well 
         #won't store headway to save a bit of memory
         
+        #stuff for relaxation
         self.in_relax = False
         self.relax = None
         self.relax_start = None
         
-        self.check_lc = check_lc
+        #route stuff 
+        self.route_parameters = routep
+        self.route = route
+        self.routemem = route.copy()
+        
+        
+        #if initialize = True, 
+        self.set_state(pos,spd,hd,initialize = initialize, inittime = inittime)
         
         if cfmodel is not None: 
-            self.call_cf = CF_wrapper(cfmodel)
+            self.call_cf_helper = CF_wrapper(cfmodel)
         
         if free_cf is not None: 
             self.free_cf = staticmethod(free_cf)
@@ -811,6 +832,9 @@ class vehicle:
     
     def __ne__(self, other):
         return not(self is other)
+    
+    def call_cf(self, timeind, dt):
+        self.action = self.call_cf_helper(self.lead, self.lane, timeind, dt, self.in_relax)
             
     def update(self, timeind, dt): 
         #update state
@@ -825,6 +849,36 @@ class vehicle:
             if timeind == self.relax_start + len(self.relax) - 1:
                 self.in_relax = False
                 self.relaxmem.append((self.relax_start, timeind, self.relax))
+                
+    def set_state(self, pos, spd, hd, initialize = False, inittime = None):
+        #state
+        self.pos = pos
+        self.speed = spd
+        self.hd = hd
+        
+        if initialize: 
+            #memory 
+            self.inittime = inittime
+            self.leadmem.append(self.lead, inittime)
+            self.lanemem.append(self.lane, inittime)
+            self.posmem.append(pos)
+            self.speedmem.append(spd)
+            
+            #llane/rlane and l/r 
+            self.llane = self.lane.get_connect_left(pos)
+            if self.llane.road is self.road: 
+                self.l = 'discretionary'
+            else:
+                self.l = None
+            self.rlane = self.lane.get_connect_right(pos)
+            if self.rlane.road is self.road: 
+                self.r = 'discretionary'
+            else:
+                self.r = None
+            
+            #set lane/route events - sets lane_events, route_events, cur_route
+            set_lane_events(self)
+            set_route_events(self)
                 
     
             
@@ -895,7 +949,7 @@ def downstream_wrapper(speed_fun = None, method = 'speed', congested = True,
 #        return free_cf_model(veh.cf_parameters, veh.speed)
 
         
-class anchor_vehicle:
+class anchor_vehicle: #// TO DO check that this is updated 
     #anchor vehicles have cf_parameters as None 
     def __init__(self, curlane, time, lfol = None, rfol = None, lead = None, rlead = set(), llead = set()):
         self.cf_parameters = None 
@@ -970,7 +1024,7 @@ def eql_inflow_congested(curlane, inflow, c = .8, check_gap = True):
         se = -math.inf
     if hd > c*se: #condition met
         spd = curlane.veh.get_eql(hd, input_type = 's')
-        return 0, spd, hd
+        return curlane.start, spd, hd
     else:
         return None
     
@@ -980,7 +1034,7 @@ def eql_inflow_free(curlane, inflow):
     lead = curlane.anchor.lead
     hd = curlane.get_headway(curlane.anchor, lead)
     spd = curlane.newveh.inv_flow(inflow, leadlen = lead.len, output_type = 'v', congested = False) #speed corresponding to current flow
-    return 0, spd, hd
+    return curlane.start, spd, hd
 
 def shifted_speed_inflow(curlane, dt, shift = 1, accel_bound = -2):
     #gives the first speed based on the shifted speed of the lead vehicle (similar to newell model)
@@ -993,16 +1047,14 @@ def shifted_speed_inflow(curlane, dt, shift = 1, accel_bound = -2):
         
     if accel_bound is not None: 
         newveh = curlane.newveh
-        newveh.pos = 0
-        newveh.spd = spd
-        newveh.hd = hd
-        acc = newveh.call_cf(lead, curlane, None, dt, False)
+        newveh.set_state(curlane.start, spd, hd)
+        acc = newveh.call_cf_helper(lead, curlane, None, dt, False)
         if acc > accel_bound: 
             return 0, spd, hd
         else: 
             return None
     
-    return 0, spd, hd
+    return curlane.start, spd, hd
 
 def shift_speed(speedseries, shift, dt):
     #speedseries is timeseries with a constant discretization of dt
@@ -1026,16 +1078,14 @@ def speed_inflow(curlane, speed_fun, timeind, dt, accel_bound = -2):
         
     if accel_bound is not None: 
         newveh = curlane.newveh
-        newveh.pos = 0
-        newveh.spd = spd
-        newveh.hd = hd
-        acc = newveh.call_cf(lead, curlane, None, dt, False)
+        newveh.set_state(curlane.start, spd, hd)
+        acc = newveh.call_cf_helper(lead, curlane, None, dt, False)
         if acc > accel_bound: 
             return 0, spd, hd
         else: 
             return None
     
-    return 0, spd, hd 
+    return curlane.start, spd, hd 
     
 
 
@@ -1054,7 +1104,7 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -2
             if self.anchor.lead is None: 
                 if spd is None: 
                     spd = speed_fun(timeind)
-                out = (0, spd, None)
+                out = (self.start, spd, None)
             elif method == 'ceql': 
                 out = eql_inflow_congested(self, inflow, c = c, check_gap = check_gap)
             elif method == 'feql':
@@ -1066,27 +1116,19 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -2
             
             if out == None:  
                 return
-            #add vehicle with the given initial conditions ????????? the lane is self, the vehicle is newveh = self.newveh 
-            pos, speed, hd = out[0], out[1], out[2]
-            newveh = lane.newveh
-            lead = self.anchor.lead
-            anchor = lane.anchor
-            #initialize state
-            self.pos = pos
-            self.speed = speed
-            self.hd= hd
+            #add vehicle with the given initial conditions
+            pos, speed, hd = out[:]
+            newveh = self.newveh
+            anchor = self.anchor
+            lead = anchor.lead
+            newveh.lead = lead
             
-            #initalize memory
-            self.inittime = timeind+1
-            self.leadmem.append((lead, timeind+1))
-            self.lanemem.append((lane,timeind+1))
-            self.posmem.append(pos)
-            self.speedmem.append(speed)
+            #initialize state
+            newveh.set_state(pos, speed, hd, True, timeind+1)
             
             #update leader/follower relationships
             #leader relationships
             lead.fol = newveh
-            newveh.lead = lead
             for rlead in anchor.rlead: 
                 rlead.lfol = newveh
             newveh.rlead = anchor.rlead
@@ -1096,7 +1138,7 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -2
             newveh.llead = anchor.llead
             anchor.llead = set()
             
-            #update anchor and follower relationships
+            #update anchor and follower relationships ##// TO DO fix this  #anchors should have left/right attributes
             anchor.leadmem.append((newveh, timeind+1))
             anchor.lead = newveh
             if lane.connect_left == None:
@@ -1113,19 +1155,16 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -2
                 newveh.rfol = rightanchor
                 rightanchor.llead.add(newveh)
             
-            #initaialize route // TO DO #also some of the initialization above will need to be changed as well
-            
+            #update simulation
             self.inflow_buffer += -1
             vehicles.add(newveh)
+            vehid = vehid + 1
         
             #create next vehicle
             cf_parameters, lc_parameters, kwargs = self.new_vehicle()
-            newveh = vehicle(vehid, self, cf_parameters, lc_parameters, **kwargs)
-            self.newveh = newveh
-            vehid = vehid + 1
+            self.newveh = vehicle(vehid, self, cf_parameters, lc_parameters, None, None, None, None, initialize = False, **kwargs)
             
-                
-                
+            
         return vehid
         
     return increment_inflow
