@@ -158,6 +158,7 @@ def update_lane_helper(veh, curlane, curevent):
         veh.lfol.rlead.remove(veh)
         veh.lfol = None
         veh.l = None
+        veh.llane = None
     elif curevent['left'] == 'add':
         newllane = curlane.get_connect_left(curevent['pos'])
         merge_anchor = newllane.merge_anchors[curevent['left merge']][0]
@@ -166,6 +167,7 @@ def update_lane_helper(veh, curlane, curevent):
         veh.lfol = newfol
         newfol.rlead.add(veh)
         veh.l = 'discretionary'
+        veh.llane = newllane
         
     
     #same thing for right
@@ -173,6 +175,7 @@ def update_lane_helper(veh, curlane, curevent):
         veh.rfol.llead.remove(veh)
         veh.rfol = None
         veh.r = None
+        veh.rlane = None
     elif curevent['right'] == 'add': 
         newrlane  = curlane.get_connect_right(curevent['pos'])
         merge_anchor = newrlane.merge_anchors[curevent['right merge']][0]
@@ -181,6 +184,7 @@ def update_lane_helper(veh, curlane, curevent):
         veh.rfol = newfol
         newfol.llead.add(veh)
         veh.r = 'discretionary'
+        veh.rlane = newrlane
 
 def set_lane_events(veh):
     veh.lane_events = []
@@ -450,21 +454,24 @@ def update_change(veh, timeind):
     #logic for updating - logic is complicated because we avoid doing any sorts - faster this way 
     
     #no check for vehicles moving into same gap // TO DO low priority 
-    #no cooperative tactical components // TO DO
+    #no cooperative tactical components // TO DO #also fix the way left/right lanes are handled 
     
     #initialization, update lane/road/position and update l/r attributes
     if veh.lc == 'l':
         #define lcside/opside
         lcsidefol, opsidefol, lcsidelead, opsidelead = 'lfol', 'rfol', 'llead', 'rlead'
         #update lane/road/position, and the l/r attributes
+        veh.rlane = veh.lane
         lcsidelane = veh.lane.get_connect_left(veh.pos)
         update_veh_lane(veh, veh.lane, lcsidelane, timeind+1, 'r')
         #update new lcside lane change attribute
         newlcsidelane = lcsidelane.get_connect_left(veh.pos)
+        veh.llane = newlcsidelane
         if newlcsidelane != None and newlcsidelane.road is veh.road:
             veh.l = 'discretionary'
         else:
             veh.l = None
+            
         
     else: 
         lcsidefol, opsidefol, lcsidelead, opsidelead = 'rfol', 'lfol', 'rlead', 'llead'
@@ -739,7 +746,7 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
     #get_fol - lc model uses the current follower if True 
     #kwargs - keyword arguments which are passed to lcmodel 
     
-    #// TO DO get rid of dist to end, just use None
+    #// TO DO get rid of dist to end, just use None, in general need to refactor/update this 
     #don't think anchor vehicles should give a 0 headway either, should just be None? 
     
     def call_lc(self, lc_actions, timeind, dt):
@@ -971,18 +978,19 @@ def downstream_wrapper(speed_fun = None, method = 'speed', congested = True,
             else: 
                 return veh.free_cf(veh.cf_parameters, veh.speed)
             return (speed - veh.speed)/dt
-                
-    
-#def free_downstream_wrapper(free_cf_model):
-#    #this only works if all vehicles have same model - needs to call something vehicle specific
-#    @staticmethod
-#    def call_downstream(veh, *args):
-#        return free_cf_model(veh.cf_parameters, veh.speed)
 
-        
-class anchor_vehicle: #// TO DO check that this is updated 
+#anchor vehicles are present at the start of any track. Any track can have only one anchor for any constituent lanes. 
+#a track is defined as a continuous series of lanes such that a vehicle could start at the first lane, and continue through 
+#all lanes on the track without performing any lane changing actions. So anchors are basically the start of the track.
+#besides defining what track any lane is in, anchor vehicles are used in the inflow methods, as they keep track of the vehicle order
+#and allow vehicles to be inserted with the correct vehicle order. 
+#they also more generally maintain the vehicle order at the beginning of tracks, so that the only way a vehicle can have a None attribute for 
+#lfol/rfol is if there is no lane for the vehicle. They can also be used to calculate headways or distances relative to other vehicles. 
+#they are identified as anchors because they have cf_parameters = None
+
+class anchor_vehicle: 
     #anchor vehicles have cf_parameters as None 
-    def __init__(self, curlane, time, lfol = None, rfol = None, lead = None, rlead = set(), llead = set()):
+    def __init__(self, curlane, inittime, lfol = None, rfol = None, lead = None, rlead = set(), llead = set()):
         self.cf_parameters = None 
         self.lane = curlane
         self.road = curlane.road
@@ -993,11 +1001,11 @@ class anchor_vehicle: #// TO DO check that this is updated
         self.rlead = rlead
         self.llead = llead
         
-        self.pos = 0
-        self.hd = 0 
+        self.pos = curlane.start
+        self.hd = None
         self.length = 0
         
-        self.leadmem = [[lead,time]]
+        self.leadmem = [[lead,inittime]]
         
 def get_inflow_wrapper(speed_fun, inflow_type = 'flow'):
     #to use the inflow functions provided, you need the following methods in the lane 
@@ -1169,21 +1177,18 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -2
             newveh.llead = anchor.llead
             anchor.llead = set()
             
-            #update anchor and follower relationships ##// TO DO fix this  #anchors should have left/right attributes
-            anchor.leadmem.append((newveh, timeind+1))
+            #update anchor and follower relationships
             anchor.lead = newveh
-            if lane.connect_left == None:
-                newveh.lfol = None
-            else:
-                leftanchor = lane.connect_left.anchor
-                newveh.lfol = leftanchor
-                leftanchor.rlead.add(newveh)
+            anchor.leadmem.append((newveh, timeind+1))
             newveh.fol = anchor
-            if lane.connect_right == None:
-                newveh.rfol = None
-            else:
-                rightanchor = lane.connect_right.anchor
-                newveh.rfol = rightanchor
+            
+            leftanchor = anchor.lfol
+            newveh.lfol = leftanchor
+            if leftanchor != None: 
+                leftanchor.rlead.add(newveh)
+            rightanchor = anchor.rfol
+            newveh.rfol = rightanchor
+            if rightanchor != None: 
                 rightanchor.llead.add(newveh)
             
             #update simulation
