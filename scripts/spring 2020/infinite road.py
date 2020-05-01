@@ -8,10 +8,13 @@ from havsim.simulation.simulation import vehicle
 from havsim.simulation.models import IDM, IDM_eql
 
 class lane:
-    def __init__(self, speedfun):
-#        self.call_downstream = downstream_wrapper(speed_fun = speedfun, method = 'speed')
+    def __init__(self, speedfun, connect_left = [(0, None)], connect_right = [(0, None)]):
+#        self.call_downstream = downstream_wrapper(speed_fun = speedfun, method = 'speed').__get__(self, lane)
         self.timeseries = speedfun
         self.road = None
+        self.events = []
+        self.connect_left = connect_left
+        self.connect_right = connect_right
     def get_headway(self, veh, lead):
         return lead.pos-veh.pos - lead.length
     
@@ -19,6 +22,21 @@ class lane:
         speed = self.timeseries[timeind]
         return (speed - veh.speed)/dt
     
+    def get_connect_left(self, pos):
+        #given position, returns the connection to left 
+        #output is either lane object or None
+        return connect_helper(self.connect_left, pos)
+
+    def get_connect_right(self, pos):
+        return connect_helper(self.connect_right,pos)
+    
+def connect_helper(connect, pos):
+    out = connect[-1][1] #default to last lane for edge case or case when there is only one possible connection 
+    for i in range(len(connect)-1):
+        if pos < connect[i+1][0]:
+            out = connect[i][1]
+            break
+    return out 
 
 #number of timesteps and timestep length
 simlen = 2000 
@@ -37,28 +55,22 @@ initspeed = timeseries[0]
 length = 2
 # build simulation
 vehicles = set()
-veh = vehicle(-1, curlane, p, None, length = length, cfmodel = IDM, eqlfun = IDM_eql)
-#eql_hd = veh.get_eql(veh, initspeed) - length #eql_hd = IDM_eql(p, initspeed) - length 
-eql_hd = IDM_eql(p, initspeed) - length 
 curpos = 0
-veh.pos, veh.speed = curpos, initspeed
-veh.posmem.append(curpos), veh.speedmem.append(initspeed)
+veh = vehicle(-1, curlane, p, None, curpos, initspeed, None, 0, length = length, cfmodel = IDM, eqlfun = IDM_eql)
+#eql_hd = veh.get_eql(initspeed)
+eql_hd = IDM_eql(p, initspeed) 
 vehicles.add(veh)
 vehlead = veh
 for i in range(nveh -1):
-    curpos += -eql_hd
-    veh = vehicle(i, curlane, p, None, length = length, cfmodel = IDM, eqlfun = IDM_eql)
-    veh.pos, veh.speed = curpos, initspeed
-    veh.posmem.append(curpos), veh.speedmem.append(initspeed)
-    veh.lead = vehlead
-    veh.hd = curlane.get_headway(veh,veh.lead)
+    curpos += -eql_hd - length
+    veh = vehicle(i, curlane, p, None, curpos, initspeed, eql_hd, 0, length = length, cfmodel = IDM, eqlfun = IDM_eql, lead = vehlead)
     vehicles.add(veh)
     vehlead = veh
     
 def test_cf(vehicles, simlen, dt):
     for i in range(simlen):
         for veh in vehicles: 
-            veh.action = veh.call_cf(veh, veh.lead, veh.lane, i, dt, veh.in_relax)
+            veh.call_cf( i, dt)
         
         for veh in vehicles: 
             veh.update(i, dt)

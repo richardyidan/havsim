@@ -324,6 +324,9 @@ def set_route_events(veh):
     #cur_route is created by make_route_helper - at that point we also pop from the veh.route
     #if a vehicle enters a lane on the same road, which is not in cur_route, the make_route_helper adds the lane events for the new lane
     
+#    if veh.route == []:  #for testing purposes for infinite road only#########
+#        return 
+    
     #get new route events if they are stored in memory already 
     newlane = veh.lane 
     if newlane in veh.cur_route: 
@@ -453,8 +456,8 @@ def update_veh_lane(veh, oldlane, newlane, timeind, side = None):
 def update_change(veh, timeind): 
     #logic for updating - logic is complicated because we avoid doing any sorts - faster this way 
     
-    #no check for vehicles moving into same gap // TO DO low priority 
-    #no cooperative tactical components // TO DO #also fix the way left/right lanes are handled 
+    #no check for vehicles moving into same gap // TO DO low priority (? this should be part of lane changing model?)
+    #no cooperative tactical components // TO DO
     
     #initialization, update lane/road/position and update l/r attributes
     if veh.lc == 'l':
@@ -476,10 +479,12 @@ def update_change(veh, timeind):
     else: 
         lcsidefol, opsidefol, lcsidelead, opsidelead = 'rfol', 'lfol', 'rlead', 'llead'
         
+        veh.llane = veh.lane
         lcsidelane = veh.lane.get_connect_right(veh.pos)
         update_veh_lane(veh, veh.lane, lcsidelane, timeind+1, 'l')
         
         newlcsidelane = lcsidelane.get_connect_right(veh.pos)
+        veh.rlane = newlcsidelane
         if newlcsidelane != None and newlcsidelane.road is veh.road: 
             veh.r = 'discretionary'
         else:
@@ -803,7 +808,7 @@ class vehicle:
     
     def __init__(self, vehid,curlane, p, lcp, pos, spd, hd, inittime, 
                  lead = None, fol = None, lfol = None, rfol = None, llead = None, rlead = None,
-                 length = 3, relaxp = None, initialize = True, routep = [30,120], route = None,
+                 length = 3, relaxp = None, initialize = True, routep = [30,120], route = [],
                  cfmodel = None, free_cf = None, lcmodel = None, eqlfun = None, eql_kwargs = {}): 
         self.vehid = vehid
         self.lane = curlane
@@ -849,18 +854,18 @@ class vehicle:
         self.set_state(pos,spd,hd,initialize = initialize, inittime = inittime)
         
         if cfmodel is not None: 
-            self.call_cf_helper = CF_wrapper(cfmodel)
+            self.call_cf_helper = CF_wrapper(cfmodel).__get__(self, vehicle)
         
         if free_cf is not None: 
-            self.free_cf = staticmethod(free_cf)
+            self.free_cf = staticmethod(free_cf).__get__(self, vehicle)
             
         if eqlfun is not None: 
-            self.get_eql = eql_wrapper(eqlfun, **eql_kwargs)
-            self.get_flow = FD_wrapper(eqlfun)
-            self.inv_flow = invFD_wrapper(eqlfun, **eql_kwargs)
+            self.get_eql = eql_wrapper(eqlfun, **eql_kwargs).__get__(self, vehicle)
+            self.get_flow = FD_wrapper(eqlfun).__get__(self, vehicle)
+            self.inv_flow = invFD_wrapper(eqlfun, **eql_kwargs).__get__(self, vehicle)
             
         if lcmodel is not None: 
-            self.call_lc = LC_wrapper(lcmodel)
+            self.call_lc = LC_wrapper(lcmodel).__get__(self, vehicle)
             
     def __hash__(self):
         return hash(self.vehid)
@@ -897,24 +902,28 @@ class vehicle:
         if initialize: 
             #memory 
             self.inittime = inittime
-            self.leadmem.append(self.lead, inittime)
-            self.lanemem.append(self.lane, inittime)
+            self.leadmem.append((self.lead, inittime))
+            self.lanemem.append((self.lane, inittime))
             self.posmem.append(pos)
             self.speedmem.append(spd)
             
             #llane/rlane and l/r 
             self.llane = self.lane.get_connect_left(pos)
-            if self.llane.road is self.road: 
+            if self.llane== None:
+                self.l = None
+            elif self.llane.road is self.road: 
                 self.l = 'discretionary'
             else:
                 self.l = None
             self.rlane = self.lane.get_connect_right(pos)
-            if self.rlane.road is self.road: 
+            if self.rlane== None:
+                self.r = None
+            elif self.rlane.road is self.road: 
                 self.r = 'discretionary'
             else:
                 self.r = None
             
-            #set lane/route events - sets lane_events, route_events, cur_route
+            #set lane/route events - sets lane_events, route_events, cur_route attributes
             set_lane_events(self)
             set_route_events(self)
                 
@@ -922,23 +931,27 @@ class vehicle:
             
 
 def downstream_wrapper(speed_fun = None, method = 'speed', congested = True, 
-                       mergeside = 'l', merge_anchor_ind = None, anchor = None, shift = 1):
+                       mergeside = 'l', merge_anchor_ind = None, target_lane = None, selflane = None, shift = 1,
+                       minacc = -4):
     #downstream function -> method of lane, takes in (veh, timeind, dt)
     #and returns action (acceleration) for the vehicle 
     
+    #options - speed_fun 
     if method == 'speed': #specify a function speedfun which takes in time and returns the speed
-        def call_downstream(veh, timeind, dt):
+        def call_downstream(self, veh, timeind, dt):
             speed = speed_fun(timeind)
             return (speed - veh.speed)/dt
         return call_downstream
     
+    #options - none
     elif method == 'free': #use free flow method of the vehicle 
-        def free_downstream(veh, *args):
+        def free_downstream(self, veh, *args):
             return veh.free_cf(veh.cf_parameters, veh.speed)
         return free_downstream
     
+    #options - congested controls whether the flow is inverted into free or congested branch
     elif method == 'flow': #specify a function which gives the flow, we invert the flow to obtain speed
-        def call_downstream(veh, timeind, dt):
+        def call_downstream(self, veh, timeind, dt):
             flow = speed_fun(timeind)
             speed = veh.inv_flow(flow, output_type = 'v', congested = congested)
             return (speed - veh.speed)/dt
@@ -947,6 +960,14 @@ def downstream_wrapper(speed_fun = None, method = 'speed', congested = True,
      #this is meant to give a longitudinal update in congested conditions 
      #when on a bottleneck (on ramp or lane ending) and you have no leader 
      #not because you are leaving the network but because the lane is ending and you need to move over
+     
+     #options - mergeside = 'l' - whether vehicles are supposed to merge left or right 
+     #merge_anchor_ind - index for merge anchor in target_lane
+     #selflane - Your own lane, can be provided if you want vehicle to stop if it can't merge. It will act as if there is a vehicle at the end of the road, 
+     #and if its deceleration is more than minacc, it will use its CF model to update.
+     #shift = 1 - will shift the follower's speed
+     #minacc = -4 - if selflane is not None, then once we have to decelerate stronger than this, we will start slowing down 
+     #speed_fun, if we can't use the endanchor, a follower/merge anchor, we default to using the free_cf, unless you provide speed_fun, in which case we will use speed_fun. 
     elif method == 'merge':
         #first try to get a vehicle and use its shifted speed. By default use the l/rfol (controlled by mergeside)
         #can also try using the merge anchor (if merge_anchor_ind is not None) or another anchor's lead (if anchor is not None)
@@ -954,23 +975,27 @@ def downstream_wrapper(speed_fun = None, method = 'speed', congested = True,
         #if we fail to find such a vehicle and speed_fun is not None, we will use that; 
         #otherwise we will use the vehicle's free_cf method
         
-        #the vehicle won't slow down if approaching the end of the lane // TO DO
-        #would be simple to add this modification - at end of function do a check if youre getting close, 
-        #then can just use the car following model with the headway to the end 
         if mergeside == 'l': 
             folside = 'lfol'
         elif mergeside == 'r':
             folside = 'rfol'
+        if selflane != None:
+            endanchor = anchor_vehicle(selflane, None)
+            endanchor.pos = selflane.end
+        else:
+            endanchor = None
         def call_downstream(self, veh, timeind, dt): 
+            if endanchor != None:
+                acc = veh.call_cf_helper(endanchor, veh.lane, timeind, dt, veh.in_relax)
+                if acc < minacc: 
+                    return acc
             fol = getattr(veh, folside) #first check if we can use your current change side follower
             if fol.cf_parameters == None: 
                 fol = fol.lead
                 if fol == None and merge_anchor_ind != None:
-                    fol = self.merge_anchor[merge_anchor_ind][0]
+                    fol = target_lane.merge_anchors[merge_anchor_ind][0]
                     if fol.cf_parameters == None: 
                         fol = fol.lead
-                        if fol == None and anchor != None: 
-                            fol = anchor.lead
             if fol != None: 
                 speed = shift_speed(fol.speedmem, shift, dt)
             elif speed_fun != None:
@@ -978,6 +1003,8 @@ def downstream_wrapper(speed_fun = None, method = 'speed', congested = True,
             else: 
                 return veh.free_cf(veh.cf_parameters, veh.speed)
             return (speed - veh.speed)/dt
+        
+        return call_downstream
 
 #anchor vehicles are present at the start of any track. Any track can have only one anchor for any constituent lanes. 
 #a track is defined as a continuous series of lanes such that a vehicle could start at the first lane, and continue through 
@@ -1002,6 +1029,7 @@ class anchor_vehicle:
         self.llead = llead
         
         self.pos = curlane.start
+        self.speed = 0
         self.hd = None
         self.length = 0
         
@@ -1223,16 +1251,16 @@ class lane:
         self.connect_from = None
         
         if downstream != {}:
-            self.call_downstream = downstream_wrapper(**downstream)
+            self.call_downstream = downstream_wrapper(**downstream).__get__(self, lane)
             
         if increment_inflow != {}:
-            self.increment_inflow = increment_inflow_wrapper(**increment_inflow)
+            self.increment_inflow = increment_inflow_wrapper(**increment_inflow).__get__(self, lane)
             
         if get_inflow != {}:
-            self.get_inflow = get_inflow_wrapper(**get_inflow)
+            self.get_inflow = get_inflow_wrapper(**get_inflow).__get__(self, lane)
             
         if new_vehicle != None:
-            self.new_vehicle = staticmethod(new_vehicle)
+            self.new_vehicle = staticmethod(new_vehicle).__get__(self, lane)
         
         #todo - 
         #need function to initialize roads, which will make roadlen dictionary, 
