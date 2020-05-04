@@ -13,7 +13,7 @@ import scipy.optimize as sc
 def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, dt): 
     #update followers/leaders for all lane changes 
     for veh in lc_actions.keys(): 
-        update_change(veh, timeind) #this cannot be done in parralel
+        update_change(lc_actions, veh, timeind) #this cannot be done in parralel
     
         #apply relaxation 
         new_relaxation(veh, timeind, dt)
@@ -197,8 +197,8 @@ def make_cur_route(p, curlane, nextroadname):
     #generates route events with parameters p in lane lane 
     #p - parameters - currently len 2 list with constant, p[0] is a constant which is a like a safety buffer, and p[1]
     #controls the distance you need for a change (also a constant)
-    #lane- lane object that the route events start on 
-    #nextroad - once you leave lane.road, you want to end up on nextroad
+    #curlane- lane object that the route events start on 
+    #nextroad - once you leave curlane.road, you want to end up on nextroad
     
     #output - dictionary where keys are lanes, values are the route events a vehicle with 
     #parameters p needs to follow on that lane. 
@@ -212,6 +212,8 @@ def make_cur_route(p, curlane, nextroadname):
     #reaching 100% cooperation by 'y' - p[0]
     
     #we only get the route for the current road - no look ahead to take into account future roads. // TO DO low priority 
+    #(This is non trivial, be careful. Should only have to look forward one road )
+    
     #nothing to handle cases where LC cannot be completed successfully // TO DO medium priority (put necessary info into cur_route dict) 
     ####if you fail to follow your route, you need to be given a new route, and the code which does this can also be used in vehicle.set_state if route = None at initialization####
     #would need to know latest point when change can take place ('pos' for 'continue' type), 
@@ -227,18 +229,23 @@ def make_cur_route(p, curlane, nextroadname):
     
     cur_route = {}
     
-    if change_type == 'continue': #-> vehicle needs to reach end of lane to transition to next road 
+    if change_type == 'continue': #-> vehicle needs to reach end of lane to transition to next road or exit simulation
         #initialize for lanes which vehicle needs to continue on 
-        for i in range(laneind[0], laneind[1]+1):
+        leftind, rightind = laneind[:]
+        for i in range(leftind, rightind+1):
             cur_route[curroad[i]] = []
             
-        templane = curroad[laneind[0]]
-        cur_route[templane].append({'pos': templane.end - p[0] - p[1], 'event': 'end discretionary', 'side': 'l'})
+        if leftind > 0:
+            templane = curroad[leftind]
+            curpos = min(templane.end, curroad[leftind-1].end)
+            cur_route[templane].append({'pos': curpos - p[0] - p[1], 'event': 'end discretionary', 'side': 'l'})
         
-        templane = curroad[laneind[1]]
-        cur_route[templane].append({'pos': templane.end - p[0] - p[1], 'event': 'end discretionary', 'side': 'r'})
+        if rightind< curroad['laneinds']-1:
+            templane = curroad[rightind]
+            curpos = min(templane.end, curroad[rightind+1].end)
+            cur_route[templane].append({'pos': curpos - p[0] - p[1], 'event': 'end discretionary', 'side': 'r'})
         
-        if curlaneind >= laneind[0] and curlaneind <= laneind[1]: #if on correct lane(s) already, do no more work 
+        if curlaneind >= leftind and curlaneind <= rightind: #if on correct lane(s) already, do no more work 
             return cur_route
         
         elif curlaneind < laneind[0]: #need to change right possibly multiple times
@@ -246,58 +253,73 @@ def make_cur_route(p, curlane, nextroadname):
         else: 
             uselaneind = laneind[1]
             
-        cur_route = make_route_helper(p, cur_route, curroad, curlaneind, uselaneind, curroad[uselaneind].end, curroad[uselaneind].start)
+        cur_route = make_route_helper(p, cur_route, curroad, curlaneind, uselaneind, curroad[uselaneind].end)
                 
             
     elif change_type =='merge': #logic is similar and also uses make_route_helper
+        templane = curroad[laneind] 
+        
+        #determine end discretionary event if necessary 
         if side == 'l': 
-            opside = 'r'
+            if curlaneind < curroad['laneinds'] - 1: 
+                enddisc = min(pos, curroad[laneind+1].end)
+                cur_route[templane].append({'pos': enddisc -p[0] - p[1], 'event':'end discretionary', 'side':'r'})
         else: 
-            opside= 'l'
-            
-        templane = curroad[laneind]
-        cur_route[templane].append({'pos': pos -p[0] - p[1], 'event':'end discretionary', 'side':opside})
+            if curlaneind > 0: 
+                enddisc = min(pos, curroad[laneind-1].end)
+                cur_route[templane].append({'pos': enddisc -p[0] - p[1], 'event':'end discretionary', 'side':'l'})
+
+
         cur_route[templane].append({'pos': pos, 'event':'mandatory', 'side':side})
         
-        cur_route = make_route_helper(p, cur_route, curroad, curlaneind, laneind, pos, templane.start)
+        if curlaneind != laneind:
+            cur_route = make_route_helper(p, cur_route, curroad, curlaneind, laneind, pos)
     
     return cur_route
     
-def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos, mincurpos):
+def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos):
     #p - parameters for route 
     #cur_route - dictionary to add entries to 
     #curroad - current road 
     #curlaneind - current index of lane you start in 
     #laneind, curpos - index of lane you want to be in by position curpos 
-    #mincurpos - for edge case to prevent you from changing onto lane before it starts 
     
     #starting on curroad in lane with index curlaneind, and wanting to be in laneind by curpos position, 
     #generates routes cur all roads in [curlaneind, laneind)
     #assumes you already have the route for laneind
+    #edge cases where routes have different lengths are handled. 
     if curlaneind < laneind:
         curind = laneind - 1
+        prevtemplane = curroad[curind+1]
         templane = curroad[curind]
         cur_route[templane] = []
         while not (curind < curlaneind):
-            #determine curpos = where the mandatory change starts 
-            if templane.end < curpos: 
+            #determine curpos = where the mandatory change starts (different meaning than the 'curpos' which is passed in)
+            if templane.end < curpos: #in case templane ends before the curpos
                 curpos = templane.end
             curpos += -p[0] - p[1]
-            curpos = max(mincurpos, curpos)
-            enddiscpos = curpos - p[0] - p[1]
+            curpos = max(prevtemplane.start, curpos) #in case the lane doesn't exist at curpos
             
-            #append the two events - end discretionary and being mandatory 
-            cur_route[templane].append({'pos': enddiscpos, 'event': 'end discretionary', 'side': 'l'})
+            #determine enddiscpos = where the discretionary ends
+            #only necessary if there is something to end the discretionary into
+            if curind > 0: 
+                nexttemplane = curroad[curind-1]
+                enddiscpos = min(curpos, nexttemplane.end)
+                enddiscpos = enddiscpos - p[0] - p[1]
+                cur_route[templane].append({'pos': enddiscpos, 'event': 'end discretionary', 'side': 'l'})
+            
+            #there is always a mandatory event
             cur_route[templane].append({'pos': curpos, 'event': 'mandatory', 'side': 'r'})
             
             #update iteration 
-            mincurpos = templane.start
             curind += -1 
-            templane = curroad[curind]
+            prevtemplane = templane
+            templane = nexttemplane
             
     #same code but for opposite side 
     elif curlaneind > laneind: 
         curind = laneind +1
+        prevtemplane = curroad[curind - 1]
         templane = curroad[curind]
         cur_route[templane] = []
         while not (curind > curlaneind):
@@ -305,17 +327,21 @@ def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos, mincur
             if templane.end < curpos: 
                 curpos = templane.end
             curpos += -p[0] - p[1]
-            curpos = max(mincurpos, curpos)
-            enddiscpos = curpos - p[0] - p[1]
+            curpos = max(prevtemplane.start, curpos)
             
-            #append the two events - end discretionary and being mandatory 
-            cur_route[templane].append({'pos': enddiscpos, 'event': 'end discretionary', 'side': 'r'})
+            if curind < curroad['laneinds'] - 1: 
+                nexttemplane = curroad[curind + 1]
+                enddiscpos = min(curpos, nexttemplane.end)
+                enddiscpos = enddiscpos - p[0] - p[1]
+                cur_route[templane].append({'pos': enddiscpos, 'event': 'end discretionary', 'side': 'r'})
+                
+            
             cur_route[templane].append({'pos': curpos, 'event': 'mandatory', 'side': 'l'})
             
             #update iteration 
-            mincurpos = templane.start
             curind += -1 
-            templane = curroad[curind]
+            prevtemplane = templane
+            templane = nexttemplane
 
     return cur_route
         
@@ -340,8 +366,14 @@ def set_route_events(veh):
         p = veh.route_parameters
         prevlane = veh.lanemem[-2][0]
         if prevlane.road is newlane.road: #on same road - we can just use helper function to update cur_route
-            curpos = veh.cur_route[prevlane][0]['pos'] + p[0] + p[1]
-            make_route_helper(p, veh.cur_route, veh.road, newlane.laneind, prevlane.laneind, curpos,prevlane.start)
+            prevlane_events = veh.cur_route[prevlane]
+            if len(prevlane_events) == 0: #this can only happen for continue event => curpos = the end of lane
+                curpos = prevlane.end
+            elif prevlane_events[0]['event'] == 'end discretionary':
+                curpos = prevlane_events[0]['pos'] + p[0] + p[1]
+            else: #mandatory event
+                curpos = prevlane_events[0]['pos']
+            make_route_helper(p, veh.cur_route, veh.road, newlane.laneind, prevlane.laneind, curpos)
         else: #on new road - we need to generate new cur_route and update the vehicle's route
             veh.cur_route = make_cur_route(p, newlane, veh.route.pop(0))
         
@@ -453,16 +485,13 @@ def update_veh_lane(veh, oldlane, newlane, timeind, side = None):
 #This strategy would have higher costs per timestep to keep lfol/rfol updated, but would be simpler to update when there is a lane change. 
 #Thus it might be more efficient if the timesteps are long relative to the number of lane changes. 
 #Overall I doubt there would be much practical difference between this option and the first option unless the timesteps are very long (~10-15 sec) and changes very often (every ~30 seconds)
-def update_change(veh, timeind): 
-    #logic for updating - logic is complicated because we avoid doing any sorts - faster this way 
+def update_change(lc_actions, veh, timeind): 
     
     #no check for vehicles moving into same gap // TO DO low priority (? this should be part of lane changing model?)
     #no cooperative tactical components // TO DO
     
     #initialization, update lane/road/position and update l/r attributes
-    if veh.lc == 'l':
-        #define lcside/opside
-        lcsidefol, opsidefol, lcsidelead, opsidelead = 'lfol', 'rfol', 'llead', 'rlead'
+    if lc_actions[veh] == 'l':
         #update lane/road/position, and the l/r attributes
         veh.rlane = veh.lane
         lcsidelane = veh.lane.get_connect_left(veh.pos)
@@ -477,8 +506,6 @@ def update_change(veh, timeind):
             
         
     else: 
-        lcsidefol, opsidefol, lcsidelead, opsidelead = 'rfol', 'lfol', 'rlead', 'llead'
-        
         veh.llane = veh.lane
         lcsidelane = veh.lane.get_connect_right(veh.pos)
         update_veh_lane(veh, veh.lane, lcsidelane, timeind+1, 'l')
@@ -491,6 +518,20 @@ def update_change(veh, timeind):
             veh.r = None
         
     ######update all leader/follower relationships#####
+    
+    update_leadfol_after_lc(veh, lcsidelane, newlcsidelane, lc_actions[veh], timeind)
+            
+    return 
+
+def update_leadfol_after_lc(veh, lcsidelane, newlcsidelane, side, timeind):
+    #updates all logics for keeping vehicle orders updated after vehicle 
+    #performs a lane change in side (either 'l' or 'r') which causes it to transition to lane lcsidelane
+    #with a new lcsidelane at timeind
+    if side == 'l': 
+        #define lcside/opside
+        lcsidefol, opsidefol, lcsidelead, opsidelead = 'lfol', 'rfol', 'llead', 'rlead'
+    else:
+        lcsidefol, opsidefol, lcsidelead, opsidelead = 'rfol', 'lfol', 'rlead', 'llead'
     
     #update current leader
     lead = veh.lead 
@@ -569,8 +610,7 @@ def update_change(veh, timeind):
             unused, newlcsidefol = lcsidelane.leadfol_find(veh, guess)
             setattr(veh, lcsidefol, newlcsidefol)
             getattr(newlcsidefol, opsidelead).add(veh)
-            
-    return 
+    
         
 def get_guess(lcfol, lclead, veh, lcsidefol, newlcsidelane):
     #need to find new lcside follower for veh
@@ -755,18 +795,19 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
     #don't think anchor vehicles should give a 0 headway either, should just be None? 
     
     def call_lc(self, lc_actions, timeind, dt):
-        lfol, rfol, curlane = self.lane = self.lfol, self.rfol, self.lane
-        if lfol== None and rfol == None:
+        l, r, curlane = self.lane = self.l, self.r, self.lane
+        if l== None and r == None:
             return 
         
-        #could put this in model but more efficient to keep it early 
-        chk_lc = self.lc_parameters[-1]
-        if chk_lc == 0:
-            return
-        elif chk_lc == 1:
+        #determine if we want to compute the LC model 
+        if l == 'mandatory' or r == 'mandatory' or self.coop_veh != None or self.in_tactical: 
             pass
-        elif np.random.rand() > chk_lc: 
-            return 
+        else: 
+            chk_lc = self.lc_parameters[-1]
+            if chk_lc >= 1:
+                pass
+            elif np.random.rand() > chk_lc: 
+                return 
         
         if lfol != None: 
             llead, newlfolhd, newlhd = call_lc_helper(lfol, self, curlane.get_connect_left(self.pos)) #better to just store left/right lanes
@@ -847,7 +888,9 @@ class vehicle:
         #route stuff 
         self.route_parameters = routep
         self.route = route
-        self.routemem = route.copy()
+        #do check if route is empty
+        self.routemem = self.route.copy()
+        
         
         
         #if initialize = True, 
@@ -932,7 +975,7 @@ class vehicle:
 
 def downstream_wrapper(speed_fun = None, method = 'speed', congested = True, 
                        mergeside = 'l', merge_anchor_ind = None, target_lane = None, selflane = None, shift = 1,
-                       minacc = -4):
+                       minacc = -2):
     #downstream function -> method of lane, takes in (veh, timeind, dt)
     #and returns action (acceleration) for the vehicle 
     
@@ -956,6 +999,18 @@ def downstream_wrapper(speed_fun = None, method = 'speed', congested = True,
             speed = veh.inv_flow(flow, output_type = 'v', congested = congested)
             return (speed - veh.speed)/dt
         return call_downstream
+    
+    #options - minacc
+    #selflane must be provided
+    elif method == 'free merge': #use free flow method of the vehicle 
+        endanchor = anchor_vehicle(selflane, None)
+        endanchor.pos = selflane.end
+        def free_downstream(self, veh, timeind, dt):
+            acc = veh.call_cf_helper(endanchor, veh.lane, timeind, dt, veh.in_relax)
+            if acc < minacc: 
+                return acc
+            return veh.free_cf(veh.cf_parameters, veh.speed)
+        return free_downstream
     
      #this is meant to give a longitudinal update in congested conditions 
      #when on a bottleneck (on ramp or lane ending) and you have no leader 
@@ -1044,9 +1099,13 @@ def get_inflow_wrapper(speed_fun, inflow_type = 'flow'):
     
     #returns get_inflow function, which accepts timeind and returns the flow at that time
     
+    #give flow series - simple 
     if inflow_type == 'flow':
         def get_inflow(self, timeind):
             return speed_fun(timeind), None
+    #give speed series, we convert to equilibrium flow using the parameters of the next vehicle to be added 
+    #note that if all vehicles have same parameters/length, this is exactly equivalent to the 'flow' method 
+    #(where the speeds correspond to the flows for the eql soln being used)
     elif inflow_type == 'speed':
         def get_inflow(self, timeind):
             spd = speed_fun(timeind)
@@ -1057,6 +1116,9 @@ def get_inflow_wrapper(speed_fun, inflow_type = 'flow'):
                 leadlen = self.newveh.len
             s = self.newveh.get_eql(spd, find = 's')
             return spd / (s + leadlen), spd
+        
+    #in congested type it is similar to the 'speed' method but uses the speed from the anchor.lead instead of 
+    #a speed which is specified a priori. This is basically supposed to add a vehicle with 0 acceleration 
     elif inflow_type == 'congested':
         def get_inflow(self, timeind):
             lead = self.anchor.lead
