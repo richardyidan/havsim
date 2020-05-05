@@ -36,6 +36,19 @@ def IDM_eql(p, v):
     s = ((p[2]+p[1]*v)**2/(1- (v/p[0])**4))**.5
     return s 
 
+def IDM_shift_eql(p, v, shiftp, state):
+    #p = CF parameters
+    #v = velocity 
+    #shiftp = list of deceleration, acceleration parameters. eq'l at v goes to n times of normal, where n is the parameter
+    #state = if state = 'decel' we use shiftp[0] else shiftp[1]
+    if state == 'decel':
+        temp = shiftp[0]**2
+    else:
+        temp = shiftp[1]**2
+        
+    return (temp - 1)/temp*p[3]*(1 - (v/p[0])**4)
+    
+
 
 def mobil(lc_actions, veh, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,
           lfol, llead, rfol, rlead, fol, lead, curlane, userelax_cur = True, userelax_new = False):

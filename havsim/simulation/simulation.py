@@ -487,8 +487,7 @@ def update_veh_lane(veh, oldlane, newlane, timeind, side = None):
 #Overall I doubt there would be much practical difference between this option and the first option unless the timesteps are very long (~10-15 sec) and changes very often (every ~30 seconds)
 def update_change(lc_actions, veh, timeind): 
     
-    #no check for vehicles moving into same gap // TO DO low priority (? this should be part of lane changing model?)
-    #no cooperative tactical components // TO DO
+    #no check for vehicles moving into same gap // TO DO low priority 
     
     #initialization, update lane/road/position and update l/r attributes
     if lc_actions[veh] == 'l':
@@ -866,10 +865,11 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
     #option 2 - you can inherit this class and write your own functions (more work but less restrictive)
     #(also possible that you may use the decorators for your own custom methods)
 class vehicle: 
-    
+    #// TO DO a wrapper for cooperative/tactical acceleration model
+    #// TO DO implementation of adjoint method for cf, relax, shift parameters
     def __init__(self, vehid,curlane, p, lcp,
                  lead = None, fol = None, lfol = None, rfol = None, llead = None, rlead = None,
-                 length = 3, relaxp = None, routep = [30,120], route = [],
+                 length = 3, relaxp = None, routep = [30,120], route = [], shiftp = None, 
                  cfmodel = None, free_cf = None, lcmodel = None, eqlfun = None, eql_kwargs = {},
                  accbounds = [-7,3], maxspeed = 1e4, hdbounds = (0, 1e4)): 
         self.vehid = vehid
@@ -1322,7 +1322,7 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -2
         
             #create next vehicle
             cf_parameters, lc_parameters, kwargs = self.new_vehicle()
-            self.newveh = vehicle(vehid, self, cf_parameters, lc_parameters, None, None, None, None, initialize = False, **kwargs)
+            self.newveh = vehicle(vehid, self, cf_parameters, lc_parameters, **kwargs)
             
             
         return vehid
@@ -1358,10 +1358,6 @@ class lane:
         if new_vehicle != None:
             self.new_vehicle = staticmethod(new_vehicle).__get__(self, lane)
         
-        #todo - 
-        #need function to initialize roads, which will make roadlen dictionary, 
-        #enddist attribute, initialize special vehicles and anchor vehicles 
-        #add roads and roadind attribute, handle routes 
     
     def get_headway(self, veh, lead): 
         #distance from front of vehicle to back of lead
