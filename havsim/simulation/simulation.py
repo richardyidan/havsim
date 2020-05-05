@@ -765,7 +765,7 @@ def invFD_wrapper(eqlfun, eql_type = 'v', spdbounds = (0, 1e4), hdbounds = (0, 1
     
 
 
-def CF_wrapper(cfmodel, acc_bounds = [-7,3]): 
+def CF_wrapper(cfmodel): 
     #acc_bounds controls [lower, upper] bounds on acceleration 
     #assumes a second order model which has inputs of (p, state), where state
     #is a list of all values needed, p is a list of parameters, and
