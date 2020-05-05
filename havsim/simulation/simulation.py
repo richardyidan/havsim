@@ -816,18 +816,48 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
     def call_lc(self, lc_actions, timeind, dt):
         #first determine what situation we are in and which sides we need to check
         l, r = self.lane = self.l, self.r
-        
-        
-        #determine if we want to compute the LC model 
-        if l == 'mandatory' or r == 'mandatory' or self.coop_veh != None or self.in_tactical: 
-            pass
+        if l == None: 
+            if r == None: 
+                return
+            elif r == 'discretionary':
+                lside, rside = False, True
+                chk_cond = False if self.lcside != None else True
+            else: 
+                lside, rside = False, True
+                chk_cond = False
+        elif l == 'discretionary': 
+            if r == None:
+                lside,rside = True, False
+                chk_cond = False if self.lcside != None else True
+            elif r == 'discretionary': 
+                if self.lcside != None: 
+                    chk_cond = False
+                    if self.lcside == 'l': 
+                        lside, rside = True, False
+                    else: 
+                        lside, rside = False, True
+                else: 
+                    chk_cond = True
+                    lside, rside = True, True
+            else: 
+                lside, rside = False, True
+                chk_cond = False
         else: 
+            if r == None: 
+                lside, rside = True, False
+                chk_cond = False
+            elif r == 'discretionary': 
+                lside, rside = True, False
+                chk_cond = False
+                
+        if chk_cond: #decide if we want to evaluate lc model or not - applies to discretionary state when there is no cooperation or tactical positioning
             chk_lc = self.lc_parameters[-1]
             if chk_lc >= 1:
                 pass
             elif np.random.rand() > chk_lc: 
                 return 
-        
+            
+        #next we compute quantities to send to LC model for the required sides 
         if lfol != None: 
             llead, newlfolhd, newlhd = call_lc_helper(lfol, self, curlane.get_connect_left(self.pos)) #better to just store left/right lanes
         else:
@@ -838,6 +868,7 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
         else:
             rlead = newrfolhd = newrhd = None
             
+        #if get_fol option is given to wrapper, it means model requires the follower's quantities as well 
         if get_fol: 
             fol, lead = self.fol, self.lead
             if fol.cf_parameters == None: 
@@ -847,10 +878,10 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
             else: 
                 newfolhd = fol.lane.get_headway(fol, lead)
                 
-            #do model call now 
+            #do model call now for get_fol = True
             lcmodel(self, lc_actions, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt, 
                     lfol, llead, rfol, rlead, fol, lead, curlane, **kwargs)
-        else: 
+        else: #model call signature when get_fol = False
             lcmodel(self, lc_actions, newlfolhd, newlhd, newrfolhd, newrhd, timeind, dt, 
                     lfol, llead, rfol, rlead, curlane, **kwargs)
             
