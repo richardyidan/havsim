@@ -789,21 +789,17 @@ def CF_wrapper(cfmodel, acc_bounds = [-7,3]):
 
 def call_lc_helper(lfol, veh, lcsidelane):
     #does headway calculation for new potential follower lfol (works for either side)
-    #bug with lane used - needs to use correct lane 
-    llead, llane = lfol.lead, lfol.lane
+    llead = lfol.lead
     if llead == None: 
-        newlhd = lcsidelane.dist_to_end(veh)
-        #note in this case lfol will not have its headway updated - 
-        #for mobil this is OK but in general may need an extra headway calculation here 
-        #e.g. lfol.hd = llane.dist_to_end(lfol)
+        newlhd = None
     else: 
         newlhd = lcsidelane.get_headway(veh, llead)
     if lfol.cf_parameters == None:
-        newlfolhd = 0
+        newlfolhd = None
     else: 
-        newlfolhd = llane.get_headway(lfol, veh)
+        newlfolhd = lfol.lane.get_headway(lfol, veh)
     
-    return llead, newlfolhd, newlhd
+    return lfol, llead, newlfolhd, newlhd
         
 
 def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userelax_new = False
@@ -858,32 +854,32 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
                 return 
             
         #next we compute quantities to send to LC model for the required sides 
-        if lfol != None: 
-            llead, newlfolhd, newlhd = call_lc_helper(lfol, self, curlane.get_connect_left(self.pos)) #better to just store left/right lanes
+        if lside: 
+            lfol, llead, newlfolhd, newlhd = call_lc_helper(self.lfol, self, self.llane) #better to just store left/right lanes
         else:
-            llead = newlfolhd = newlhd = None
+            lfol  = llead = newlfolhd = newlhd = None
         
-        if rfol != None: 
-            rlead, newrfolhd, newrhd = call_lc_helper(rfol, self, curlane.get_connect_right(self.pos))
+        if rside: 
+            rfol, rlead, newrfolhd, newrhd = call_lc_helper(self.rfol, self, self.rlane)
         else:
-            rlead = newrfolhd = newrhd = None
+            rfol = rlead = newrfolhd = newrhd = None
             
         #if get_fol option is given to wrapper, it means model requires the follower's quantities as well 
         if get_fol: 
             fol, lead = self.fol, self.lead
             if fol.cf_parameters == None: 
-                newfolhd = 0 
-            elif self.lead == None: 
-                newfolhd = fol.lane.dist_to_end(fol)
+                newfolhd = None 
+            elif lead == None: 
+                newfolhd = None
             else: 
                 newfolhd = fol.lane.get_headway(fol, lead)
                 
             #do model call now for get_fol = True
-            lcmodel(self, lc_actions, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt, 
-                    lfol, llead, rfol, rlead, fol, lead, curlane, **kwargs)
+            lcmodel(self, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt, 
+                    lfol, llead, rfol, rlead, fol, lead, **kwargs)
         else: #model call signature when get_fol = False
-            lcmodel(self, lc_actions, newlfolhd, newlhd, newrfolhd, newrhd, timeind, dt, 
-                    lfol, llead, rfol, rlead, curlane, **kwargs)
+            lcmodel(self, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, timeind, dt, 
+                    lfol, llead, rfol, rlead, **kwargs)
             
     return call_lc
 
