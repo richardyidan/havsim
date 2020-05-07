@@ -15,14 +15,19 @@ import numpy as np
 
 
 path_highd26 = '/Users/nathanbala/Desktop/meng_project/data/highd26.pkl'
+path_reconngsim = '/Users/nathanbala/Desktop/meng_project/data/reconngsim.pkl'
 with open(path_highd26, 'rb') as f:
    data = pickle.load(f)[0]
+# with open(path_reconngsim, 'rb') as f:
+#    data = pickle.load(f)[0]
 
 meas, platooninfo = makeplatoonlist(data,1, False)
 
 
-with open("./data/simhighd_info_speedconvd.pickle", 'rb') as f:
+with open("./simhighd3_info_nlc.pickle", 'rb') as f:
     data = pickle.load(f)
+
+
 
 high_error = []
 low_error = []
