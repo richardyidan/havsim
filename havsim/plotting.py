@@ -2066,7 +2066,7 @@ def selectvehID_v2(data, times, x, lane, veh, vertlist, platoon=None, vert=0):
     # Retrieve meas and platooninfo from data
     meas, platooninfo = makeplatoonlist(data, form_platoons=False)
 
-    if platoon is not None:
+    if platoon != None:
         veh_list = platoon
         xvert = []
         yvert = []
@@ -2180,7 +2180,7 @@ def selectvehID_v2(data, times, x, lane, veh, vertlist, platoon=None, vert=0):
         nonlocal indcounter4
         nonlocal counter4
 
-        spdstd = np.std(spdstd)
+#        spdstd = np.std(spdstd)
         if vehind < len(ax4.lines):  # something behind
             counter4 += -1
             ax4_artist = ax4.plot(counter4, spdstd, 'C0.', picker=5)

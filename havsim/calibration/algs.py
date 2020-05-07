@@ -1029,6 +1029,7 @@ def lanevehlist(data, lane, vehs, meas, platooninfo, needmeas = False):
 def sortveh3(vehlist,lane,meas,platooninfo):
     #third attempt at a platoon ordering algorithm 
     #this one is more hueristic based but should work pretty much always 
+    #[1736.0, 1696.0, 1745.0, 1757.0, 1748.0, 1756.0, 1737.0] wrong order [1757 1737 1748 1756]
     """
     main way to improve this functions 
     
