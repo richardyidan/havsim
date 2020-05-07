@@ -55,7 +55,7 @@ def IDM_shift_eql(p, v, shiftp, state):
 
 
 def mobil( veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,
-          lfol, llead, rfol, rlead, fol, lead, userelax_cur = True, userelax_new = False):
+          userelax_cur = True, userelax_new = False):
     #LC parameters 
     #0 - safety criterion
     #1 - incentive criteria 
@@ -72,13 +72,15 @@ def mobil( veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, 
     
     #calculate cura, fola, newfola
     if not userelax_cur and veh.in_relax: 
-        cura = veh.call_cf_helper(veh.hd, veh.speed, lead, veh.lane, timeind, dt, False)
+        cura = veh.call_cf_helper(veh.hd, veh.speed, veh.lead, veh.lane, timeind, dt, False)
     else: 
         cura = veh.acc #more generally could use a method to return acceleration 
-    fola, newfola = mobil_helper(fol, veh, lead, newfolhd, timeind, dt, userelax_cur, userelax_new)
+    fola, newfola = mobil_helper(veh.fol, veh, veh.lead, newfolhd, timeind, dt, userelax_cur, userelax_new)
     
     #to compute left side: need to compute lfola, newlfola, newla
     if lside: 
+        lfol = veh.lfol
+        llead = lfol.lead
         lfola, newlfola = mobil_helper(lfol, llead, veh, newlfolhd, timeind, dt, userelax_cur, userelax_new)
         
         userelax = userelax_new and veh.in_relax
@@ -88,6 +90,8 @@ def mobil( veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, 
     
     #same for right side
     if rside: 
+        rfol = veh.rfol
+        rlead = rfol.lead
         rfola, newrfola = mobil_helper(rfol, rlead, veh, newrfolhd, timeind, dt, userelax_cur, userelax_new)
         
         userelax = userelax_new and veh.in_relax

@@ -799,7 +799,7 @@ def call_lc_helper(lfol, veh, lcsidelane):
     else: 
         newlfolhd = lfol.lane.get_headway(lfol, veh)
     
-    return lfol, llead, newlfolhd, newlhd
+    return newlfolhd, newlhd
         
 
 def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userelax_new = False
@@ -855,14 +855,14 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
             
         #next we compute quantities to send to LC model for the required sides 
         if lside: 
-            lfol, llead, newlfolhd, newlhd = call_lc_helper(self.lfol, self, self.llane) #better to just store left/right lanes
+            newlfolhd, newlhd = call_lc_helper(self.lfol, self, self.llane) #better to just store left/right lanes
         else:
-            lfol  = llead = newlfolhd = newlhd = None
+            newlfolhd = newlhd = None
         
         if rside: 
-            rfol, rlead, newrfolhd, newrhd = call_lc_helper(self.rfol, self, self.rlane)
+            newrfolhd, newrhd = call_lc_helper(self.rfol, self, self.rlane)
         else:
-            rfol = rlead = newrfolhd = newrhd = None
+            newrfolhd = newrhd = None
             
         #if get_fol option is given to wrapper, it means model requires the follower's quantities as well 
         if get_fol: 
@@ -876,10 +876,10 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
                 
             #do model call now for get_fol = True
             lcmodel(self, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt, 
-                    lfol, llead, rfol, rlead, fol, lead, **kwargs)
+                    **kwargs)
         else: #model call signature when get_fol = False
             lcmodel(self, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, timeind, dt, 
-                    lfol, llead, rfol, rlead, **kwargs)
+                    **kwargs)
             
     return call_lc
 
