@@ -333,7 +333,7 @@ def generate_random_keys(num, meas, platooninfo):
 
 #every 4 batches go ahead and check rmse?
 final_model = model
-val_ids, nlc_len = generate_random_keys(250, meas, platooninfo)
+val_ids, nlc_len = generate_random_keys(250, meas, platooninfo) #generate trajectories for 250 vehicles
 previous_error = float("inf")
 break_loop = False
 for epoch in range(5):
@@ -342,7 +342,7 @@ for epoch in range(5):
         break
     for x, yhat in train_ds:
         i += 1
-        if i % 1000 == 0:
+        if i % 1000 == 0: #every 1000 batches
             error_arr = []
             for vec_id in val_ids:
                 unused, unused, rmse, unused = predict_trajectory(model,vec_id ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, False)
