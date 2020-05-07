@@ -90,10 +90,16 @@ def update_route(veh):
         return False
     curevent = veh.route_events[0]
     if veh.pos > curevent['pos']:
+        
         if curevent['event'] == 'end discretionary': 
-            setattr(veh, curevent['side'],None)
+            side = curevent['side']
+            setattr(veh, side ,None)
+            if veh.lcside == side: #end tactical/coop if necessary 
+                veh.coop_veh = veh.lcside = None
+                
         elif curevent['event'] == 'mandatory': 
             setattr(veh, curevent['side'],'mandatory')
+            veh.lc_urgency = curevent['lc_urgency'] #must always set urgency for mandatory changes
         veh.route_events.pop(0)
         return True
     return False
@@ -159,6 +165,8 @@ def update_lane_helper(veh, curlane, curevent):
         veh.lfol = None
         veh.l = None
         veh.llane = None
+        if veh.lcside == 'l': #end tactical/coop if necessary 
+                veh.coop_veh = veh.lcside = None
     elif curevent['left'] == 'add':
         newllane = curlane.get_connect_left(curevent['pos'])
         merge_anchor = newllane.merge_anchors[curevent['left merge']][0]
@@ -176,6 +184,8 @@ def update_lane_helper(veh, curlane, curevent):
         veh.rfol = None
         veh.r = None
         veh.rlane = None
+        if veh.lcside == 'r': #end tactical/coop if necessary 
+                veh.coop_veh = veh.lcside = None
     elif curevent['right'] == 'add': 
         newrlane  = curlane.get_connect_right(curevent['pos'])
         merge_anchor = newrlane.merge_anchors[curevent['right merge']][0]
@@ -216,14 +226,13 @@ def make_cur_route(p, curlane, nextroadname):
     
     #nothing to handle cases where LC cannot be completed successfully // TO DO medium priority (put necessary info into cur_route dict) 
     ####if you fail to follow your route, you need to be given a new route, and the code which does this can also be used in vehicle.set_state if route = None at initialization####
-    #would need to know latest point when change can take place ('pos' for 'continue' type), 
-    #need to add an attribute for 'merge' type giving this 
+    #would need to know latest point when change can take place ('pos' for 'continue' type or pos[1] for merge type), 
     #in lane changing model, it would need to check if we are getting too close and act accordingly (e.g. slow down) if so 
     #in this function, would need to add events if you miss the change, and in that case you would need to be given a new route 
     
     curroad = curlane.road
     curlaneind = curlane.laneind
-    #position, str, tuple of 2 ints or single int, str, dict for the next road
+    #position or tuple of positions, str, tuple of 2 ints or single int, str, dict for the next road
     pos, change_type, laneind, side, nextroad  = curroad['connect to'][nextroadname][:]
     #roads also have 'name', 'length', 'laneinds', all lanes are values with their indexes as keys 
     
@@ -258,6 +267,7 @@ def make_cur_route(p, curlane, nextroadname):
             
     elif change_type =='merge': #logic is similar and also uses make_route_helper
         templane = curroad[laneind] 
+        pos, endpos = pos[:]
         
         #determine end discretionary event if necessary 
         if side == 'l': 
@@ -270,7 +280,7 @@ def make_cur_route(p, curlane, nextroadname):
                 cur_route[templane].append({'pos': enddisc -p[0] - p[1], 'event':'end discretionary', 'side':'l'})
 
 
-        cur_route[templane].append({'pos': pos, 'event':'mandatory', 'side':side})
+        cur_route[templane].append({'pos': pos, 'event':'mandatory', 'side':side, 'lc_urgency': [pos, endpos - p[0]]})
         
         if curlaneind != laneind:
             cur_route = make_route_helper(p, cur_route, curroad, curlaneind, laneind, pos)
@@ -309,7 +319,7 @@ def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos):
                 cur_route[templane].append({'pos': enddiscpos, 'event': 'end discretionary', 'side': 'l'})
             
             #there is always a mandatory event
-            cur_route[templane].append({'pos': curpos, 'event': 'mandatory', 'side': 'r'})
+            cur_route[templane].append({'pos': curpos, 'event': 'mandatory', 'side': 'r', 'urgency':[curpos, curpos + p[1]]})
             
             #update iteration 
             curind += -1 
@@ -336,7 +346,7 @@ def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos):
                 cur_route[templane].append({'pos': enddiscpos, 'event': 'end discretionary', 'side': 'r'})
                 
             
-            cur_route[templane].append({'pos': curpos, 'event': 'mandatory', 'side': 'l'})
+            cur_route[templane].append({'pos': curpos, 'event': 'mandatory', 'side': 'l', 'urgency':[curpos, curpos + p[1]]})
             
             #update iteration 
             curind += -1 
@@ -515,6 +525,10 @@ def update_change(lc_actions, veh, timeind):
             veh.r = 'discretionary'
         else:
             veh.r = None
+    
+    #update tact/coop components
+    veh.lcside = veh.coop_veh = veh.lc_urgency = None
+    
         
     ######update all leader/follower relationships#####
     
@@ -892,24 +906,43 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
     #option 2 - you can inherit this class and write your own functions (more work but less restrictive)
     #(also possible that you may use the decorators for your own custom methods)
 class vehicle: 
-    #// TO DO a wrapper for cooperative/tactical acceleration model
     #// TO DO implementation of adjoint method for cf, relax, shift parameters
     def __init__(self, vehid,curlane, p, lcp,
                  lead = None, fol = None, lfol = None, rfol = None, llead = None, rlead = None,
-                 length = 3, relaxp = None, routep = [30,120], route = [], shiftp = None, 
+                 length = 3, relaxp = None, routep = [30,120], route = [], shiftp = [.4,2], 
                  cfmodel = None, free_cf = None, lcmodel = None, eqlfun = None, eql_kwargs = {},
                  accbounds = [-7,3], maxspeed = 1e4, hdbounds = (0, 1e4)): 
         self.vehid = vehid
+        self.length = length
         self.lane = curlane
         self.road = curlane.road
 
         #model parameters
         self.cf_parameters = p
-        self.relaxp = relaxp
-        self.length = length
         self.lc_parameters = lcp
+        
+        #relaxation
+        self.relaxp = relaxp
+        self.in_relax = False
+        self.relax = None
+        self.relax_start = None
+        
+        #route parameters
+        self.route_parameters = routep
+        self.route = route
+        # // TO DO check if route is empty
+        self.routemem = self.route.copy()
+        
+        #bounds
         self.minacc, self.maxacc = accbounds[0], accbounds[1]
         self.maxspeed = maxspeed        
+        
+        #cooperative/tactical model
+        self.shiftp = shiftp
+        self.lcside = None
+        self.lc_urgency = None
+        self.coop_veh = None
+        
         
         #leader/follower relationships
         self.lead = lead
@@ -926,19 +959,6 @@ class vehicle:
         self.posmem = []
         self.speedmem = []
         self.relaxmem = []
-        #will want lfol and rfol memory if you want gradient wrt LC parameters, probably need memory for lc output as well 
-        #won't store headway to save a bit of memory
-        
-        #stuff for relaxation
-        self.in_relax = False
-        self.relax = None
-        self.relax_start = None
-        
-        #route stuff 
-        self.route_parameters = routep
-        self.route = route
-        #do check if route is empty
-        self.routemem = self.route.copy()
 
         
         if cfmodel is not None: 
