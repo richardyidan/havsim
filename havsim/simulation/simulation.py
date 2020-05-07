@@ -789,21 +789,17 @@ def CF_wrapper(cfmodel):
 
 def call_lc_helper(lfol, veh, lcsidelane):
     #does headway calculation for new potential follower lfol (works for either side)
-    #bug with lane used - needs to use correct lane 
-    llead, llane = lfol.lead, lfol.lane
+    llead = lfol.lead
     if llead == None: 
-        newlhd = lcsidelane.dist_to_end(veh)
-        #note in this case lfol will not have its headway updated - 
-        #for mobil this is OK but in general may need an extra headway calculation here 
-        #e.g. lfol.hd = llane.dist_to_end(lfol)
+        newlhd = None
     else: 
         newlhd = lcsidelane.get_headway(veh, llead)
     if lfol.cf_parameters == None:
-        newlfolhd = 0
+        newlfolhd = None
     else: 
-        newlfolhd = llane.get_headway(lfol, veh)
+        newlfolhd = lfol.lane.get_headway(lfol, veh)
     
-    return llead, newlfolhd, newlhd
+    return newlfolhd, newlhd
         
 
 def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userelax_new = False
@@ -816,43 +812,74 @@ def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userela
     def call_lc(self, lc_actions, timeind, dt):
         #first determine what situation we are in and which sides we need to check
         l, r = self.lane = self.l, self.r
-        
-        
-        #determine if we want to compute the LC model 
-        if l == 'mandatory' or r == 'mandatory' or self.coop_veh != None or self.in_tactical: 
-            pass
+        if l == None: 
+            if r == None: 
+                return
+            elif r == 'discretionary':
+                lside, rside = False, True
+                chk_cond = False if self.lcside != None else True
+            else: 
+                lside, rside = False, True
+                chk_cond = False
+        elif l == 'discretionary': 
+            if r == None:
+                lside,rside = True, False
+                chk_cond = False if self.lcside != None else True
+            elif r == 'discretionary': 
+                if self.lcside != None: 
+                    chk_cond = False
+                    if self.lcside == 'l': 
+                        lside, rside = True, False
+                    else: 
+                        lside, rside = False, True
+                else: 
+                    chk_cond = True
+                    lside, rside = True, True
+            else: 
+                lside, rside = False, True
+                chk_cond = False
         else: 
+            if r == None: 
+                lside, rside = True, False
+                chk_cond = False
+            elif r == 'discretionary': 
+                lside, rside = True, False
+                chk_cond = False
+                
+        if chk_cond: #decide if we want to evaluate lc model or not - applies to discretionary state when there is no cooperation or tactical positioning
             chk_lc = self.lc_parameters[-1]
             if chk_lc >= 1:
                 pass
             elif np.random.rand() > chk_lc: 
                 return 
-        
-        if lfol != None: 
-            llead, newlfolhd, newlhd = call_lc_helper(lfol, self, curlane.get_connect_left(self.pos)) #better to just store left/right lanes
-        else:
-            llead = newlfolhd = newlhd = None
-        
-        if rfol != None: 
-            rlead, newrfolhd, newrhd = call_lc_helper(rfol, self, curlane.get_connect_right(self.pos))
-        else:
-            rlead = newrfolhd = newrhd = None
             
+        #next we compute quantities to send to LC model for the required sides 
+        if lside: 
+            newlfolhd, newlhd = call_lc_helper(self.lfol, self, self.llane) #better to just store left/right lanes
+        else:
+            newlfolhd = newlhd = None
+        
+        if rside: 
+            newrfolhd, newrhd = call_lc_helper(self.rfol, self, self.rlane)
+        else:
+            newrfolhd = newrhd = None
+            
+        #if get_fol option is given to wrapper, it means model requires the follower's quantities as well 
         if get_fol: 
             fol, lead = self.fol, self.lead
             if fol.cf_parameters == None: 
-                newfolhd = 0 
-            elif self.lead == None: 
-                newfolhd = fol.lane.dist_to_end(fol)
+                newfolhd = None 
+            elif lead == None: 
+                newfolhd = None
             else: 
                 newfolhd = fol.lane.get_headway(fol, lead)
                 
-            #do model call now 
-            lcmodel(self, lc_actions, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt, 
-                    lfol, llead, rfol, rlead, fol, lead, curlane, **kwargs)
-        else: 
-            lcmodel(self, lc_actions, newlfolhd, newlhd, newrfolhd, newrhd, timeind, dt, 
-                    lfol, llead, rfol, rlead, curlane, **kwargs)
+            #do model call now for get_fol = True
+            lcmodel(self, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt, 
+                    **kwargs)
+        else: #model call signature when get_fol = False
+            lcmodel(self, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, timeind, dt, 
+                    **kwargs)
             
     return call_lc
 
