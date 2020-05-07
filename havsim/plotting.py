@@ -1989,7 +1989,8 @@ def selectoscillation(data1, timeint, spacebins, lane=1, use_avg='mean', region_
         if event.key in ['N', 'n']:
             if len(mytoggle_selector.RS.verts) == 4:
                 vertlist.append(mytoggle_selector.RS.verts)
-            selectvehID(data1, times, x, lane, veh, vertlist)
+#            selectvehID(data1, times, x, lane, veh, vertlist)
+            selectvehID_v2(data1, times, x, lane, veh, vertlist)
 
     plt.pcolormesh(X, Y, meanspeeds,
                    cmap=cmap)  # pcolormesh is similar to imshow but is meant for plotting whereas imshow is for actual images
@@ -2037,6 +2038,332 @@ def point2bin(xpoint, ypoint, x, y, x0, y0, xint, yint):
         curybin = 0
 
     return curxbin, curybin
+
+#########################################
+
+def get_all_vehicles_for_lane(meas, platooninfo, lane, start, end):
+    veh_list = []
+    for veh_id in meas:
+        if lane in np.unique(meas[veh_id][:, 7]):
+            if platooninfo[veh_id][2] < start or platooninfo[veh_id][1] > end:
+                continue
+            veh_list.append(veh_id)
+
+    return veh_list
+
+
+def selectvehID_v2(data, times, x, lane, veh, vertlist, platoon=None, vert=0):
+    # data - data in raw form
+    # times, x, lane, veh - these are all outputs from selectoscillation.
+    # vertlist - list of verticies of region, each vertice is a tuple and there should usually be 4 corners.
+    # platoon = None - can either automatically get intial vehicles or you can manually specify which vehicles should be in the initialization
+    # vert = 0 -You can choose which vertice to start centered on.
+
+    # outputs -
+    # plot with 4 subplots, shows the space-time, speed-time, std. dev of speed, wavelet series of vehicles.
+    # interactive plot can add vehicles before/after, select specific vehicles etc.
+
+    # Retrieve meas and platooninfo from data
+    meas, platooninfo = makeplatoonlist(data, form_platoons=False)
+
+    if platoon is not None:
+        veh_list = platoon
+        xvert = []
+        yvert = []
+
+    else:
+        # Get time limit based on vertlist
+        timestamps = []
+        for i in range(4):
+            timestamps.append(vertlist[0][i][0])
+
+        # Sort the list of vehicles based on the given lane
+        all_veh_list = get_all_vehicles_for_lane(meas, platooninfo, lane, min(timestamps), max(timestamps))
+        all_veh_list = sortveh3(all_veh_list, lane, meas, platooninfo)
+        initial_index = len(all_veh_list) // 2
+        veh_list = []
+        veh_list.append(all_veh_list[initial_index])
+
+        xvert = []
+        yvert = []
+
+    left_window_index = initial_index
+    right_window_index = initial_index
+
+    # Initiate plotting
+    fig = plt.figure()
+    ax1 = plt.subplot(2, 2, 1)
+    ax2 = plt.subplot(2, 2, 2)
+    ax3 = plt.subplot(2, 2, 3)
+    ax4 = plt.subplot(2, 2, 4)
+
+    scale = np.arange(15, 100)  # for wavelet transform
+    indcounter = np.asarray([], dtype=np.int64)  # keeps track of which line2D artists correspond to which vehicles (for axis 1);
+    indcounter4 = np.asarray([], dtype=np.int64)  # same thing for axis 4
+    counter4 = 0
+
+    # The centralized dictionary that stores {veh_id -> list of all 4 artists in ax1, ax2, ax3 and ax4}
+    artist_dict = {}
+
+    def plot_ax1(veh, meas, platooninfo, vehind):
+        nonlocal artist_dict
+        nonlocal indcounter
+
+        LCind = generate_LCind(meas[veh], lane)
+
+        x = meas[veh][:, 1]
+        y1 = meas[veh][:, 2]
+        y2 = meas[veh][:, 3]
+        spdstd = np.asarray([])
+        artist_dict[veh] = [None] * 4
+
+        ax1_artist_list = []
+
+        for i in range(len(LCind) - 1):
+            kwargs = {}
+            if meas[veh][LCind[i], 7] != lane:
+                kwargs = {'linestyle': '--', 'alpha': .4}
+            spdstd = np.append(spdstd, y2[LCind[i]:LCind[i + 1]])
+            ax1_artist = ax1.plot(x[LCind[i]:LCind[i + 1]], y1[LCind[i]:LCind[i + 1]], 'C0', picker=5, **kwargs)
+            ax1_artist_list.append(ax1_artist)
+            indcounter = np.append(indcounter, vehind)
+
+        artist_dict[veh][0] = ax1_artist_list
+        spdstd = np.std(spdstd)
+
+        return spdstd
+
+    def plot_ax2(veh, meas, platooninfo):
+        nonlocal artist_dict
+        ax2.cla()
+        LCind = generate_LCind(meas[veh], lane)
+
+        x = meas[veh][:, 1]
+        y2 = meas[veh][:, 3]
+
+        ax2_artist_list = []
+
+        for i in range(len(LCind) - 1):
+            kwargs = {}
+            if meas[veh][LCind[i], 7] != lane:
+                kwargs = {'linestyle': '--', 'alpha': .4}
+            ax2_artist = ax2.plot(x[LCind[i]:LCind[i + 1]], y2[LCind[i]:LCind[i + 1]], 'C0', picker=5, **kwargs)
+            ax2_artist_list.append(ax2_artist)
+
+        artist_dict[veh][1] = ax2_artist_list
+        return
+
+    def plot_ax3(veh, meas, platooninfo):
+        nonlocal artist_dict
+        ax3.cla()
+
+        LCind = generate_LCind(meas[veh], lane)
+
+        x = meas[veh][:, 1]
+        y2 = meas[veh][:, 3]
+        energy = wt(y2, scale)
+
+        ax3_artist_list = []
+
+        for i in range(len(LCind) - 1):
+            kwargs = {}
+            if meas[veh][LCind[i], 7] != lane:
+                kwargs = {'linestyle': '--', 'alpha': .4}
+            ax3_artist = ax3.plot(x[LCind[i]:LCind[i + 1]], energy[LCind[i]:LCind[i + 1]], 'C0', picker=5, **kwargs)
+            ax3_artist_list.append(ax3_artist)
+
+        artist_dict[veh][2] = ax3_artist_list
+        return
+
+    def plot_ax4(veh, meas, platooninfo, vehind, spdstd):
+        nonlocal artist_dict
+        nonlocal indcounter4
+        nonlocal counter4
+
+        spdstd = np.std(spdstd)
+        if vehind < len(ax4.lines):  # something behind
+            counter4 += -1
+            ax4_artist = ax4.plot(counter4, spdstd, 'C0.', picker=5)
+        else:
+            ax4_artist = ax4.plot(vehind + counter4, spdstd, 'C0.', picker=5)
+        artist_dict[veh][3] = ax4_artist
+        indcounter4 = np.append(indcounter4, vehind)
+
+        return
+
+    # Plot the 4 subplots
+    for veh_index, veh in enumerate(veh_list):
+        spdstd = plot_ax1(veh, meas, platooninfo, veh_index)
+        plot_ax2(veh, meas, platooninfo)
+        plot_ax3(veh, meas, platooninfo)
+        plot_ax4(veh, meas, platooninfo, veh_index, spdstd)
+
+    zoomind = None
+    indlist = []
+    indlist4 = None
+    plt.suptitle('Left click on trajectory to select vehicle')
+
+    ax1.plot(xvert, yvert, 'k-', scalex=False, scaley=False, alpha=.4)  # draw box for trajectories
+
+    def on_pick(event):
+        # there is a bug: when there is only one line left, clicking would result in an error
+        nonlocal artist_dict
+        nonlocal zoomind
+        nonlocal indlist
+        nonlocal indlist4
+
+        ax = event.artist.axes;
+        curind = ax.lines.index(event.artist)
+
+        if event.mouseevent.button == 3:  # right click zooms in on wavelet and speed series
+            pass
+        else:  # left click selects the trajectory to begin/end with
+            if indlist4 != None:
+                ax4.lines[indlist4].set_color('C0')
+            if ax == ax1:
+                curvehind = indcounter[curind]
+                for ind, j in enumerate(indcounter4):
+                    if j == curvehind:
+                        ax4.lines[ind].set_color('C1')
+                        break
+                indlist4 = ind
+            if ax == ax4:
+                curvehind = indcounter4[curind]
+                event.artist.set_color('C1')
+                indlist4 = curind
+
+            for i in indlist:  # reset old selection for ax4
+                if i < len(ax1.lines):
+                    ax1.lines[i].set_color('C0')
+
+            for ind, j in enumerate(indcounter):
+                if j == curvehind:
+                    indlist.append(ind)
+                    ax1.lines[ind].set_color('C1')
+
+            veh = veh_list[curvehind]
+            plt.suptitle('Vehicle ID ' + str(veh) + ' selected')
+            plot_ax2(veh, meas, platooninfo)
+            plot_ax3(veh, meas, platooninfo)
+
+            fig.canvas.draw()
+            return
+
+    def key_press(event):
+        nonlocal artist_dict
+        nonlocal veh_list
+        nonlocal indcounter
+        nonlocal indcounter4
+        nonlocal left_window_index
+        nonlocal right_window_index
+
+        if event.key in ['T', 't']:  # whether to show the trajectory box
+            first = True
+            visbool = None
+            ax = event.inaxes
+            for i in ax.lines:
+                if i.get_alpha() != None:
+                    if first:
+                        visbool = i.get_visible()
+                        visbool = not visbool
+                        first = False
+                    i.set_visible(visbool)
+            fig.canvas.draw()
+
+        if event.key in ['P', 'p']:  # print current vehicle list
+            print('current vehicles shown are ' + str(veh_list))
+        if event.key in ['A', 'a']:  # add a vehicle before
+            ax1.lines[-1].remove()  # for study area to be shown
+            ax1.relim()
+
+            if left_window_index > 0:
+                indcounter += 1
+                indcounter4 += 1
+
+                left_window_index += -1
+                new_veh = all_veh_list[left_window_index]
+                veh_list.insert(0, new_veh)
+                spdstd = plot_ax1(new_veh, meas, platooninfo, 0)
+                plot_ax2(new_veh, meas, platooninfo)
+                plot_ax3(new_veh, meas, platooninfo)
+                plot_ax4(new_veh, meas, platooninfo, 0, spdstd)
+
+                ax1.plot(xvert, yvert, 'k-', scalex=False, scaley=False, alpha=.4)
+                plt.draw()
+
+        if event.key in ['Z', 'z']:  # add a vehicle after
+            ax1.lines[-1].remove()  # for study area to be shown
+            ax1.relim()
+
+            if right_window_index < len(all_veh_list) - 1:
+                right_window_index += 1
+                new_veh = all_veh_list[right_window_index]
+                veh_list.append(new_veh)
+                spdstd = plot_ax1(new_veh, meas, platooninfo, len(veh_list) - 1)
+                plot_ax2(new_veh, meas, platooninfo)
+                plot_ax3(new_veh, meas, platooninfo)
+                plot_ax4(new_veh, meas, platooninfo, len(veh_list) - 1, spdstd)
+
+                ax1.plot(xvert, yvert, 'k-', scalex=False, scaley=False, alpha=.4)  # redraw study area
+                plt.draw()
+
+        if event.key in ['D', 'd']:  # remove a vehicle before
+            ax1.lines[-1].remove()  # for study area to be shown
+            ax1.relim()
+
+            if right_window_index > left_window_index:
+                indcounter = np.delete(indcounter, np.where(indcounter == 0))
+                indcounter += -1
+                indcounter4 = np.delete(indcounter4, np.where(indcounter4 == 0))
+                indcounter4 += -1
+                veh_tbr = all_veh_list[left_window_index]
+                left_window_index += 1
+                veh_list.pop(0)
+                ax1_artist_list = artist_dict[veh_tbr][0]
+                for ax1_artist in ax1_artist_list:
+                    for art in ax1_artist:
+                        art.remove()
+                        del art
+
+                ax1.plot(xvert, yvert, 'k-', scalex=False, scaley=False, alpha=.4)  # redraw study area
+                plt.draw()
+
+        if event.key in ['C', 'c']:  # remove a vehicle after
+            ax1.lines[-1].remove()  # for study area to be shown
+            ax1.relim()
+
+            if right_window_index > left_window_index:
+                max_index_ax1 = np.max(indcounter)
+                indcounter = np.delete(indcounter, np.where(indcounter == max_index_ax1))
+                max_index_ax4 = np.max(indcounter4)
+                indcounter4 = np.delete(indcounter4, np.where(indcounter4 == max_index_ax4))
+                veh_tbr = all_veh_list[right_window_index]
+                right_window_index += -1
+                veh_list.pop()
+                ax1_artist_list = artist_dict[veh_tbr][0]
+                for ax1_artist in ax1_artist_list:
+                    for art in ax1_artist:
+                        art.remove()
+                        del art
+
+                ax1.plot(xvert, yvert, 'k-', scalex=False, scaley=False, alpha=.4)  # redraw study area
+                plt.draw()
+
+        if event.key in ['N', 'n']:  # next study area
+            plt.close()
+            selectvehID(data, times, x, lane, veh, vertlist, vert=vert + 1)
+
+        return
+
+    fig.canvas.callbacks.connect('pick_event', on_pick)
+    plt.connect('key_press_event', key_press)
+    return
+
+
+
+
+#########################################
+
 
 
 def selectvehID(data, times, x, lane, veh, vertlist, platoon=None, vert=0):
@@ -2112,6 +2439,7 @@ def selectvehID(data, times, x, lane, veh, vertlist, platoon=None, vert=0):
     # basically we want a list of vehicles which will be added when we add vehicles before, and we need a list of vehicles which will be added when we add after.
     # also there should be some initial vehicles which populate the plots.
     # initialize post and pre vehicle lists
+
     prevehlist, curvehlist, unused = prelisthelper([], [], newvehlist, [], lane, meas, platooninfo)
     postvehlist, curvehlist, unused = postlisthelper([], [], newvehlist, [], lane, meas, platooninfo)
     # initial quick sort of curvehlist just so we know which one is the earliest vehicle

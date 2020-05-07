@@ -14,10 +14,10 @@ from havsim.calibration.helper import makeleadfolinfo, obj_helper
 from havsim.calibration.models import OVM, OVMadjsys, OVMadj
 from havsim.calibration.opt import platoonobjfn_obj, platoonobjfn_objder
 #simulation 
-from havsim.simulation.simulation import eq_circular, simulate_cir, update2nd_cir, update_cir
+#from havsim.simulation.simulation import eq_circular, simulate_cir, update2nd_cir, update_cir
 from havsim.simulation.models import IDM_b3, IDM_b3_eql
 #plotting 
-from havsim.plotting import platoonplot, plotflows, animatevhd, plotvhd, animatevhd_list, animatetraj, meanspeedplot, optplot, selectoscillation, plotformat, selectvehID
+from havsim.plotting import platoonplot, plotflows, animatevhd, plotvhd, animatetraj, meanspeedplot, optplot, selectoscillation, plotformat, selectvehID, selectvehID_v2
 #data processing
 from havsim.calibration.algs import makeplatoonlist
 #%% #load data
@@ -64,7 +64,6 @@ plotvhd(meas,None,platooninfo,platoonlist[50][:4],plot_color_line=True, draw_arr
 
 
 #%%
-
 #example output from simulation module
 #p = [33.33, 1.2, 2, 1.1, 1.5] #parameters for human drivers
 #initstate, auxinfo, roadinfo = eq_circular(p, IDM_b3, update2nd_cir, IDM_b3_eql, 41, length = 2, L = None, v = 15, perturb = 2) #create initial state on road
@@ -86,6 +85,6 @@ times, x, lane, veh = selectoscillation(data,50,20,lane=3)
 
 #option 2 - call selectvehID directly, but need to specify a starting vehicle list and also the rectangular region 
 #gives error? 
-test2 = [[(5562.474476963611, 1476.8050669428), (6311.045414797408, 164.0527611552), (7203.064516129032, 164.0527611552), (6454.493578295235, 1476.8050669428)]]
-test3 = [224.0, 194.0, 244.0, 240.0, 249.0, 255.0, 260.0, 267.0, 257.0] 
-selectvehID(data,times,x,3,veh,test2,test3)
+#test2 = [[(5562.474476963611, 1476.8050669428), (6311.045414797408, 164.0527611552), (7203.064516129032, 164.0527611552), (6454.493578295235, 1476.8050669428)]]
+#test3 = [224.0, 194.0, 244.0, 240.0, 249.0, 255.0, 260.0, 267.0, 257.0]
+#selectvehID(data,times,x,3,veh,test2,test3)
