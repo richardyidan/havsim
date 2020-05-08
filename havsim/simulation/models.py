@@ -55,7 +55,7 @@ def IDM_shift_eql(p, v, shiftp, state):
 
 
 def mobil( veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,
-          userelax_cur = True, userelax_new = False):
+          userelax_cur = True, userelax_new = False, use_coop = True, use_tact = True):
     #LC parameters 
     #0 - safety criterion
     #1 - incentive criteria 
@@ -120,17 +120,18 @@ def mobil( veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, 
         folsafe = newlfola
     
     #determine if LC can be completed, and if not, determine if we want to enter cooperative or tactical states
+    #if wanted to make the function for cooperative/tactical states modular, could return a flag and arguments 
     if lctype == 'discretionary':
         if incentive > p[1]: 
             if selfsafe > p[0] and folsafe > p[0]:
                 lc_actions[veh] = side
             else: 
-                coop_tact_model(veh, newhd, newlcsidehd, folsafe, selfsafe, side, lctype)
+                coop_tact_model(veh, newhd, newlcsidehd, folsafe, selfsafe, side, lctype, use_coop = use_coop, use_tact = use_tact) 
     else: #mandatory state
         if selfsafe > p[0] and folsafe > p[0]:
             lc_actions[veh] = side
         else: 
-            coop_tact_model(veh, newhd, newlcsidehd, folsafe, selfsafe, side, lctype)
+            coop_tact_model(veh, newhd, newlcsidehd, folsafe, selfsafe, side, lctype, use_coop = use_coop, use_tact = use_tact)
         
     return 
     
@@ -205,16 +206,16 @@ def coop_tact_model(veh, newhd, newlcsidehd, folsafe, selfsafe, side, lctype, us
         if coop_veh != None: 
             #2 possible cases here 
             if coop_veh is lcsidefol: 
-                coop_veh.acc += IDM_shift_eql(coop_veh.cf_parameters, coop_veh.speed, coop_veh.shiftp, 'decel')
+                coop_veh.acc += coop_veh.shift_eql(coop_veh.cf_parameters, coop_veh.speed, coop_veh.shiftp, 'decel')
                 tact = True
             else: #check condition for coop_veh to be valid in case where coop_veh = lcsidefol.fol
                 if coop_veh is lcsidefol.fol and newlcsidehd < 0:
-                    coop_veh.acc += IDM_shift_eql(coop_veh.cf_parameters, coop_veh.speed, coop_veh.shiftp, 'decel')
+                    coop_veh.acc += coop_veh.shift_eql(coop_veh.cf_parameters, coop_veh.speed, coop_veh.shiftp, 'decel')
                     if lcsidefol.speed > veh.speed: 
                         tactstate = 'decel'
                     else: 
                         tactstate = 'accel'
-                    veh.acc += IDM_shift_eql(veh.cf_parameters, veh.speed, veh.shiftp, tactstate)
+                    veh.acc += veh.shift_eql(veh.cf_parameters, veh.speed, veh.shiftp, tactstate)
                 else: #cooperation is not valid -> reset
                     veh.lcside = None
                     veh.coop_veh = None
@@ -236,7 +237,7 @@ def coop_tact_model(veh, newhd, newlcsidehd, folsafe, selfsafe, side, lctype, us
                     veh.coop_veh = coop_veh
                     veh.lcside = side
                     #apply cooperation
-                    coop_veh.acc += IDM_shift_eql(coop_veh.cf_parameters, coop_veh.speed, coop_veh.shiftp, 'decel')
+                    coop_veh.acc += coop_veh.shift_eql(coop_veh.cf_parameters, coop_veh.speed, coop_veh.shiftp, 'decel')
                     #apply tactical 
                     if coop_veh is not lcsidefol: #in this case we need to manually apply; otherwise we go to normal tactical model (tact = True)
                         tact = False
@@ -244,7 +245,7 @@ def coop_tact_model(veh, newhd, newlcsidehd, folsafe, selfsafe, side, lctype, us
                             tactstate = 'decel'
                         else:
                             tactstate = 'accel'
-                        veh.acc += IDM_shift_eql(veh.cf_parameters, veh.speed, veh.shiftp, tactstate)
+                        veh.acc += veh.shift_eql(veh.cf_parameters, veh.speed, veh.shiftp, tactstate)
             
             
     elif use_coop and not use_tact:
@@ -252,7 +253,7 @@ def coop_tact_model(veh, newhd, newlcsidehd, folsafe, selfsafe, side, lctype, us
         coop_veh = veh.coop_veh
         if coop_veh != None:
             if coop_veh is lcsidefol and newhd > 0: #conditions for cooperation when there is no tactical
-                coop_veh.acc += IDM_shift_eql(coop_veh.cf_parameters, coop_veh.speed, coop_veh.shiftp, 'decel')
+                coop_veh.acc += coop_veh.shift_eql(coop_veh.cf_parameters, coop_veh.speed, coop_veh.shiftp, 'decel')
             else: #cooperating vehicle not valid -> reset 
                 veh.lcside = None
                 veh.coop_veh = None
@@ -268,7 +269,7 @@ def coop_tact_model(veh, newhd, newlcsidehd, folsafe, selfsafe, side, lctype, us
                     veh.coop_veh = lcsidefol
                     veh.lcside = side
                     #apply cooperation 
-                    lcsidefol.acc += IDM_shift_eql(lcsidefol.cf_parameters, lcsidefol.speed, lcsidefol.shiftp, 'decel')
+                    lcsidefol.acc += lcsidefol.shift_eql(lcsidefol.cf_parameters, lcsidefol.speed, lcsidefol.shiftp, 'decel')
                     
     elif tact or (not use_coop and use_tact):
         #mark side if not already 
@@ -291,7 +292,7 @@ def coop_tact_model(veh, newhd, newlcsidehd, folsafe, selfsafe, side, lctype, us
 #        if tactveh == None: #may need this in very weird edge case where you are at boundary but this is probably just overkill to include
 #            return
         
-        veh.acc += IDM_shift_eql(veh.cf_parameters, veh.speed, veh.shiftp, tactstate)
+        veh.acc += veh.shift_eql(veh.cf_parameters, veh.speed, veh.shiftp, tactstate)
         
         
         

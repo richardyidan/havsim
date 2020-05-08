@@ -9,6 +9,7 @@ houses the main code for running simulations
 import numpy as np 
 import math 
 import scipy.optimize as sc 
+import havsim.simulation.models as hm
     
 def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, dt): 
     #update followers/leaders for all lane changes 
@@ -86,7 +87,7 @@ def update_route(veh):
     #returns True if we make a change, False otherwise
     #expect a list of dictionarys, each dict is an event with keys of pos, event, side 
     #giving the position when the event occurs, event type, and side of the event 
-    if len(veh.lane_events) == 0:
+    if len(veh.route_events) == 0:
         return False
     curevent = veh.route_events[0]
     if veh.pos > curevent['pos']:
@@ -643,274 +644,195 @@ class simulation:
         lc_actions = {}
         
         for veh in self.vehicles: 
-            veh.call_cf(timeind, dt)
+            veh.set_cf(timeind, dt)
             
         for veh in self.vehicles: 
             veh.call_lc(lc_actions, timeind, dt)
             
         #update function goes here 
-        
-def eql_wrapper(eqlfun, eql_type = 'v', tol = .1, spdbounds = (0, 1e4), hdbounds = (0, 1e4), **kwargs):
-    #eqlfun -> fun to wrap, needs call signature like (parameters, input, *args)
+
+def get_eql_helper(veh, x, input_type = 'v', eql_type = 'v', spdbounds = (0, 1e4), hdbounds = (0, 1e4), tol = .1):
+    #veh - vehicle object - needs cf_parameters attribute and eqlfun method
+        #eqlfun has call signature of (cf_parameters, x) and returns a float
+    #x - input, can be either a spsed or headway 
+    #input_type = 'v' if 'v' we input a speed and return a headway; if 's' we input headway and return a speed
     #eql_type = 's' - if 'v', eqlfun takes in velocity and outputs headway. if 's', it takes in headway and outputs velocity
-    #if eql_type = 'both', then eqlfun takes in an additional argument (parameters, input, input_type) and will return the other quantity
-    #bounds = (1e-10, 120) - bounds used when eql_type != find. Should define an interval that the soln is in 
-    #tol = .5 - if need to numerically invert the function, this is the tolerance used 
+    #spdbounds = (0, 1e4), hdbounds = (0, 1e4) - x is projected onto the relevant bounds. 
+    #if eqlfun is inverted, the appropriate bounds are used 
+    #tol = .1 - if need to numerically invert the eqlfun, this is the tolerance used for the solver
     
-    #there can be problems when you try to get the equilibrium for a speed which is not possible, or for a headway 
-    #which is not possible.
-    if eql_type != 'both':
+    if input_type == 'v': 
+        if x < spdbounds[0]: 
+            x = spdbounds[0]
+        elif x > spdbounds[1]:
+            x = spdbounds[1]
+    elif input_type == 's': 
+        if x < hdbounds[0]: 
+            x = hdbounds[0]
+        elif x > hdbounds[1]:
+            x = hdbounds[1]
+    if input_type == eql_type: 
+        return veh.eqlfun(veh.cf_parameters, x)
+    elif input_type != eql_type: 
+        def inveql(y):
+            return x - veh.eqlfun(veh.cf_parameters, y)
         if eql_type == 'v': 
             bracket = spdbounds
         else:
             bracket = hdbounds
-        def get_eql(self, x, input_type = 'v'):
-            if input_type == 'v': 
-                if x < spdbounds[0]: 
-                    x = spdbounds[0]
-                elif x > spdbounds[1]:
-                    x = spdbounds[1]
-            elif input_type == 's': 
-                if x < hdbounds[0]: 
-                    x = hdbounds[0]
-                elif x > hdbounds[1]:
-                    x = hdbounds[1]
-            
-            if input_type == eql_type: 
-                return eqlfun(self.cf_parameters, x)
-            elif input_type != eql_type: 
-                def inveql(y):
-                    return x - eqlfun(self.cf_parameters, y)
-                ans = sc.root_scalar(inveql, bracket = bracket, xtol = tol, method = 'brentq')
-                if ans['converged']: 
-                    return ans['root']
-                else: 
-                    raise RuntimeError('could not invert provided equilibrium function')
-    else:
-        def get_eql(self, x, input_type = 'v'):
-            return eqlfun(self.cf_parameters, x, input_type)
-    
-    return get_eql
-
-#get_flow is currently not needed anywhere in the code, but could be useful to have 
-def FD_wrapper(eqlfun):
-    #returns flow based on provided equilibrium function 
-    def get_flow(self, x, leadlen = None, input_type = 'v'):
-        if leadlen == None: 
-            lead = self.lead 
-            if lead != None: 
-                leadlen = lead.len
-            else:
-                leadlen = self.len
-        if input_type == 'v':
-            s = self.get_eql(x, input_type = input_type)
-            return x / (s + leadlen)
-        elif input_type == 's': 
-            v = self.get_eql(x, input_type = input_type)
-            return v / (s + leadlen)
-    return get_flow
-                
-#solving for the headway/speed given flow must be done numerically, 
-    #and thus has some extra computational costs associated with it. 
-    #if eql_type = 'both', it should be possible to solve for the inverse flow function 
-    #analytically and thus one should just define the inv\_flow method using that 
-
-#there may be errors if you try to invert a flow which is not possible - e.g. wrong units, or simply too large a flow for the vehicle's parameters
-#would be possible to 
-def invFD_wrapper(eqlfun, eql_type = 'v', spdbounds = (0, 1e4), hdbounds = (0, 1e4), tol = .1, ftol = .01, invflowfun = None):
-    #same call signature as eql_wrapper, tol is for headway/speed tolerance, ftol is for flow tolerance 
-    if eql_type != 'both':
-        if eql_type == 'v': 
-            bracket = spdbounds
-        else:
-            bracket = hdbounds
-        def inv_flow(self, x, leadlen = None, output_type = 'v', congested = True):
-            if leadlen == None: 
-                lead = self.lead 
-            if lead != None: 
-                leadlen = lead.len
-            else:
-                leadlen = self.len
-                
-            def maxfun(y):
-                return -self.get_flow(y, leadlen = leadlen, input_type = eql_type)
-            
-            res = sc.minimize_scalar(maxfun, bracket = bracket, tol = ftol)
-            if res['success']:
-                if congested: 
-                    invbounds = (bracket[0], res['x'])
-                else:
-                    invbounds = (res['x'], bracket[1])
-                if -res['fun'] < x: 
-                    print('warning - inputted flow is too large to be achieved')
-                    if output_type == eql_type: 
-                        return res['x']
-                    else: 
-                        return self.get_eql(res['x'], input_type = eql_type)
-            else:
-                raise RuntimeError('could not find maximum flow')
-                
-                
-            if eql_type == 'v':
-                def invfun(y): 
-                    return x - y/(eqlfun(self.cf_parameters, y) + leadlen)
-            elif eql_type == 's':
-                def invfun(y):
-                    return x - eqlfun(self.cf_parameters, y)/(y+leadlen)
-            
-            ans = sc.root_scalar(invfun, bracket = invbounds, xtol = tol, method = 'brentq')
-            
-            if ans['converged']:
-                if output_type == eql_type: 
-                    return ans['root']
-                elif output_type == 's':
-                    return ans['root']/x - leadlen
-                elif output_type == 'v':
-                    return (ans['root']+leadlen)*x
-            else: 
-                raise RuntimeError('could not invert provided equilibrium function')
-    else: 
-        def inv_flow(self, x, leadlen = None, output_type = 'v', congested = True):
-            return invflowfun(x, leadlen, output_type, congested)
-    
-    return inv_flow
-        
-        
-    
-
-
-def CF_wrapper(cfmodel): 
-    #acc_bounds controls [lower, upper] bounds on acceleration 
-    #assumes a second order model which has inputs of (p, state), where state
-    #is a list of all values needed, p is a list of parameters, and
-    #output is a float giving the acceleration 
-    def call_cf_helper(self, hd, spd, lead, curlane, timeind, dt, userelax): 
-        if lead is None: 
-            acc = curlane.call_downstream(self, timeind, dt)
-            
-        else:
-            if userelax:
-                currelax = self.relax[timeind - self.relax_start]
-                hd += currelax #can add check to see if relaxed headway is too small
-                acc = cfmodel(self.cf_parameters, [hd, spd, lead.speed])
-                hd += -currelax
-            else: 
-                acc = cfmodel(self.cf_parameters, [hd, spd, lead.speed])
-            
-        return acc
-    
-    return call_cf_helper
-
-def call_lc_helper(lfol, veh, lcsidelane):
-    #does headway calculation for new potential follower lfol (works for either side)
-    llead = lfol.lead
-    if llead == None: 
-        newlhd = None
-    else: 
-        newlhd = lcsidelane.get_headway(veh, llead)
-    if lfol.cf_parameters == None:
-        newlfolhd = None
-    else: 
-        newlfolhd = lfol.lane.get_headway(lfol, veh)
-    
-    return newlfolhd, newlhd
-        
-
-def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userelax_new = False
-    #lcmodel - model to wrap. Assume it takes as input the vehicle, 
-        #new left follower headway, new left headway, new right follower headway, new right headway, 
-        #new follower headway (if get_fol is True), timeind, dt, *args, **kwargs
-    #get_fol - lc model uses the current follower if True 
-    #kwargs - keyword arguments which are passed to lcmodel 
-    
-    def call_lc(self, lc_actions, timeind, dt):
-        #first determine what situation we are in and which sides we need to check
-        l, r = self.lane = self.l, self.r
-        if l == None: 
-            if r == None: 
-                return
-            elif r == 'discretionary':
-                lside, rside = False, True
-                chk_cond = False if self.lcside != None else True
-            else: 
-                lside, rside = False, True
-                chk_cond = False
-        elif l == 'discretionary': 
-            if r == None:
-                lside,rside = True, False
-                chk_cond = False if self.lcside != None else True
-            elif r == 'discretionary': 
-                if self.lcside != None: 
-                    chk_cond = False
-                    if self.lcside == 'l': 
-                        lside, rside = True, False
-                    else: 
-                        lside, rside = False, True
-                else: 
-                    chk_cond = True
-                    lside, rside = True, True
-            else: 
-                lside, rside = False, True
-                chk_cond = False
+        ans = sc.root_scalar(inveql, bracket = bracket, xtol = tol, method = 'brentq')
+        if ans['converged']: 
+            return ans['root']
         else: 
-            if r == None: 
-                lside, rside = True, False
-                chk_cond = False
-            elif r == 'discretionary': 
-                lside, rside = True, False
-                chk_cond = False
-                
-        if chk_cond: #decide if we want to evaluate lc model or not - applies to discretionary state when there is no cooperation or tactical positioning
-            chk_lc = self.lc_parameters[-1]
-            if chk_lc >= 1:
-                pass
-            elif np.random.rand() > chk_lc: 
-                return 
-            
-        #next we compute quantities to send to LC model for the required sides 
-        if lside: 
-            newlfolhd, newlhd = call_lc_helper(self.lfol, self, self.llane) #better to just store left/right lanes
-        else:
-            newlfolhd = newlhd = None
+            raise RuntimeError('could not invert provided equilibrium function')
         
-        if rside: 
-            newrfolhd, newrhd = call_lc_helper(self.rfol, self, self.rlane)
-        else:
-            newrfolhd = newrhd = None
-            
-        #if get_fol option is given to wrapper, it means model requires the follower's quantities as well 
-        if get_fol: 
-            fol, lead = self.fol, self.lead
-            if fol.cf_parameters == None: 
-                newfolhd = None 
-            elif lead == None: 
-                newfolhd = None
-            else: 
-                newfolhd = fol.lane.get_headway(fol, lead)
-                
-            #do model call now for get_fol = True
-            lcmodel(self, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt, 
-                    **kwargs)
-        else: #model call signature when get_fol = False
-            lcmodel(self, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, timeind, dt, 
-                    **kwargs)
-            
-    return call_lc
+def inv_flow_helper(veh, x, leadlen = None, output_type = 'v', congested = True, eql_type = 'v', spdbounds = (0, 1e4), hdbounds = (0, 1e4), tol = .1, ftol = .01):
+    if leadlen == None: 
+        lead = veh.lead 
+    if lead != None: 
+        leadlen = lead.len
+    else:
+        leadlen = veh.len
 
-#2 options for implementing your own LC model and CF model - 
-    #option 1 - we have decorators for book keeping work for the LC/CF functions, user specifies the model 
-    #and what the vehicle object calls is the decorated model which will handle formatting/bookkeeping issues
-    #the default class will use this design so users can write their own model in a standard format 
-    #and directly feed that in (easier but more restrictive)
+    if eql_type == 'v': 
+        bracket = spdbounds
+    else:
+        bracket = hdbounds
+        
+    def maxfun(y):
+        return -veh.get_flow(y, leadlen = leadlen, input_type = eql_type)
+    res = sc.minimize_scalar(maxfun, bracket = bracket, tol = ftol)
     
-    #option 2 - you can inherit this class and write your own functions (more work but less restrictive)
-    #(also possible that you may use the decorators for your own custom methods)
+    if res['success']:
+        if congested: 
+            invbounds = (bracket[0], res['x'])
+        else:
+            invbounds = (res['x'], bracket[1])
+        if -res['fun'] < x: 
+            print('warning - inputted flow is too large to be achieved')
+            if output_type == eql_type: 
+                return res['x']
+            else: 
+                return veh.get_eql(res['x'], input_type = eql_type)
+    else:
+        raise RuntimeError('could not find maximum flow')
+        
+    if eql_type == 'v':
+        def invfun(y): 
+            return x - y/(veh.eqlfun(veh.cf_parameters, y) + leadlen)
+    elif eql_type == 's':
+        def invfun(y):
+            return x - veh.eqlfun(veh.cf_parameters, y)/(y+leadlen)
+    
+    ans = sc.root_scalar(invfun, bracket = invbounds, xtol = tol, method = 'brentq')
+    
+    if ans['converged']:
+        if output_type == eql_type: 
+            return ans['root']
+        elif output_type == 's':
+            return ans['root']/x - leadlen
+        elif output_type == 'v':
+            return (ans['root']+leadlen)*x
+    else: 
+        raise RuntimeError('could not invert provided equilibrium function')
+    
+def set_lc_helper(veh, chk_lc = 1, get_fol = True):
+    #calculates new headways to pass to lane changing model
+    #veh - vehicle object
+    #chk_lc = 1 - probability of checking lane changing model
+    #get_fol = True - if True, we calculate the headways for the follower
+    
+    #returns 
+    #call_model - True if we are to pass to LC model, False otherwise
+    #(lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd)
+    #where lside/rside are boolean indicating which sides to call model on, rest are headways
+    
+    #first determine what situation we are in and which sides we need to check
+    l, r  = veh.l, veh.r
+    if l == None: 
+        if r == None: 
+            return
+        elif r == 'discretionary':
+            lside, rside = False, True
+            chk_cond = False if veh.lcside != None else True
+        else: 
+            lside, rside = False, True
+            chk_cond = False
+    elif l == 'discretionary': 
+        if r == None:
+            lside,rside = True, False
+            chk_cond = False if veh.lcside != None else True
+        elif r == 'discretionary': 
+            if veh.lcside != None: 
+                chk_cond = False
+                if veh.lcside == 'l': 
+                    lside, rside = True, False
+                else: 
+                    lside, rside = False, True
+            else: 
+                chk_cond = True
+                lside, rside = True, True
+        else: 
+            lside, rside = False, True
+            chk_cond = False
+    else: 
+        if r == None: 
+            lside, rside = True, False
+            chk_cond = False
+        elif r == 'discretionary': 
+            lside, rside = True, False
+            chk_cond = False
+            
+    if chk_cond: #decide if we want to evaluate lc model or not - applies to discretionary state when there is no cooperation or tactical positioning
+        if chk_lc >= 1:
+            pass
+        elif np.random.rand() > chk_lc: 
+            return False, None 
+        
+    #next we compute quantities to send to LC model for the required sides 
+    if lside: 
+        newlfolhd, newlhd = get_new_hd(veh.lfol, veh, veh.llane) #better to just store left/right lanes
+    else:
+        newlfolhd = newlhd = None
+    
+    if rside: 
+        newrfolhd, newrhd = get_new_hd(veh.rfol, veh, veh.rlane)
+    else:
+        newrfolhd = newrhd = None
+        
+    #if get_fol option is given to wrapper, it means model requires the follower's quantities as well 
+    if get_fol: 
+        fol, lead = veh.fol, veh.lead
+        if fol.cf_parameters == None: 
+            newfolhd = None 
+        elif lead == None: 
+            newfolhd = None
+        else: 
+            newfolhd = fol.lane.get_headway(fol, lead)
+        
+    return True, (lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd)
+
+def get_new_hd(lcsidefol, veh, lcsidelane):
+    #does headway calculation for new potential follower lfol (works for either side)
+    #helper functino for set_lc_helper
+    lcsidelead = lcsidefol.lead
+    if lcsidelead == None: 
+        newlcsidehd = None
+    else: 
+        newlcsidehd = lcsidelane.get_headway(veh, lcsidelead)
+    if lcsidefol.cf_parameters == None:
+        newlcsidefolhd = None
+    else: 
+        newlcsidefolhd = lcsidefol.lane.get_headway(lcsidefol, veh)
+    
+    return newlcsidefolhd, newlcsidehd
+
 class vehicle: 
     #// TO DO implementation of adjoint method for cf, relax, shift parameters
     def __init__(self, vehid,curlane, p, lcp,
                  lead = None, fol = None, lfol = None, rfol = None, llead = None, rlead = None,
-                 length = 3, relaxp = None, routep = [30,120], route = [], shiftp = [.4,2], 
-                 cfmodel = None, free_cf = None, lcmodel = None, eqlfun = None, eql_kwargs = {},
+                 length = 3, relaxp = None,  shiftp = [.4,2], coopp = .2, 
+                 routep = [30,120], route = [],
                  accbounds = [-7,3], maxspeed = 1e4, hdbounds = (0, 1e4)): 
         self.vehid = vehid
         self.length = length
@@ -935,10 +857,12 @@ class vehicle:
         
         #bounds
         self.minacc, self.maxacc = accbounds[0], accbounds[1]
-        self.maxspeed = maxspeed        
+        self.maxspeed = maxspeed    
+        self.hdbounds = hdbounds
         
         #cooperative/tactical model
         self.shiftp = shiftp
+        self.coopp = coopp
         self.lcside = None
         self.lc_urgency = None
         self.coop_veh = None
@@ -959,21 +883,84 @@ class vehicle:
         self.posmem = []
         self.speedmem = []
         self.relaxmem = []
-
-        
-        if cfmodel is not None: 
-            self.call_cf_helper = CF_wrapper(cfmodel).__get__(self, vehicle)
-        
-        if free_cf is not None: 
-            self.free_cf = staticmethod(free_cf).__get__(self, vehicle)
+    
             
-        if eqlfun is not None: 
-            self.get_eql = eql_wrapper(eqlfun, spdbounds = (0, maxspeed), hdbounds = hdbounds, **eql_kwargs).__get__(self, vehicle)
-            self.get_flow = FD_wrapper(eqlfun).__get__(self, vehicle)
-            self.inv_flow = invFD_wrapper(eqlfun, spdbounds = (0, maxspeed), hdbounds = hdbounds, **eql_kwargs).__get__(self, vehicle)
+    @staticmethod
+    def cfmodel(p, state):
+    #state = headway, velocity, lead velocity
+    #p = parameters
+    #returns acceleration 
+        return p[3]*(1-(state[1]/p[0])**4-((p[2]+state[1]*p[1]+(state[1]*(state[1]-state[2]))/(2*(p[3]*p[4])**(1/2)))/(state[0]))**2)
             
-        if lcmodel is not None: 
-            self.call_lc = LC_wrapper(lcmodel).__get__(self, vehicle)
+    def get_cf(self, hd, spd, lead, curlane, timeind, dt, userelax): 
+        if lead is None: 
+            acc = curlane.call_downstream(self, timeind, dt)
+            
+        else:
+            if userelax:
+                currelax = self.relax[timeind - self.relax_start]
+                hd += currelax #can add check to see if relaxed headway is too small
+                acc = self.cfmodel(self.cf_parameters, [hd, spd, lead.speed])
+                hd += -currelax
+            else: 
+                acc = self.cfmodel(self.cf_parameters, [hd, spd, lead.speed])
+            
+        return acc
+    
+    def set_cf(self, timeind, dt):
+        self.acc = self.get_cf(self.hd, self.speed, self.lead, self.lane, timeind, dt, self.in_relax)
+        
+    @staticmethod
+    def free_cf(p, spd):
+        return p[3]*(1-(spd/p[0])**4)
+    
+    @staticmethod
+    def eqlfun(p, v):
+        #p = parameters
+        #v - velocity
+        s = ((p[2]+p[1]*v)**2/(1- (v/p[0])**4))**.5
+        return s 
+    
+    def get_eql(self, x, input_type = 'v'):
+        #if input type is 'v', x is a speed and we return a headway s such that (s,v) is an equilibrium solution
+        #if input_type is 's', x is a headway and we return a speed
+        return get_eql_helper(self, x, input_type, self.eql_type, (0, self.maxspeed), self.hdbounds)
+    
+    def get_flow(self, x, leadlen = None, input_type = 'v'):
+        if leadlen == None: 
+            lead = self.lead 
+            if lead != None: 
+                leadlen = lead.len
+            else:
+                leadlen = self.len
+        if input_type == 'v':
+            s = self.get_eql(x, input_type = input_type)
+            return x / (s + leadlen)
+        elif input_type == 's': 
+            v = self.get_eql(x, input_type = input_type)
+            return v / (s + leadlen)
+        
+    def inv_flow(self, x, leadlen = None, output_type = 'v', congested = True):
+        return inv_flow_helper(self, x, leadlen, output_type, congested, self.eql_type, (0, self.maxspeed), self.hdbounds)
+    
+    @staticmethod
+    def shift_eql(p, v, shiftp, state):
+        #p = CF parameters
+        #v = velocity 
+        #shiftp = list of deceleration, acceleration parameters. eq'l at v goes to n times of normal, where n is the parameter
+        #state = if state = 'decel' we use shiftp[0] else shiftp[1]
+        if state == 'decel':
+            temp = shiftp[0]**2
+        else:
+            temp = shiftp[1]**2
+            
+        return (temp - 1)/temp*p[3]*(1 - (v/p[0])**4)
+    
+    def set_lc(self, lc_actions, timeind, dt):
+        call_model, args = set_lc_helper(self, self.lc_parameters[-1])
+        if call_model: 
+            hm.mobil(self, lc_actions, *args, timeind, dt)
+        return
             
     def __hash__(self):
         return hash(self.vehid)
@@ -984,12 +971,10 @@ class vehicle:
     def __ne__(self, other):
         return not(self is other)
     
-    def call_cf(self, timeind, dt):
-        self.action = self.call_cf_helper(self.hd, self.speed, self.lead, self.lane, timeind, dt, self.in_relax)
             
     def update(self, timeind, dt): 
         #bounds on acceleration
-        acc = self.action
+        acc = self.acc
         if acc > self.maxacc: 
             acc = self.maxacc
         elif acc < self.minacc: 
@@ -1088,7 +1073,7 @@ def downstream_wrapper(speed_fun = None, method = 'speed', congested = True,
         endanchor.pos = selflane.end
         def free_downstream(self, veh, timeind, dt):
             hd = veh.lane.get_headway(veh, endanchor)
-            acc = veh.call_cf_helper(hd, veh.speed, endanchor, veh.lane, timeind, dt, veh.in_relax)
+            acc = veh.get_cf(hd, veh.speed, endanchor, veh.lane, timeind, dt, veh.in_relax)
             if acc < minacc: 
                 return acc
             return veh.free_cf(veh.cf_parameters, veh.speed)
@@ -1124,7 +1109,7 @@ def downstream_wrapper(speed_fun = None, method = 'speed', congested = True,
         def call_downstream(self, veh, timeind, dt): 
             if endanchor != None:
                 hd = veh.lane.get_headway(veh, endanchor)
-                acc = veh.call_cf_helper(hd, veh.speed, endanchor, veh.lane, timeind, dt, veh.in_relax)
+                acc = veh.get_cf(hd, veh.speed, endanchor, veh.lane, timeind, dt, veh.in_relax)
                 if acc < minacc: 
                     return acc
             fol = getattr(veh, folside) #first check if we can use your current change side follower
@@ -1259,7 +1244,7 @@ def shifted_speed_inflow(curlane, dt, shift = 1, accel_bound = -2):
         
     if accel_bound is not None: 
         newveh = curlane.newveh
-        acc = newveh.call_cf_helper(hd, spd, lead, curlane, None, dt, False)
+        acc = newveh.get_cf(hd, spd, lead, curlane, None, dt, False)
         if acc > accel_bound: 
             return 0, spd, hd
         else: 
@@ -1289,7 +1274,7 @@ def speed_inflow(curlane, speed_fun, timeind, dt, accel_bound = -2):
         
     if accel_bound is not None: 
         newveh = curlane.newveh
-        acc = newveh.call_cf_helper(hd, spd, lead, curlane, None, dt, False)
+        acc = newveh.get_cf(hd, spd, lead, curlane, None, dt, False)
         if acc > accel_bound: 
             return 0, spd, hd
         else: 
@@ -1391,7 +1376,6 @@ class lane:
         self.connect_left = connect_left
         self.connect_right = connect_right
         self.connect_to = None
-        self.connect_from = None
         
         if downstream != {}:
             self.call_downstream = downstream_wrapper(**downstream).__get__(self, lane)
@@ -1410,7 +1394,7 @@ class lane:
         #distance from front of vehicle to back of lead
         #assumes veh.road = self.road
         hd = lead.pos - veh.pos - lead.length
-        if self.road != lead.road: 
+        if self.road is not lead.road: 
             hd += self.roadlen[lead.road]
         return hd 
     
@@ -1418,7 +1402,7 @@ class lane:
         #distance from front of vehicle to front of lead
         #assumes veh.lane.road = self.road
         dist = lead.pos-veh.pos
-        if self.road != lead.road: 
+        if self.road is not lead.road: 
             dist += self.roadlen[lead.road]
         return dist
     
@@ -1430,10 +1414,6 @@ class lane:
         #used to initialize the new lc side follower/leader when new lanes become available
         #because this is only used when a new lane becomes available, there will always be a follower returned
         #it is possible that the leader is None, or that there is a leader but it can't have veh as a follower. 
-        
-#        if guess == None: #I don't remember what case this is for or if its even still necessary or useful 
-#            return None, None
-#        else: 
         
         if side == 'r':
             checkfol = 'lfol'
@@ -1498,3 +1478,224 @@ def connect_helper(connect, pos):
             out = connect[i][1]
             break
     return out 
+
+
+#def CF_wrapper(cfmodel): 
+#    #acc_bounds controls [lower, upper] bounds on acceleration 
+#    #assumes a second order model which has inputs of (p, state), where state
+#    #is a list of all values needed, p is a list of parameters, and
+#    #output is a float giving the acceleration 
+#    def call_cf_helper(self, hd, spd, lead, curlane, timeind, dt, userelax): 
+#        if lead is None: 
+#            acc = curlane.call_downstream(self, timeind, dt)
+#            
+#        else:
+#            if userelax:
+#                currelax = self.relax[timeind - self.relax_start]
+#                hd += currelax #can add check to see if relaxed headway is too small
+#                acc = cfmodel(self.cf_parameters, [hd, spd, lead.speed])
+#                hd += -currelax
+#            else: 
+#                acc = cfmodel(self.cf_parameters, [hd, spd, lead.speed])
+#            
+#        return acc
+#    
+#    return call_cf_helper
+    
+#def eql_wrapper(eqlfun, eql_type = 'v', tol = .1, spdbounds = (0, 1e4), hdbounds = (0, 1e4), **kwargs):
+#    #eqlfun -> fun to wrap, needs call signature like (parameters, input, *args)
+#    #eql_type = 's' - if 'v', eqlfun takes in velocity and outputs headway. if 's', it takes in headway and outputs velocity
+#    #if eql_type = 'both', then eqlfun takes in an additional argument (parameters, input, input_type) and will return the other quantity
+#    #bounds = (1e-10, 120) - bounds used when eql_type != find. Should define an interval that the soln is in 
+#    #tol = .5 - if need to numerically invert the function, this is the tolerance used 
+#    
+#    if eql_type != 'both':
+#        if eql_type == 'v': 
+#            bracket = spdbounds
+#        else:
+#            bracket = hdbounds
+#        def get_eql(self, x, input_type = 'v'):
+#            if input_type == 'v': 
+#                if x < spdbounds[0]: 
+#                    x = spdbounds[0]
+#                elif x > spdbounds[1]:
+#                    x = spdbounds[1]
+#            elif input_type == 's': 
+#                if x < hdbounds[0]: 
+#                    x = hdbounds[0]
+#                elif x > hdbounds[1]:
+#                    x = hdbounds[1]
+#            
+#            if input_type == eql_type: 
+#                return eqlfun(self.cf_parameters, x)
+#            elif input_type != eql_type: 
+#                def inveql(y):
+#                    return x - eqlfun(self.cf_parameters, y)
+#                ans = sc.root_scalar(inveql, bracket = bracket, xtol = tol, method = 'brentq')
+#                if ans['converged']: 
+#                    return ans['root']
+#                else: 
+#                    raise RuntimeError('could not invert provided equilibrium function')
+#    else:
+#        def get_eql(self, x, input_type = 'v'):
+#            return eqlfun(self.cf_parameters, x, input_type)
+#    
+#    return get_eql
+
+
+#def FD_wrapper(eqlfun):
+#    #returns flow based on provided equilibrium function 
+#    def get_flow(self, x, leadlen = None, input_type = 'v'):
+#        if leadlen == None: 
+#            lead = self.lead 
+#            if lead != None: 
+#                leadlen = lead.len
+#            else:
+#                leadlen = self.len
+#        if input_type == 'v':
+#            s = self.get_eql(x, input_type = input_type)
+#            return x / (s + leadlen)
+#        elif input_type == 's': 
+#            v = self.get_eql(x, input_type = input_type)
+#            return v / (s + leadlen)
+#    return get_flow
+                
+#def invFD_wrapper(eqlfun, eql_type = 'v', spdbounds = (0, 1e4), hdbounds = (0, 1e4), tol = .1, ftol = .01, invflowfun = None):
+#    #same call signature as eql_wrapper, tol is for headway/speed tolerance, ftol is for flow tolerance 
+#    if eql_type != 'both':
+#        if eql_type == 'v': 
+#            bracket = spdbounds
+#        else:
+#            bracket = hdbounds
+#        def inv_flow(self, x, leadlen = None, output_type = 'v', congested = True):
+#            if leadlen == None: 
+#                lead = self.lead 
+#            if lead != None: 
+#                leadlen = lead.len
+#            else:
+#                leadlen = self.len
+#                
+#            def maxfun(y):
+#                return -self.get_flow(y, leadlen = leadlen, input_type = eql_type)
+#            
+#            res = sc.minimize_scalar(maxfun, bracket = bracket, tol = ftol)
+#            if res['success']:
+#                if congested: 
+#                    invbounds = (bracket[0], res['x'])
+#                else:
+#                    invbounds = (res['x'], bracket[1])
+#                if -res['fun'] < x: 
+#                    print('warning - inputted flow is too large to be achieved')
+#                    if output_type == eql_type: 
+#                        return res['x']
+#                    else: 
+#                        return self.get_eql(res['x'], input_type = eql_type)
+#            else:
+#                raise RuntimeError('could not find maximum flow')
+#                
+#                
+#            if eql_type == 'v':
+#                def invfun(y): 
+#                    return x - y/(eqlfun(self.cf_parameters, y) + leadlen)
+#            elif eql_type == 's':
+#                def invfun(y):
+#                    return x - eqlfun(self.cf_parameters, y)/(y+leadlen)
+#            
+#            ans = sc.root_scalar(invfun, bracket = invbounds, xtol = tol, method = 'brentq')
+#            
+#            if ans['converged']:
+#                if output_type == eql_type: 
+#                    return ans['root']
+#                elif output_type == 's':
+#                    return ans['root']/x - leadlen
+#                elif output_type == 'v':
+#                    return (ans['root']+leadlen)*x
+#            else: 
+#                raise RuntimeError('could not invert provided equilibrium function')
+#    else: 
+#        def inv_flow(self, x, leadlen = None, output_type = 'v', congested = True):
+#            return invflowfun(x, leadlen, output_type, congested)
+#    
+#    return inv_flow
+    
+
+#def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userelax_new = False
+#    #lcmodel - model to wrap. Assume it takes as input the vehicle, 
+#        #new left follower headway, new left headway, new right follower headway, new right headway, 
+#        #new follower headway (if get_fol is True), timeind, dt, *args, **kwargs
+#    #get_fol - lc model uses the current follower if True 
+#    #kwargs - keyword arguments which are passed to lcmodel 
+#    
+#    def call_lc(self, lc_actions, timeind, dt):
+#        #first determine what situation we are in and which sides we need to check
+#        l, r  = self.l, self.r
+#        if l == None: 
+#            if r == None: 
+#                return
+#            elif r == 'discretionary':
+#                lside, rside = False, True
+#                chk_cond = False if self.lcside != None else True
+#            else: 
+#                lside, rside = False, True
+#                chk_cond = False
+#        elif l == 'discretionary': 
+#            if r == None:
+#                lside,rside = True, False
+#                chk_cond = False if self.lcside != None else True
+#            elif r == 'discretionary': 
+#                if self.lcside != None: 
+#                    chk_cond = False
+#                    if self.lcside == 'l': 
+#                        lside, rside = True, False
+#                    else: 
+#                        lside, rside = False, True
+#                else: 
+#                    chk_cond = True
+#                    lside, rside = True, True
+#            else: 
+#                lside, rside = False, True
+#                chk_cond = False
+#        else: 
+#            if r == None: 
+#                lside, rside = True, False
+#                chk_cond = False
+#            elif r == 'discretionary': 
+#                lside, rside = True, False
+#                chk_cond = False
+#                
+#        if chk_cond: #decide if we want to evaluate lc model or not - applies to discretionary state when there is no cooperation or tactical positioning
+#            chk_lc = self.lc_parameters[-1]
+#            if chk_lc >= 1:
+#                pass
+#            elif np.random.rand() > chk_lc: 
+#                return 
+#            
+#        #next we compute quantities to send to LC model for the required sides 
+#        if lside: 
+#            newlfolhd, newlhd = call_lc_helper(self.lfol, self, self.llane) #better to just store left/right lanes
+#        else:
+#            newlfolhd = newlhd = None
+#        
+#        if rside: 
+#            newrfolhd, newrhd = call_lc_helper(self.rfol, self, self.rlane)
+#        else:
+#            newrfolhd = newrhd = None
+#            
+#        #if get_fol option is given to wrapper, it means model requires the follower's quantities as well 
+#        if get_fol: 
+#            fol, lead = self.fol, self.lead
+#            if fol.cf_parameters == None: 
+#                newfolhd = None 
+#            elif lead == None: 
+#                newfolhd = None
+#            else: 
+#                newfolhd = fol.lane.get_headway(fol, lead)
+#                
+#            #do model call now for get_fol = True
+#            lcmodel(self, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt, 
+#                    **kwargs)
+#        else: #model call signature when get_fol = False
+#            lcmodel(self, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, timeind, dt, 
+#                    **kwargs)
+#            
+#    return call_lc
