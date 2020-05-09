@@ -1387,7 +1387,7 @@ class lane:
             self.get_inflow = get_inflow_wrapper(**get_inflow).__get__(self, lane)
             
         if new_vehicle != None:
-            self.new_vehicle = staticmethod(new_vehicle).__get__(self, lane)
+            self.new_vehicle = new_vehicle
         
     
     def get_headway(self, veh, lead): 

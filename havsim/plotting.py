@@ -781,9 +781,18 @@ def generate_changetimes(veh, col_index):
 # 	return q, k
 
 
-def calculateflows(meas, spacea, timea, agg, lane = None):
+def calculateflows(meas, spacea, timea, agg, lane = None, method = 'area'):
+    #debugged/refactored by me on 5/9/20
+    #note units will be in whatever data you use e.g. space in units of feet, time in units of .1 seconds for NGSim 
+    #area method (from laval paper), or flow method (count flow into space region, calculate space mean speed, get density from flow/speed)
+    #area method is better
+    
+    #for each space region, value is a list of floats of the value at the correpsonding time interval 
     q = [[] for i in spacea]
     k = [[] for i in spacea]
+    
+    starttime = [i[0,1] for i in meas.values()]
+    starttime = int(min(starttime)) #first time index in data
 
     spacealist = []
     for i in spacea:
@@ -793,7 +802,7 @@ def calculateflows(meas, spacea, timea, agg, lane = None):
     timemin = min(timea)
     timemax = max(timea)
 
-    intervals = []
+    intervals = []  #tuples of time intervals 
     start = timea[0]
     end = timea[1]
     temp1 = start
@@ -804,16 +813,19 @@ def calculateflows(meas, spacea, timea, agg, lane = None):
         temp2 += agg
     intervals.append((temp1, end))
 
-    # ([time frame], [space])
-    regions = [[([], []) for j in intervals] for i in spacea]
 
-    for id in meas:
-        #heuristic for selecting shorter region of data; many trajectories we can potentially ignore
-        alldata = meas[id]
-        alldata = alldata[np.all([alldata[:,1] < timemax, alldata[:,1]>timemin], axis=0)]
-        alldata = alldata[np.all([alldata[:,2] < spacemax, alldata[:,2]>spacemin], axis=0)]
-        if len(alldata) == 0:
-           continue
+    regions = [[([], []) for j in intervals] for i in spacea] 
+    #regions are indexed by space, then time. values are list of (position traveled, time elapsed) (list of float, list of float)
+    
+    flows = [[0 for j in intervals] for i in spacea] #used if method = 'flow', indexed by space, then time, int of how many vehicles enter region
+    for vehid in meas:
+        alldata = meas[vehid]
+#        #heuristic for selecting shorter region of data; many trajectories we can potentially ignore
+#        alldata = meas[vehid]
+#        alldata = alldata[np.all([alldata[:,1] < timemax, alldata[:,1]>timemin], axis=0)]
+#        alldata = alldata[np.all([alldata[:,2] < spacemax, alldata[:,2]>spacemin], axis=0)]
+#        if len(alldata) == 0:
+#           continue
        
         #if lane is given we need to find the segments of data inside the lane
         if lane is not None: 
@@ -826,48 +838,67 @@ def calculateflows(meas, spacea, timea, agg, lane = None):
             indlist = [[0,len(alldata)]]
         
         for i in indlist:
-            data = alldata[i[0]:i[1]] #select only current region of data 
+            data = alldata[i[0]:i[1]] #select only current region of data - #sequential data for a single vehicle in correct lane if applicable
             if len(data) == 0:
                 continue
-            region_contained = []
-            region_data = {}  # key: tid, sid
+#            region_contained = []
+#            region_data = {}  # key: tid, sid
     
             for i in range(len(intervals)):
-                try:
-                    start = max(0, intervals[i][0] - data[0][1])
-                    end = max(0, intervals[i][1] - data[0][1])
-                except:
-                    print("Empty data")
-                start = int(start)
-                end = int(end)
+                start =  int(max(0, intervals[i][0] + starttime - data[0,1])) #indices for slicing data
+                end = int(max(0, intervals[i][1] + starttime - data[0,1])) #its ok if end goes over for slicing - if both zero means no data in current interval
     
                 if start == end:
                     continue
-    
-                dataInterval = data[start:end]
-                spaceInterval = [j[2] for j in dataInterval]
-    
+                curdata = data[start:end]
+                
                 for j in range(len(spacea)):
-                    try:
-                        start = min(bisect.bisect_left(spaceInterval, spacea[j][0]), len(dataInterval)-1)
-                        end = min(bisect.bisect_left(spaceInterval, spacea[j][1]), len(dataInterval)-1)
-                        if start == end:
-                            continue
-                        regions[j][i][0].append(dataInterval[end][1] - dataInterval[start][1])
-                        regions[j][i][1].append(dataInterval[end][2] - dataInterval[start][2])
+                    minspace, maxspace = spacea[j][0], spacea[j][1]
+                    curspacedata = curdata[np.all([curdata[:,2] > minspace, curdata[:,2] < maxspace], axis = 0)]
+                    if len(curspacedata) == 0: 
+                        continue
+                    regions[j][i][0].append(curspacedata[-1,2] - curspacedata[0,2])
+                    regions[j][i][1].append(curspacedata[-1,1] - curspacedata[0,1])
+                    if method == 'flow': 
+                        firstpos, lastpos = curdata[0,2], curdata[-1,2]
+                        if firstpos < spacea[j][0] and lastpos > spacea[j][0]:
+                            flows[j][i] += 1
+                            
+                
+                
+#                dataInterval = data[start:end]
+#                spaceInterval = [j[2] for j in dataInterval]
     
-                    except:
-                        print("out index")
-
-    for i in range(len(regions)):
-        for j in range(len(regions[0])):
-            area = (spacea[i][1] - spacea[i][0]) * (intervals[j][1] - intervals[j][0])
-            q[i].append(sum(regions[i][j][1]) / area)
-            k[i].append(sum(regions[i][j][0]) / area)
+#                for j in range(len(spacea)):
+#                    try:
+#                        start = min(bisect.bisect_left(spaceInterval, spacea[j][0]), len(dataInterval)-1)
+#                        end = min(bisect.bisect_left(spaceInterval, spacea[j][1]), len(dataInterval)-1)
+#                        if start == end:
+#                            continue
+#                        regions[j][i][0].append(dataInterval[end][1] - dataInterval[start][1])
+#                        regions[j][i][1].append(dataInterval[end][2] - dataInterval[start][2])
+#    
+#                    except:
+#                        print("out index")
+    if method == 'area':
+        for i in range(len(spacea)):
+            for j in range(len(intervals)):
+                area = (spacea[i][1] - spacea[i][0]) * (intervals[j][1] - intervals[j][0])
+                q[i].append(sum(regions[i][j][0]) / area)
+                k[i].append(sum(regions[i][j][1]) / area)
+    elif method == 'flow': 
+        for i in range(len(spacea)):
+            for j in range(len(intervals)):
+                q[i].append(flows[i][j])
+                try:
+                    k[i].append(sum(regions[i][j][0]) / sum(regions[i][j][1]))
+                except: 
+                    k[i].append(0) #division by zero when region is empty 
+                
     return q, k
 
 
-def plotflows(meas, spacea, timea, agg, type='FD', FDagg=None, lane = None):
+def plotflows(meas, spacea, timea, agg, type='FD', FDagg=None, lane = None, method = 'area'):
     """
 	aggregates microscopic data into macroscopic quantities based on Edie's generalized definitions of traffic variables
     
@@ -907,7 +938,7 @@ def plotflows(meas, spacea, timea, agg, type='FD', FDagg=None, lane = None):
         temp2 += agg
     intervals.append((temp1, end))
 
-    q, k = calculateflows(meas, spacea, timea, agg, lane = lane)
+    q, k = calculateflows(meas, spacea, timea, agg, lane = lane, method = method)
     time_sequence = []
     time_sequence_for_line = []
 

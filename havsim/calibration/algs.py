@@ -784,7 +784,9 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
     
     #this runs makeplatooninfo and makeplatoon on the data, returning the measurements (meas), information on each vehicle (platooninfo), 
     #and the list of platoons to calibrate 
-	
+    """
+	this function is slow - need to profile and optimize
+    """
 	#inputs -
 	# data - data in numpy format with correct indices 
 	# n = 1 - specified size of platoons to form 
@@ -1027,6 +1029,12 @@ def lanevehlist(data, lane, vehs, meas, platooninfo, needmeas = False):
         return sortedvehlist
 
 def sortveh3(vehlist,lane,meas,platooninfo):
+    """
+    better sorting logic - 
+    instead of always using distances, try to first use ordering (only possible when circular dependency does not exist)
+    then can use distances only for circular dependencies or other edge cases. 
+    this can still fail in some rare edge cases
+    """
     #third attempt at a platoon ordering algorithm 
     #this one is more hueristic based but should work pretty much always 
     """
