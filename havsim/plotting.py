@@ -366,6 +366,7 @@ def plotColorLines(X, Y, SPEED, speed_limit, colormap = 'speeds', ind = 0):
     norm = plt.Normalize(speed_limit[0], speed_limit[1])
     if colormap =='speeds':
         lc = LineCollection(segments, cmap=palettable.colorbrewer.diverging.RdYlGn_4.mpl_colormap, norm=norm)
+        lc.set_linewidth(1)
     elif colormap =='times': 
         cmap_list = [palettable.colorbrewer.sequential.Blues_9.mpl_colormap, palettable.colorbrewer.sequential.Oranges_9.mpl_colormap, 
                      palettable.colorbrewer.sequential.Greens_9.mpl_colormap, palettable.colorbrewer.sequential.Greys_9.mpl_colormap]
@@ -373,11 +374,11 @@ def plotColorLines(X, Y, SPEED, speed_limit, colormap = 'speeds', ind = 0):
 #        lc = LineCollection(segments, cmap=plt.get_cmap('viridis'), norm=norm)
         if ind > len(cmap_list)-1:
             ind = len(cmap_list)-1
-        lc = LineCollection(segments, cmap=cmap_list[ind], norm=norm)
+        lc = LineCollection(segments, cmap=cmap_list[ind], norm=norm) 
+        lc.set_linewidth(1)
         
 #    lc = LineCollection(segments, cmap=cm.get_cmap('RdYlBu'), norm=norm)
     lc.set_array(c)
-    lc.set_linewidth(1)
     line = axs.add_collection(lc)
     return line
 
@@ -1016,7 +1017,7 @@ def plotspeed(meas1, sim1, platooninfo1, my_id, fulltraj=False, delay=0, h=.1, n
 
     return
 
-def plotvhd(meas, sim, platooninfo, vehicle_id, draw_arrow=False, arrow_interval=20, effective_headway=False, rp=None, h=.1,
+def plotvhd(meas, sim, platooninfo, vehicle_id, draw_arrow=False, arrow_interval=10, effective_headway=False, rp=None, h=.1,
             datalen=9, timerange=[None, None], lane=None, delay=0, newfig=True, plot_color_line=False):
     # draw_arrow = True: draw arrows (indicating direction) along with trajectories; False: plot the trajectories only
     # effective_headway = False - if True, computes the relaxation amounts using rp, and then uses the headway + relaxation amount to plot instead of just the headway
@@ -1062,7 +1063,10 @@ def plotvhd(meas, sim, platooninfo, vehicle_id, draw_arrow=False, arrow_interval
 
     if draw_arrow:
         for art in artist_list:
-            add_arrow(art[0], arrow_interval)
+            if plot_color_line: 
+                add_arrow(art, arrow_interval, plot_color_line = plot_color_line)
+            else:
+                add_arrow(art[0], arrow_interval)
 
     return
 
@@ -1129,12 +1133,13 @@ def plot_one_vehicle(x_coordinates, y_coordinates, timestamps, lane_numbers, tar
             # Check if should do color line plotting
             if plot_color_line:
                 lines = plotColorLines(x_coordinates[temp_start:index], y_coordinates[temp_start:index], timestamps[temp_start:index], [start- 100, end+10], colormap = 'times', ind = count)
+                artist_list.append((lines, [start-100, end+10]))
             else:
                 kwargs = {}
                 # Check if lane changed as well, if yes, plot opaque lines instead
                 if lane_numbers[temp_start] != target_lane and target_lane is not None:
                     kwargs = {'alpha': opacity}  # .4 opacity (60% see through)
-                art = plt.plot(x_coordinates[temp_start:index], y_coordinates[temp_start:index], label=label, color=color, **kwargs)
+                art = plt.plot(x_coordinates[temp_start:index], y_coordinates[temp_start:index], label=label, color=color, linewidth = 1.2, **kwargs)
                 artist_list.append(art)
 
             temp_start = index
@@ -1142,11 +1147,12 @@ def plot_one_vehicle(x_coordinates, y_coordinates, timestamps, lane_numbers, tar
     # Plot the very last set, if there is one
     if plot_color_line:
         lines = plotColorLines(x_coordinates[temp_start:], y_coordinates[temp_start:], timestamps[temp_start:], [start-100, end+10], colormap = 'times', ind = count)
+        artist_list.append((lines, [start-100, end+10]))
     else:
         kwargs = {}
         if lane_numbers[temp_start] != target_lane and target_lane is not None:
             kwargs = {'alpha': opacity}  # .4 opacity (60% see through)
-        art = plt.plot(x_coordinates[temp_start:], y_coordinates[temp_start:], label=label, color=color, **kwargs)
+        art = plt.plot(x_coordinates[temp_start:], y_coordinates[temp_start:], label=label, color=color, linewidth = 1.2, **kwargs)
         artist_list.append(art)
     return artist_list
 
@@ -1161,7 +1167,7 @@ def organize_legends():
             newHandles.append(handle)
     plt.legend(newHandles, newLabels)
 
-def add_arrow(line, arrow_interval=20, direction='right', size=15, color=None):
+def add_arrow(line, arrow_interval=20, direction='right', size=15, color=None, plot_color_line = False):
     """
     add an arrow to a line.
 
@@ -1171,13 +1177,41 @@ def add_arrow(line, arrow_interval=20, direction='right', size=15, color=None):
     direction:      'left' or 'right'
     size:           size of the arrow in fontsize points
     color:          if None, line color is taken.
+    plot_color_line = True - if True, line is a tuple of (line collection object, norm) not line2d object
     """
-    if color is None:
-        color = line.get_color()
-
-    xdata = line.get_xdata()
-    ydata = line.get_ydata()
+    if plot_color_line: 
+        line, norm = line[:]
+        
+        my_cmap = line.get_cmap()
+        colorarray = line.get_array()
+        
+        def color_helper(index):
+            myint = (colorarray[index]-1 - norm[0])/(norm[1] - norm[0]+1)
+            return my_cmap(myint)
+        
+        temp = line.get_segments()
+        xdata = [temp[0][0][0]]
+        ydata = [temp[0][0][1]]
+        for i in temp: 
+            xdata.append(i[1][0])
+            ydata.append(i[1][1])
+            
+    else:
+        if color == None:
+            color = line.get_color()
+    
+        xdata = line.get_xdata()
+        ydata = line.get_ydata()
+        
+        def color_helper(*args):
+            return color
     curdist = 0
+    line.axes.annotate('',
+                xytext=(xdata[0], ydata[0]),
+                xy=(xdata[1], ydata[1]),
+                arrowprops=dict(arrowstyle="->", color=color_helper(0)),
+                size=size
+            )
     for i in range(len(xdata)-1):
         curdist += ((xdata[i+1] - xdata[i])**2 + (ydata[i+1] - ydata[i])**2 )**.5
         if curdist > arrow_interval:
@@ -1191,11 +1225,10 @@ def add_arrow(line, arrow_interval=20, direction='right', size=15, color=None):
             end_ind = start_ind + 1
 #            else:
 #                end_ind = start_ind - 1
-    
             line.axes.annotate('',
                 xytext=(xdata[start_ind], ydata[start_ind]),
                 xy=(xdata[end_ind], ydata[end_ind]),
-                arrowprops=dict(arrowstyle="->", color=color),
+                arrowprops=dict(arrowstyle="->", color=color_helper(start_ind)),
                 size=size
             )
             
