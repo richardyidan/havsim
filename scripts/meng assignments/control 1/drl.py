@@ -119,11 +119,11 @@ class PolicyModel2(tf.keras.Model):
 class PolicyModel3(tf.keras.Model):
   def __init__(self, num_actions, num_hiddenlayers = 2, num_neurons = 32, activationlayer = kl.LeakyReLU()):
     super().__init__('mlp_policy')
-    self.hidden1 = kl.Dense(560, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.15)) #hidden layer for actions (policy)
+    self.hidden1 = kl.Dense(560, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.13)) #hidden layer for actions (policy)
     self.norm1 = kl.BatchNormalization()
-    self.hidden11 = kl.Dense(270, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.15))
+    self.hidden11 = kl.Dense(270, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.13))
     self.norm11 = kl.BatchNormalization()
-    self.hidden111 = kl.Dense(num_actions*10, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.15))
+    self.hidden111 = kl.Dense(num_actions*10, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.13))
     self.norm111 = kl.BatchNormalization()
     # Logits are unnormalized log probabilities
     self.logits = kl.Dense(num_actions, name = 'policy_logits')
@@ -208,11 +208,11 @@ class ValueModel3(tf.keras.Model):
   def __init__(self, num_hiddenlayers = 3, num_neurons=64, activationlayer = kl.ReLU()):
     super().__init__('mlp_policy')
     self.activationlayer = activationlayer
-    self.hidden2 = kl.Dense(560, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.15)) #hidden layer for state-value
+    self.hidden2 = kl.Dense(560, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.13)) #hidden layer for state-value
     self.norm2 = kl.BatchNormalization()
-    self.hidden22 = kl.Dense(52, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.15))
+    self.hidden22 = kl.Dense(52, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.13))
     self.norm22 = kl.BatchNormalization()
-    self.hidden222 = kl.Dense(5, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.15))
+    self.hidden222 = kl.Dense(5, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.13))
     self.norm222 = kl.BatchNormalization()
     
        
@@ -254,7 +254,7 @@ class ValueModelLinearBaseline(tf.keras.Model):
     return tf.squeeze(value, axis=-1)
     
 class ACagent:
-    def __init__(self,policymodel, valuemodel, data_sz = 256, batch_sz=64,  lr = 0.000105, entropy_const = 1e-6, epochs = 10):
+    def __init__(self,policymodel, valuemodel, data_sz = 256, batch_sz=64,  lr = 0.000105, entropy_const = 5e-7, epochs = 20):
         #self.model = model
         self.policymodel = policymodel
         self.valuemodel = valuemodel
@@ -332,7 +332,7 @@ class ACagent:
         data_sz = env.simlen * numeps if by_eps else self.data_sz
         if nTDsteps < 0:
             nTDsteps = data_sz
-        statemem = np.empty((data_sz,env.statememdim))
+        statemem = np.empty((data_sz,env.state_dim))
         rewards = np.empty((data_sz))
         values = np.empty((data_sz))
         actions = np.empty(data_sz)
@@ -351,7 +351,7 @@ class ACagent:
             curindex = 0 #keeps track of index for start of current episode
             #(or if episode is continueing from previous batch, curindex = 0)
             
-            firstdone = -1 #bug here? 
+            firstdone = -1
             gammafactor = self.counter
             
             for bstep in range(data_sz):
@@ -451,11 +451,12 @@ class circ_singleav: #example of single AV environment
         initstate, auxinfo, roadinfo = eq_circular(p, IDM_b3, update2nd_cir, 
                                                    IDM_b3_eql, 41, length = 2, L = None, v = 15, perturb = 2) #create initial state on road
         sim, curstate, auxinfo = simulate_cir(initstate, auxinfo,roadinfo, update_cir, timesteps = 25000, dt = .25)
+        del sim 
         vlist = {i: curstate[i][1] for i in curstate.keys()}
         avid = min(vlist, key=vlist.get)
         
         #for simulation backend
-        self.initstate = initstate
+        self.initstate = curstate
         self.auxinfo = auxinfo
         self.auxinfo[avid][6] = NNhelper
         self.roadinfo = roadinfo
@@ -470,7 +471,7 @@ class circ_singleav: #example of single AV environment
         #stuff for building states (len self.mem+1 tuple of past states)
         self.paststates = [] #holds sequence of states
         self.statecnt = 0
-        self.statememdim = (self.mem+1)*5
+        self.state_dim = (self.mem)*5
 
         #normalization for state
         self.hd_m = 1/(50 - 0)
@@ -496,18 +497,17 @@ class circ_singleav: #example of single AV environment
 
     def get_state(self, curstate):
         #curstate is the state for the simulation backend, get_state converts curstate to input for NN models
-        extend_seq = ((curstate[self.avid][1]+self.spd_c)*self.spd_m, 
+        state = [(curstate[self.avid][1]+self.spd_c)*self.spd_m, 
                       (curstate[self.avlead][1]+self.spd_c)*self.spd_m, 
                       (curstate[self.avid][2]+self.hd_c)*self.hd_m, 
                       (curstate[self.avfol][1]+self.spd_c)*self.spd_m, 
-                      (curstate[self.avfol][2]+self.hd_c)*self.hd_m 
-                      )
+                      (curstate[self.avfol][2]+self.hd_c)*self.hd_m ]
         
-        self.paststates.extend(extend_seq)
+        self.paststates.extend(state)
         if self.counter < self.mem:
-            avstate = extend_seq * int(self.mem + 1)
+            avstate = self.paststates + state*int(self.mem -self.counter)
         else:
-            avstate = self.paststates[-self.statememdim:]
+            avstate = self.paststates[-self.state_dim:]
         
         return np.asarray([avstate])
     
@@ -606,7 +606,7 @@ class gym_env:
     def __init__(self, env, simlen = 500):
         self.env = env
         self.initstate = self.env.reset()
-        self.statememdim = self.initstate.shape[0]
+        self.state_dim = self.initstate.shape[0]
         self.simlen = simlen
         
     def reset(self):
