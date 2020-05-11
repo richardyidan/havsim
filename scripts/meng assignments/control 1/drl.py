@@ -119,11 +119,11 @@ class PolicyModel2(tf.keras.Model):
 class PolicyModel3(tf.keras.Model):
   def __init__(self, num_actions, num_hiddenlayers = 2, num_neurons = 32, activationlayer = kl.LeakyReLU()):
     super().__init__('mlp_policy')
-    self.hidden1 = kl.Dense(560, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.1)) #hidden layer for actions (policy)
+    self.hidden1 = kl.Dense(560, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.15)) #hidden layer for actions (policy)
     self.norm1 = kl.BatchNormalization()
-    self.hidden11 = kl.Dense(270, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+    self.hidden11 = kl.Dense(270, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.15))
     self.norm11 = kl.BatchNormalization()
-    self.hidden111 = kl.Dense(num_actions*10, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+    self.hidden111 = kl.Dense(num_actions*10, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.15))
     self.norm111 = kl.BatchNormalization()
     # Logits are unnormalized log probabilities
     self.logits = kl.Dense(num_actions, name = 'policy_logits')
@@ -208,11 +208,11 @@ class ValueModel3(tf.keras.Model):
   def __init__(self, num_hiddenlayers = 3, num_neurons=64, activationlayer = kl.ReLU()):
     super().__init__('mlp_policy')
     self.activationlayer = activationlayer
-    self.hidden2 = kl.Dense(560, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.1)) #hidden layer for state-value
+    self.hidden2 = kl.Dense(560, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.15)) #hidden layer for state-value
     self.norm2 = kl.BatchNormalization()
-    self.hidden22 = kl.Dense(52, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+    self.hidden22 = kl.Dense(52, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.15))
     self.norm22 = kl.BatchNormalization()
-    self.hidden222 = kl.Dense(5, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+    self.hidden222 = kl.Dense(5, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.15))
     self.norm222 = kl.BatchNormalization()
     
        
@@ -254,7 +254,7 @@ class ValueModelLinearBaseline(tf.keras.Model):
     return tf.squeeze(value, axis=-1)
     
 class ACagent:
-    def __init__(self,policymodel, valuemodel, batch_sz=32*4,  lr = 0.00705, entropy_const = 1e-5):
+    def __init__(self,policymodel, valuemodel, data_sz = 256, batch_sz=64,  lr = 0.000105, entropy_const = 1e-6, epochs = 10):
         #self.model = model
         self.policymodel = policymodel
         self.valuemodel = valuemodel
@@ -269,7 +269,9 @@ class ACagent:
         
         
         self.gamma = 1 #discounting
+        self.data_sz = data_sz
         self.batch_sz = batch_sz #batch size
+        self.epochs = epochs
         self.entropy_const = entropy_const #constant for entropy maximization term in logit loss function
         self.logit2logprob = kls.SparseCategoricalCrossentropy(from_logits=True) #tensorflow built in converts logits to log probability 
         
@@ -313,7 +315,7 @@ class ACagent:
         #updates - number of times we will call model.fit. This is the number of iterations of the outer loop. 
            #before the first update, the environment is reset. after that, the environment is only reset if done = True is returned 
         #by_eps = False - if True, we generate entire episodes at a time. 
-             #If False, we generate self.batch_sz steps at a time
+             #If False, we generate self.data_sz steps at a time
         #numeps = 1 - if by_eps = True, numeps is the number of entire episodes generated
         #nTDsteps = 5 - number of steps used for temporal difference errors (also known as advantages)
             #if nTDsteps = -1, then the maximum number of steps possible is used 
@@ -322,34 +324,37 @@ class ACagent:
         
         #returns - ep_rewards, total (undiscounted) rewards for all complete episodes 
         
-        
+        #initialize
         curstate = self.reset(env)
-        leftover = 0
+        leftover = 0 #leftover has sum of undiscounted rewards from an unfinished episode in previous batch 
         
-        batch_sz = env.simlen * numeps if by_eps else self.batch_sz
+        #memory
+        data_sz = env.simlen * numeps if by_eps else self.data_sz
         if nTDsteps < 0:
-            nTDsteps = batch_sz
-        statemem = np.empty((batch_sz,env.statememdim))
-        rewards = np.empty((batch_sz))
-        values = np.empty((batch_sz))
-        actions = np.empty(batch_sz)
-        dones = np.empty((batch_sz))
+            nTDsteps = data_sz
+        statemem = np.empty((data_sz,env.statememdim))
+        rewards = np.empty((data_sz))
+        values = np.empty((data_sz))
+        actions = np.empty(data_sz)
+        dones = np.empty((data_sz))
         
+        #output
         ep_rewards = []
         ep_lens = []
         
         action,value = self.action_value(curstate)
         for i in tqdm(range(updates)):# for i in tqdm(range(updates)):
             
-            batchlen = 0 #batchlen keeps track of how many steps are in inner loop
+            batchlen = 0 #batchlen keeps track of how many steps are in inner loop. batchlen = bstep + 1
             #(self.counter keeps track of how many steps since start of most recent episode)
-            epsdone = 0
+            epsdone = 0 #keeps track of number of episodes simulated
             curindex = 0 #keeps track of index for start of current episode
+            #(or if episode is continueing from previous batch, curindex = 0)
             
             firstdone = -1 #bug here? 
             gammafactor = self.counter
             
-            for bstep in range(batch_sz):
+            for bstep in range(data_sz):
                 statemem[bstep] = curstate
                 nextstate, reward, done = env.step(action, False)
                 nextaction, nextvalue = self.action_value(nextstate)
@@ -384,10 +389,8 @@ class ACagent:
             TDerrors = self._TDerrors(rewards[:batchlen], values[:batchlen], dones[:batchlen], nextvalue, gamma_adjust, nTDsteps)
             TDacc = np.reshape(np.append(TDerrors, actions[:batchlen]), (batchlen,2), order = 'F')
         
-#            self.policymodel.fit(statemem[:batchlen,:], TDacc)
-#            self.valuemodel.fit(statemem[:batchlen,:], TDerrors)
-            self.policymodel.train_on_batch(statemem[:batchlen,:], TDacc)
-            self.valuemodel.train_on_batch(statemem[:batchlen,:], TDerrors)
+            self.policymodel.fit(statemem[:batchlen,:], TDacc, batch_size = self.batch_sz, epochs = self.epochs, verbose = 0)
+            self.valuemodel.fit(statemem[:batchlen,:], TDerrors, batch_size = self.batch_sz, epochs = self.epochs, verbose = 0)
             
 
         return ep_rewards, ep_lens
@@ -506,7 +509,7 @@ class circ_singleav: #example of single AV environment
         else:
             avstate = self.paststates[-self.statememdim:]
         
-        return np.asarray(avstate)
+        return np.asarray([avstate])
     
     def get_acceleration(self,action,curstate):
         #action from NN gives a scalar, we convert it to the quantized acceleration
