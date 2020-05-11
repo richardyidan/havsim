@@ -28,8 +28,9 @@ except:
 
 
 import havsim
-from havsim.simulation.simulationold2 import simulate_step, update_cir
+from havsim.simulation.simulationold2 import update2nd_cir, eq_circular, simulate_cir, simulate_step, update_cir
 from havsim.plotting import plotformat, platoonplot
+from havsim.simulation.models import  IDM_b3, IDM_b3_eql
 
 
 #to start we will just use a quantized action space since continuous actions is more complicated
@@ -78,15 +79,15 @@ class PolicyModel2(tf.keras.Model):
   def __init__(self, num_actions, num_hiddenlayers = 2, num_neurons = 32, activationlayer = kl.LeakyReLU()):
     super().__init__('mlp_policy')
     self.activationlayer = activationlayer
-    self.hidden1 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.01)) #hidden layer for actions (policy)
+    self.hidden1 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.1)) #hidden layer for actions (policy)
     self.norm1 = kl.BatchNormalization()
-    self.hidden11 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.01))
+    self.hidden11 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.1))
     self.norm11 = kl.BatchNormalization()
     
-    self.hidden111 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.01))
-    self.norm111 = kl.BatchNormalization()
-    self.hidden1111 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.01))
-    self.norm1111 = kl.BatchNormalization()
+#    self.hidden111 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+#    self.norm111 = kl.BatchNormalization()
+#    self.hidden1111 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+#    self.norm1111 = kl.BatchNormalization()
 
     # Logits are unnormalized log probabilities
     self.logits = kl.Dense(num_actions, name = 'policy_logits')
@@ -101,12 +102,42 @@ class PolicyModel2(tf.keras.Model):
     hidden_logs = self.activationlayer(hidden_logs)
     hidden_logs = self.norm11(hidden_logs, training = training)
     
+#    hidden_logs = self.hidden111(hidden_logs)
+#    hidden_logs = self.activationlayer(hidden_logs)
+#    hidden_logs = self.norm111(hidden_logs, training = training)
+#    hidden_logs = self.hidden1111(hidden_logs)
+#    hidden_logs = self.activationlayer(hidden_logs)
+#    hidden_logs = self.norm1111(hidden_logs, training = training)
+    return self.logits(hidden_logs)
+
+  def action(self, obs):
+    logits = self.call(obs)
+    action = self.dist(logits)
+    return tf.squeeze(action, axis=-1)
+
+
+class PolicyModel3(tf.keras.Model):
+  def __init__(self, num_actions, num_hiddenlayers = 2, num_neurons = 32, activationlayer = kl.LeakyReLU()):
+    super().__init__('mlp_policy')
+    self.hidden1 = kl.Dense(560, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.1)) #hidden layer for actions (policy)
+    self.norm1 = kl.BatchNormalization()
+    self.hidden11 = kl.Dense(270, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+    self.norm11 = kl.BatchNormalization()
+    self.hidden111 = kl.Dense(num_actions*10, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+    self.norm111 = kl.BatchNormalization()
+    # Logits are unnormalized log probabilities
+    self.logits = kl.Dense(num_actions, name = 'policy_logits')
+    self.dist = ProbabilityDistribution()
+    
+  def call(self, inputs, training = False, **kwargs):
+    x = tf.convert_to_tensor(inputs)
+    hidden_logs = self.hidden1(x)
+#    hidden_logs = self.norm1(hidden_logs, training = training)
+    hidden_logs = self.hidden11(hidden_logs)
+#    hidden_logs = self.norm11(hidden_logs, training = training)
     hidden_logs = self.hidden111(hidden_logs)
-    hidden_logs = self.activationlayer(hidden_logs)
-    hidden_logs = self.norm111(hidden_logs, training = training)
-    hidden_logs = self.hidden1111(hidden_logs)
-    hidden_logs = self.activationlayer(hidden_logs)
-    hidden_logs = self.norm1111(hidden_logs, training = training)
+#    hidden_logs = self.norm111(hidden_logs, training = training)
+
     return self.logits(hidden_logs)
 
   def action(self, obs):
@@ -115,7 +146,7 @@ class PolicyModel2(tf.keras.Model):
     return tf.squeeze(action, axis=-1)
 
 class ValueModel(tf.keras.Model):
-  def __init__(self, num_hiddenlayers = 3, num_neurons=64, activationlayer = kl.LeakyReLU()):
+  def __init__(self, num_hiddenlayers = 3, num_neurons=64, activationlayer = kl.ELU()):
     super().__init__('mlp_policy')
     self.num_hiddenlayers=num_hiddenlayers
     self.activationlayer = activationlayer
@@ -148,12 +179,12 @@ class ValueModel(tf.keras.Model):
     return tf.squeeze(value, axis=-1)
 
 class ValueModel2(tf.keras.Model):
-  def __init__(self, num_hiddenlayers = 3, num_neurons=64, activationlayer = kl.LeakyReLU()):
+  def __init__(self, num_hiddenlayers = 3, num_neurons=64, activationlayer = kl.ReLU()):
     super().__init__('mlp_policy')
     self.activationlayer = activationlayer
-    self.hidden2 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.01)) #hidden layer for state-value
+    self.hidden2 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.1)) #hidden layer for state-value
     self.norm2 = kl.BatchNormalization()
-    self.hidden22 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.01))
+    self.hidden22 = kl.Dense(num_neurons, kernel_regularizer = tf.keras.regularizers.l2(l=.1))
     self.norm22 = kl.BatchNormalization()
     
        
@@ -167,6 +198,34 @@ class ValueModel2(tf.keras.Model):
     hidden_vals = self.hidden22(hidden_vals)
     hidden_vals = self.activationlayer(hidden_vals)
     hidden_vals = self.norm22(hidden_vals, training = training)
+    return self.val(hidden_vals)
+
+  def value(self, obs):
+    value = self.call(obs)
+    return tf.squeeze(value, axis=-1)
+
+class ValueModel3(tf.keras.Model):
+  def __init__(self, num_hiddenlayers = 3, num_neurons=64, activationlayer = kl.ReLU()):
+    super().__init__('mlp_policy')
+    self.activationlayer = activationlayer
+    self.hidden2 = kl.Dense(560, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.1)) #hidden layer for state-value
+    self.norm2 = kl.BatchNormalization()
+    self.hidden22 = kl.Dense(52, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+    self.norm22 = kl.BatchNormalization()
+    self.hidden222 = kl.Dense(5, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.1))
+    self.norm222 = kl.BatchNormalization()
+    
+       
+    self.val = kl.Dense(1, name = 'value') 
+
+  def call(self, inputs, training = False, **kwargs):
+    x = tf.convert_to_tensor(inputs)
+    hidden_vals = self.hidden2(x)
+#    hidden_vals = self.norm2(hidden_vals, training = training)
+    hidden_vals = self.hidden22(hidden_vals)
+#    hidden_vals = self.norm22(hidden_vals, training = training)
+    hidden_vals = self.hidden222(hidden_vals)
+#    hidden_vals = self.norm222(hidden_vals, training = training)
     return self.val(hidden_vals)
 
   def value(self, obs):
@@ -195,44 +254,24 @@ class ValueModelLinearBaseline(tf.keras.Model):
     return tf.squeeze(value, axis=-1)
     
 class ACagent:
-    def __init__(self,policymodel, valuemodel, simlen = 1500, batch_sz=64, eps = 0.05, lr = 1e-3, entropy_const = 1e-5):
+    def __init__(self,policymodel, valuemodel, batch_sz=32*4,  lr = 0.00705, entropy_const = 1e-5):
         #self.model = model
         self.policymodel = policymodel
         self.valuemodel = valuemodel
-        self.gamma = .9995
-        '''
-        self.model.compile(
-                optimizer = tf.keras.optimizers.RMSprop(learning_rate = 9e-4), #optimizer = tf.keras.optimizers.RMSprop(learning_rate = 3e-7)
-                #optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
-                loss = [self._logits_loss, self._value_loss])
-        '''
+        
+        
         self.policymodel.compile(
-                optimizer = tf.keras.optimizers.RMSprop(learning_rate = lr, clipnorm = .5, centered =True), 
-                #optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
+                optimizer = tf.keras.optimizers.RMSprop(learning_rate = lr), 
                 loss = [self._logits_loss])
         self.valuemodel.compile(
-                optimizer = tf.keras.optimizers.RMSprop(learning_rate = lr, clipnorm = .5, centered = True),
-                #optimizer = tf.keras.optimizers.SGD(learning_rate=7e-3,),
+                optimizer = tf.keras.optimizers.RMSprop(learning_rate = lr),
                 loss = [self._value_loss])
         
-        #I set learning rate small because rewards are pretty big, can try changing
-        self.logitloss = kls.SparseCategoricalCrossentropy(from_logits=True)
         
-        self.batch_sz = batch_sz
-
-        #keep track of how many steps in simulation we have taken 
-        self.counter = 0
-        #keep track of discounting 
-        self.I = 1
-        #goal for how long we want the simulation to be ideally (with no early termination)
-        self.simlen = simlen
-        
-        #Weight Checkpoints
-        self.checkpoint_path = "trainingcp/cp-{version:04d}.ckpt"
-        self.checkpoint_dir = os.path.dirname(self.checkpoint_path)
-        
-        self.eps = eps
-        self.entropy_const = entropy_const
+        self.gamma = 1 #discounting
+        self.batch_sz = batch_sz #batch size
+        self.entropy_const = entropy_const #constant for entropy maximization term in logit loss function
+        self.logit2logprob = kls.SparseCategoricalCrossentropy(from_logits=True) #tensorflow built in converts logits to log probability 
         
     
     def action_value(self, obs):
@@ -241,23 +280,25 @@ class ACagent:
     def reset(self, env):
         state = env.reset()
         self.counter = 0
-        self.I = 1
         return state
     
-    def test(self,env,timesteps,nruns = 4):
+    def test(self,env,nruns = 4):
+        #nruns = 4 - number of episodes simulated 
+    
+        #returns - list of total (undiscounted) rewards for each episode, list of nubmer of timesteps in each episode
+        
         curstate = self.reset(env)
         run = 0
         rewards = []
         rewardslist = []
         eplenlist = []
         while (run < nruns):
-            for i in range(timesteps):# for i in tqdm(range(timesteps)):
+            while True:
                 action, value = self.action_value(curstate) #if using batch normalization may want to pass training = False to the model.call
-                curstate, reward, done = env.step(action, i, timesteps)
-                self.counter += 1
+                curstate, reward, done = env.step(action)
                 rewards.append(reward)
-                env.totloss += reward
-                if done or self.counter == timesteps:
+                self.counter += 1
+                if done:
                     eplenlist.append(self.counter)
                     rewardslist.append(sum(rewards))
                     if (run + 1 < nruns):
@@ -267,11 +308,25 @@ class ACagent:
             run += 1
         return rewardslist, eplenlist
     
-    def train(self, env, updates=250, by_eps = False, numeps = 1, nTDsteps = 5):   
-        curstate = self.reset(env)
-#        self.timecounter = 0
+    def train(self, env, updates=250, by_eps = False, numeps = 1, nTDsteps = 5, simlen = 1500):   
+        #env - environment
+        #updates - number of times we will call model.fit. This is the number of iterations of the outer loop. 
+           #before the first update, the environment is reset. after that, the environment is only reset if done = True is returned 
+        #by_eps = False - if True, we generate entire episodes at a time. 
+             #If False, we generate self.batch_sz steps at a time
+        #numeps = 1 - if by_eps = True, numeps is the number of entire episodes generated
+        #nTDsteps = 5 - number of steps used for temporal difference errors (also known as advantages)
+            #if nTDsteps = -1, then the maximum number of steps possible is used 
+        #simlen = 1500 - if by_eps = True, the arrays are all initialized with numeps * simlen size, 
+            #so you must provide an upper bound for the number of steps in a single episode
         
-        batch_sz = self.simlen * numeps if by_eps else self.batch_sz
+        #returns - ep_rewards, total (undiscounted) rewards for all complete episodes 
+        
+        
+        curstate = self.reset(env)
+        leftover = 0
+        
+        batch_sz = env.simlen * numeps if by_eps else self.batch_sz
         if nTDsteps < 0:
             nTDsteps = batch_sz
         statemem = np.empty((batch_sz,env.statememdim))
@@ -281,22 +336,23 @@ class ACagent:
         dones = np.empty((batch_sz))
         
         ep_rewards = []
+        ep_lens = []
         
         action,value = self.action_value(curstate)
-        for i in range(updates):# for i in tqdm(range(updates)):
-            batchlen = 0 #enable flexible batch sizes if training by episode
-            epsdone = 0
+        for i in tqdm(range(updates)):# for i in tqdm(range(updates)):
             
-            firstdone = -1
+            batchlen = 0 #batchlen keeps track of how many steps are in inner loop
+            #(self.counter keeps track of how many steps since start of most recent episode)
+            epsdone = 0
+            curindex = 0 #keeps track of index for start of current episode
+            
+            firstdone = -1 #bug here? 
             gammafactor = self.counter
             
             for bstep in range(batch_sz):
                 statemem[bstep] = curstate
-#                start = time.time()
-                nextstate, reward, done = env.step(action,self.counter,self.simlen, False)
-#                self.timecounter += time.time() - start
+                nextstate, reward, done = env.step(action, False)
                 nextaction, nextvalue = self.action_value(nextstate)
-                env.totloss += reward
                 self.counter += 1
                 
                 rewards[bstep] = reward
@@ -306,8 +362,11 @@ class ACagent:
                 batchlen += 1
                 
                 action, value, curstate = nextaction, nextvalue, nextstate    
-                if done or self.counter >= self.simlen: #reset simulation 
-                    ep_rewards.append(env.totloss)
+                if done: #reset simulation 
+                    ep_rewards.append(sum(rewards[curindex:batchlen])+leftover)
+                    ep_lens.append(self.counter)
+                    curindex = batchlen
+                    leftover = 0
                     curstate = self.reset(env)
                     action,value = self.action_value(curstate)
                     
@@ -315,21 +374,25 @@ class ACagent:
                     if by_eps and epsdone == numeps:
                         break
                     if firstdone == -1:
-                        firstdone = bstep
+                        firstdone = batchlen
+            leftover += sum(rewards[curindex:batchlen]) #if an episode goes over several batches, keep track of cumulative rewards
 
             gamma_adjust = np.ones(batchlen)
-            adj_idx = firstdone + 1 if (firstdone!= -1) else batchlen #update all gammas if no dones in batch
+            adj_idx = firstdone  if (firstdone!= -1) else batchlen #update all gammas if no dones in batch
             gamma_adjust[:adj_idx] = self.gamma**gammafactor
+            
             TDerrors = self._TDerrors(rewards[:batchlen], values[:batchlen], dones[:batchlen], nextvalue, gamma_adjust, nTDsteps)
-#            TDacc = tf.stack([TDerrors, tf.cast(actions[:batchlen], tf.float32)], axis = 1)
             TDacc = np.reshape(np.append(TDerrors, actions[:batchlen]), (batchlen,2), order = 'F')
         
+#            self.policymodel.fit(statemem[:batchlen,:], TDacc)
+#            self.valuemodel.fit(statemem[:batchlen,:], TDerrors)
             self.policymodel.train_on_batch(statemem[:batchlen,:], TDacc)
             self.valuemodel.train_on_batch(statemem[:batchlen,:], TDerrors)
-
-        return ep_rewards
             
-    def _TDerrors(self, rewards, values, dones, nextvalue, gamma_adjust, nstep):
+
+        return ep_rewards, ep_lens
+            
+    def _TDerrors(self, rewards, values, dones, nextvalue, gamma_adjust, nstep, normalize = False):
         returns = np.append(np.zeros_like(rewards), nextvalue)
         stepreturns = np.zeros_like(rewards)
         
@@ -345,15 +408,19 @@ class ACagent:
             else:
                 stepreturns[t] = returns[t]
                 
-        returns = stepreturns * gamma_adjust
-        return returns - values
+        returns = np.multiply(stepreturns, gamma_adjust)
+        if normalize: 
+            temp = returns - values
+            return (temp - np.mean(temp))/(np.std(temp)+1e-6)
+        else:
+            return returns - values
 
     def _value_loss(self, target, value):        
         return -target*value
     
     def _logits_loss(self,target, logits):
         TDerrors, actions = tf.split(target, 2, axis = -1) 
-        logprob = self.logitloss(actions, logits, sample_weight = TDerrors) #really the log probability is negative of this.
+        logprob = self.logit2logprob(actions, logits, sample_weight = TDerrors) #really the log probability is negative of this.
         probs = tf.nn.softmax(logits)
         entropy_loss = kls.categorical_crossentropy(probs,probs)
 
@@ -375,51 +442,57 @@ class circ_singleav: #example of single AV environment
     #avid = id of AV
     #simulates on a circular road
     
-    def __init__(self, initstate,auxinfo,roadinfo,avid,rewardfn,updatefun=update_cir,dt=.25,statemem=10):
+    def __init__(self, rewardfn, dt=.25,statemem=3, simlen = 1500):
+        
+        p = [33.33, 1.2, 2, 1.1, 1.5] #parameters for human drivers
+        initstate, auxinfo, roadinfo = eq_circular(p, IDM_b3, update2nd_cir, 
+                                                   IDM_b3_eql, 41, length = 2, L = None, v = 15, perturb = 2) #create initial state on road
+        sim, curstate, auxinfo = simulate_cir(initstate, auxinfo,roadinfo, update_cir, timesteps = 25000, dt = .25)
+        vlist = {i: curstate[i][1] for i in curstate.keys()}
+        avid = min(vlist, key=vlist.get)
+        
+        #for simulation backend
         self.initstate = initstate
         self.auxinfo = auxinfo
         self.auxinfo[avid][6] = NNhelper
         self.roadinfo = roadinfo
-        self.avid = avid
-        self.updatefun = updatefun
+        self.updatefun = update_cir
         self.dt = dt
         self.rewardfn = rewardfn
-        self.sim = []
         
+        #stuff with memory of states
+        self.sim = []
         self.mem = statemem
+        self.simlen = simlen #maximum number of steps before done 
         #stuff for building states (len self.mem+1 tuple of past states)
         self.paststates = [] #holds sequence of states
         self.statecnt = 0
         self.statememdim = (self.mem+1)*5
-#        self.interp1d = interp1d((1.84,43.13), (0,1),fill_value = 'extrapolate')
-#        self.interp1dspd = interp1d((0,25.32), (0,1), fill_value = 'extrapolate')
+
+        #normalization for state
         self.hd_m = 1/(50 - 0)
         self.hd_c = 0
         self.spd_m = 1/(15)
         self.spd_c = 0
+        
+        #indices for av/leader/follower 
+        self.avid = avid
         self.avlead = self.auxinfo[self.avid][1]
         self.avfol = [k for k,v in self.auxinfo.items() if v[1] == self.avid][0] 
         
     def reset(self):
+        #resets simulation to initial state 
         self.curstate = self.initstate
         del self.sim
         self.sim = {i:[self.curstate[i]] for i in self.initstate.keys()}
         self.vavg = {i:self.initstate[i][1]  for i in self.initstate.keys()}
-        self.totloss = 0
    
         self.paststates = []
-        self.statecnt = 0
+        self.counter = 1 #coutner starts at 1 because it counts the number of states and there is an initial state
         return self.get_state(self.curstate)
 
     def get_state(self, curstate):
-        
-        
-#        extend_seq = (self.interp1dspd(curstate[self.avid][1]),
-#                      self.interp1dspd(curstate[avlead][1]),
-#                     self.interp1d(curstate[self.avid][2]),
-#                      self.interp1dspd(curstate[avfol][1]),
-#                      self.interp1d(curstate[avfol][2])
-#                      )
+        #curstate is the state for the simulation backend, get_state converts curstate to input for NN models
         extend_seq = ((curstate[self.avid][1]+self.spd_c)*self.spd_m, 
                       (curstate[self.avlead][1]+self.spd_c)*self.spd_m, 
                       (curstate[self.avid][2]+self.hd_c)*self.hd_m, 
@@ -428,27 +501,31 @@ class circ_singleav: #example of single AV environment
                       )
         
         self.paststates.extend(extend_seq)
-        if self.statecnt < self.mem:
+        if self.counter < self.mem:
             avstate = extend_seq * int(self.mem + 1)
-            self.statecnt += 1
         else:
             avstate = self.paststates[-self.statememdim:]
         
-#        avstate = tf.convert_to_tensor([avstate])
-        return np.asarray([avstate])
+        return np.asarray(avstate)
     
     def get_acceleration(self,action,curstate):
         #action from NN gives a scalar, we convert it to the quantized acceleration
-        acc = float(action - 1)
+        acc = float(action)*.25 - 1
         
-        nextspeed = curstate[self.avid][1] + self.dt*acc
-        if nextspeed < 0:
-            acc = -curstate[self.avid][1]/self.dt
-        
+        #could add in constraint but this kinda messes up the policy model as it has no way to see
+        #that the environment changed its action. 
+#        nextspeed = curstate[self.avid][1] + self.dt*acc
+#        if nextspeed < 0:
+#            acc = -curstate[self.avid][1]/self.dt
+
         return acc
     
-    def step(self, action, niter, timesteps, save_state = True, baseline = False): #basically just a wrapper for simulate step to get the next timestep
-        #simulate_step does all the updating; first line is just a hack which can be cleaned later
+    def step(self, action, save_state = True, baseline = False): 
+        #does a single step of the environment
+        #action - action for the AV to follow (currently, integer for the quantized acceleration)
+        #save_state - if True, we save the curstate to sim attribute
+        #baseline - True when using the simulate_baseline method
+        
         if baseline:
             acc = action
         else:
@@ -458,48 +535,56 @@ class circ_singleav: #example of single AV environment
         
         #update environment state 
         self.curstate = nextstate 
+        self.counter += 1
         if save_state:
             self.savestate()
         
         #get reward, update average velocity
-        reward, vavg = self.rewardfn(nextstate,self.vavg)
+        reward, vavg = self.rewardfn(nextstate,self.vavg) #rewards have a vavg which is a running average of velocity
         self.vavg = vavg
         
+        #
         allheadways = [ nextstate[i][2] for i in nextstate.keys() ]
         shouldterminate = np.any(np.array(allheadways) <= 0)
         
         nextstate = nextstate if baseline else self.get_state(nextstate)
         
-        if shouldterminate:
+        if shouldterminate or self.counter == self.simlen:
             return nextstate, reward, True
 
         return nextstate, reward, False
 
-    def simulate_baseline(self, CFmodel, p, timesteps): #can insert a CF model and parameters (e.g. put in human model or parametrized control model)
-        #for debugging purposes to verify that timestepping is done correctly
-        #if using deep RL the code to simulate/test is the same except action is chosen from NN
+    def simulate_baseline(self, CFmodel, p): 
+        #CFmodel - function for car model
+        #p - its parameters
+        
+        #returns - total (undiscounted) rewards for a single episode using CFmodel with parameters p 
+        #as a baseline for solving the control problem
         self.reset()
         avlead = self.auxinfo[self.avid][1]
-        for i in range(timesteps):
+        rewards = []
+        while True:
             action = CFmodel(p, self.curstate[self.avid],self.curstate[avlead], dt = self.dt)
-            nextstate, reward, done = self.step(action[1],i,timesteps, baseline = True)
+            nextstate, reward, done = self.step(action[1], baseline = True)
+            rewards.append(reward)
             #update state, update cumulative reward
             self.curstate = nextstate
-            self.totloss += reward
-#            #save current state to memory (so we can plot everything)
-#            for j in nextstate.keys():
-#                self.sim[j].append(nextstate[j])
+            
             if done:
                 break
+        return sum(rewards)
     
     def savestate(self):
+        #saves simulation's current state (as opposed to the agent's current state) to memory, for plotting/analysis purposes
         for j in self.curstate.keys():
             self.sim[j].append(self.curstate[j])
             
     def plot(self): 
+        #spacetime plot
         myplot(self.sim, self.auxinfo, self.roadinfo)
         
     def trajplot(self, vehid = None):
+        #plot of position, speed, headway time series
         if vehid == None: 
             vehid = self.avid
         avtraj = np.asarray(self.sim[vehid])
@@ -515,23 +600,24 @@ class circ_singleav: #example of single AV environment
         plt.ylabel('headway')
         
 class gym_env:
-    def __init__(self, env):
+    def __init__(self, env, simlen = 500):
         self.env = env
         self.initstate = self.env.reset()
         self.statememdim = self.initstate.shape[0]
+        self.simlen = simlen
         
     def reset(self):
         self.curstate = self.env.reset()
-        self.totloss = 0
         return self.get_state(self.curstate)
     
     def get_state(self, curstate):
         return curstate[None, :]
+#        return curstate
     
     def step(self, action, *_, **__):
         nextstate, reward, done, _ = self.env.step(action.numpy())
         self.curstate = nextstate
         return self.get_state(nextstate), reward, done
     
-    def savestate(self):
-        pass
+#    def savestate(self):
+#        pass
