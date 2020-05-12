@@ -119,11 +119,11 @@ class PolicyModel2(tf.keras.Model):
 class PolicyModel3(tf.keras.Model):
   def __init__(self, num_actions, num_hiddenlayers = 2, num_neurons = 32, activationlayer = kl.LeakyReLU()):
     super().__init__('mlp_policy')
-    self.hidden1 = kl.Dense(560, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.13)) #hidden layer for actions (policy)
+    self.hidden1 = kl.Dense(560, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.16)) #hidden layer for actions (policy)
     self.norm1 = kl.BatchNormalization()
-    self.hidden11 = kl.Dense(270, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.13))
+    self.hidden11 = kl.Dense(270, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.16))
     self.norm11 = kl.BatchNormalization()
-    self.hidden111 = kl.Dense(num_actions*10, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.13))
+    self.hidden111 = kl.Dense(num_actions*10, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.16))
     self.norm111 = kl.BatchNormalization()
     # Logits are unnormalized log probabilities
     self.logits = kl.Dense(num_actions, name = 'policy_logits')
@@ -208,11 +208,11 @@ class ValueModel3(tf.keras.Model):
   def __init__(self, num_hiddenlayers = 3, num_neurons=64, activationlayer = kl.ReLU()):
     super().__init__('mlp_policy')
     self.activationlayer = activationlayer
-    self.hidden2 = kl.Dense(560, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.13)) #hidden layer for state-value
+    self.hidden2 = kl.Dense(560, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.16)) #hidden layer for state-value
     self.norm2 = kl.BatchNormalization()
-    self.hidden22 = kl.Dense(52, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.13))
+    self.hidden22 = kl.Dense(52, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.16))
     self.norm22 = kl.BatchNormalization()
-    self.hidden222 = kl.Dense(5, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.13))
+    self.hidden222 = kl.Dense(5, activation='tanh', kernel_regularizer = tf.keras.regularizers.l2(l=.16))
     self.norm222 = kl.BatchNormalization()
     
        
@@ -254,7 +254,7 @@ class ValueModelLinearBaseline(tf.keras.Model):
     return tf.squeeze(value, axis=-1)
     
 class ACagent:
-    def __init__(self,policymodel, valuemodel, data_sz = 256, batch_sz=64,  lr = 0.000105, entropy_const = 5e-7, epochs = 20):
+    def __init__(self,policymodel, valuemodel, data_sz = 256, batch_sz=80,  lr = 0.000085, entropy_const = 1e-6, epochs = 20):
         #self.model = model
         self.policymodel = policymodel
         self.valuemodel = valuemodel
