@@ -47,11 +47,7 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
     for curlane in merge_lanes:
         update_merge_anchors(curlane, lc_actions)
         
-    #update inflow, adding vehicles if necessary 
-    for curlane in inflow_lanes: 
-        vehid = curlane.increment_inflow(vehicles, vehid, timeind, dt)
-                    
-    #update roads (lane events) and routes last
+    #update roads (lane events) and routes
     remove_vehicles = []
     for veh in vehicles: 
         #check vehicle's lane events and route events, acting if necessary 
@@ -59,6 +55,10 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
         update_route(veh)
     for veh in remove_vehicles: 
         vehicles.remove(veh)
+        
+    #update inflow, adding vehicles if necessary 
+    for curlane in inflow_lanes: 
+        vehid = curlane.increment_inflow(vehicles, vehid, timeind, dt)
                     
     return 
 
@@ -235,7 +235,7 @@ def make_cur_route(p, curlane, nextroadname):
     curlaneind = curlane.laneind
     #position or tuple of positions, str, tuple of 2 ints or single int, str, dict for the next road
     pos, change_type, laneind, side, nextroad  = curroad['connect to'][nextroadname][:]
-    #roads also have 'name', 'length', 'laneinds', all lanes are values with their indexes as keys 
+    #roads also have 'name', 'len', 'laneinds', all lanes are values with their indexes as keys 
     
     cur_route = {}
     
@@ -831,14 +831,14 @@ class vehicle:
     #// TO DO implementation of adjoint method for cf, relax, shift parameters
     def __init__(self, vehid,curlane, p, lcp,
                  lead = None, fol = None, lfol = None, rfol = None, llead = None, rlead = None,
-                 length = 3, relaxp = None,  shiftp = [.4,2], coopp = .2, 
+                 length = 3, eql_type = 'v',
+                 relaxp = 12,  shiftp = [.4,2], coopp = .2, 
                  routep = [30,120], route = [],
                  accbounds = [-7,3], maxspeed = 1e4, hdbounds = (0, 1e4)): 
         self.vehid = vehid
-        self.length = length
+        self.len = length
         self.lane = curlane
-        self.road = curlane.road
-
+        self.road = curlane.road if curlane != None else None
         #model parameters
         self.cf_parameters = p
         self.lc_parameters = lcp
@@ -859,6 +859,7 @@ class vehicle:
         self.minacc, self.maxacc = accbounds[0], accbounds[1]
         self.maxspeed = maxspeed    
         self.hdbounds = hdbounds
+        self.eql_type = eql_type
         
         #cooperative/tactical model
         self.shiftp = shiftp
@@ -1363,10 +1364,9 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -2
         
     
 class lane: 
-    def __init__(self, laneid, start, end, road, laneindex, connect_left = [(0, None)], connect_right = [(0, None)],
+    def __init__(self, start, end, road, laneindex, connect_left = [(0, None)], connect_right = [(0, None)],
                  downstream = {}, increment_inflow = {}, get_inflow = {}, new_vehicle = None):
         
-        self.laneid = laneid
         self.laneindex = laneindex
         self.road = road
         #starting position/end (float)
@@ -1393,9 +1393,9 @@ class lane:
     def get_headway(self, veh, lead): 
         #distance from front of vehicle to back of lead
         #assumes veh.road = self.road
-        hd = lead.pos - veh.pos - lead.length
+        hd = lead.pos - veh.pos - lead.len
         if self.road is not lead.road: 
-            hd += self.roadlen[lead.road]
+            hd += self.roadlen[lead.road['name']] #currently roads are dicts, and we hash them using their 'name' key
         return hd 
     
     def get_dist(self, veh, lead): 
@@ -1403,7 +1403,7 @@ class lane:
         #assumes veh.lane.road = self.road
         dist = lead.pos-veh.pos
         if self.road is not lead.road: 
-            dist += self.roadlen[lead.road]
+            dist += self.roadlen[lead.road['name']]
         return dist
     
     def leadfol_find(self, veh, guess, side):

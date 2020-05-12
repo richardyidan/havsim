@@ -781,9 +781,10 @@ def generate_changetimes(veh, col_index):
 # 	return q, k
 
 
-def calculateflows(meas, spacea, timea, agg, lane = None, method = 'area'):
+def calculateflows(meas, spacea, timea, agg, lane = None, method = 'area', h = .1):
     #debugged/refactored by me on 5/9/20
-    #note units will be in whatever data you use e.g. space in units of feet, time in units of .1 seconds for NGSim 
+    #h specifies unit conversion - i.e. if 1 index in data = .1 of units you want, h = .1 
+    #e.g. ngsim has .1 seconds between measurements, so h = .1 yields units of seconds for time. no conversion for space units 
     #area method (from laval paper), or flow method (count flow into space region, calculate space mean speed, get density from flow/speed)
     #area method is better
     
@@ -858,7 +859,7 @@ def calculateflows(meas, spacea, timea, agg, lane = None, method = 'area'):
                     if len(curspacedata) == 0: 
                         continue
                     regions[j][i][0].append(curspacedata[-1,2] - curspacedata[0,2])
-                    regions[j][i][1].append(curspacedata[-1,1] - curspacedata[0,1])
+                    regions[j][i][1].append((curspacedata[-1,1] - curspacedata[0,1])*h)
                     if method == 'flow': 
                         firstpos, lastpos = curdata[0,2], curdata[-1,2]
                         if firstpos < spacea[j][0] and lastpos > spacea[j][0]:
@@ -889,7 +890,7 @@ def calculateflows(meas, spacea, timea, agg, lane = None, method = 'area'):
     elif method == 'flow': 
         for i in range(len(spacea)):
             for j in range(len(intervals)):
-                q[i].append(flows[i][j])
+                q[i].append(flows[i][j] / (h*(intervals[j][1] - intervals[j][0])))
                 try:
                     k[i].append(sum(regions[i][j][0]) / sum(regions[i][j][1]))
                 except: 
@@ -898,7 +899,7 @@ def calculateflows(meas, spacea, timea, agg, lane = None, method = 'area'):
     return q, k
 
 
-def plotflows(meas, spacea, timea, agg, type='FD', FDagg=None, lane = None, method = 'area'):
+def plotflows(meas, spacea, timea, agg, type='FD', FDagg=None, lane = None, method = 'area', h = .1):
     """
 	aggregates microscopic data into macroscopic quantities based on Edie's generalized definitions of traffic variables
     
@@ -923,6 +924,8 @@ def plotflows(meas, spacea, timea, agg, type='FD', FDagg=None, lane = None, meth
     
     lane = None - If lane is given, it only uses measurement in that lane. 
     
+    h = .1 - time discretizatino in data - passed in to calculateflows
+    
     Note that if the aggregation intervals are too small the plots won't really make sense 
     because a lot of the variation is just due to the aggregation. Increase either agg
     or spacea regions to prevent this problem. 
@@ -938,7 +941,7 @@ def plotflows(meas, spacea, timea, agg, type='FD', FDagg=None, lane = None, meth
         temp2 += agg
     intervals.append((temp1, end))
 
-    q, k = calculateflows(meas, spacea, timea, agg, lane = lane, method = method)
+    q, k = calculateflows(meas, spacea, timea, agg, lane = lane, method = method, h = h)
     time_sequence = []
     time_sequence_for_line = []
 
