@@ -2110,6 +2110,12 @@ def selectvehID_v2(data, times, x, lane, veh, vertlist, platoon=None, vert=0):
 
     xvert = []
     yvert = []
+    curvert = vertlist[math.floor(vert / 2)]  # first area
+    for i in curvert:
+        xvert.append(i[0])
+        yvert.append(i[1])
+    xvert.append(curvert[0][0])
+    yvert.append(curvert[0][1])
 
     if platoon != None:
         # If a platoon is passed in, and the size of input platoon is greater than 1
