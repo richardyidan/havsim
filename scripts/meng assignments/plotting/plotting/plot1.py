@@ -79,7 +79,7 @@ plotvhd(meas,None,platooninfo,platoonlist[50][:4],plot_color_line=True, draw_arr
 #plotvhd(sim2,None,platooninfo,1)
 #%% #for selectoscillation/selectvehID
 #option 1 - select rectangular area, press n to call selectvehID with chosen region (will automatically get vehicles in chosen region top left vertex)
-times, x, lane, veh = selectoscillation(data,50,20,lane=3)
+times, x, lane, veh = selectoscillation(meas,xint = 40,lane=3)
 #make box, press n to enter selectvehID
 #a and z keys add vehicles before and after, respecitvely
 

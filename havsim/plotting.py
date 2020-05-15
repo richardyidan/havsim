@@ -1796,7 +1796,7 @@ def toggle_selector(event):
         print(toggle_selector.RS.extents)
 
 
-def selectoscillation(data1, timeint, spacebins, lane=1, use_avg='mean', region_shape='p'):
+def selectoscillation(meas, timeint = 50, xint = 70, lane=1, use_avg='mean', region_shape='p'):
     """
     \\ TO DO \\
     selectvehID needs some more features added, refer to notes on paper for more details. 
@@ -1816,7 +1816,11 @@ def selectoscillation(data1, timeint, spacebins, lane=1, use_avg='mean', region_
     # lane = 1 - choose which lane of the data to plot. (does 1 lane at a time)
 
     # choose which lane. (note a possible feature would be the ability to choose multiple lanes at once)
-    data = data1[data1[:, 7] == lane]
+    
+
+
+    data = np.concatenate(list(meas.values()))
+    data = data[data[:, 7] == lane]
 
     # can make this iterate once instead of 4 times
     t0 = min(data[:, 1])
@@ -1828,9 +1832,13 @@ def selectoscillation(data1, timeint, spacebins, lane=1, use_avg='mean', region_
     if times[-1] != tend:
         times = np.append(times, tend)
 
-    xint = (xend - x0) / spacebins
+    
     x = np.arange(x0, xend, xint)
-    x = np.append(x, xend)
+    if x[-1] != xend:
+        x = np.append(x, xend)
+    # xint = (xend - x0) / spacebins
+    # x = np.arange(x0, xend, xint)
+    # x = np.append(x, xend)
 
     X, Y = np.meshgrid(times, x)  # leave out the last point where making the grid to plot over
 
@@ -2023,7 +2031,7 @@ def selectoscillation(data1, timeint, spacebins, lane=1, use_avg='mean', region_
             if len(mytoggle_selector.RS.verts) == 4:
                 vertlist.append(mytoggle_selector.RS.verts)
 #            selectvehID(data1, times, x, lane, veh, vertlist)
-            selectvehID_v2(data1, times, x, lane, veh, vertlist)
+            selectvehID_v2(data, times, x, lane, veh, vertlist)
 
     plt.pcolormesh(X, Y, meanspeeds,
                    cmap=cmap)  # pcolormesh is similar to imshow but is meant for plotting whereas imshow is for actual images
