@@ -1214,8 +1214,7 @@ def getentryflows(meas, entrylanes,  timeind, outtimeind):
         
     
 
-#################################################
-#old makeleadfolinfo functions - this ravioli code has now been fixed! 
+#old makeleadfolinfo functions 
 #################################################
 #def makeleadfolinfo1(platoons, platooninfo, sim, *args):
 ##	inputs: 

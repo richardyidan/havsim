@@ -81,7 +81,7 @@ myplot(sim2, auxinfo, roadinfo)
 
 #%%
 #here's another plotting function. I don't want to add any to this one 
-plotflows(meas,[[400,800],[800,1200]],[0,10*60*14.5],60*10,type = 'FD',lane = 6)
+plotflows(meas,[[800,1200]],[0,10*60*14.5],30*10,type = 'line',lane = 6, method = 'flow')
 
 #%%
 plotvhd(meas,sim,platooninfo,904) #want a list version of this like for animate_list - basically just accept list input, do multiple plots
