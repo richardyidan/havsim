@@ -698,91 +698,23 @@ def generate_changetimes(veh, col_index):
     ind.append(len(veh[:, col_index]))
     
     return ind
-#########################################
-
-
-
-# def calculateflows(meas, spacea, timea, agg):
-# 	q = [[] for i in spacea]
-# 	k = [[] for i in spacea]
-#     #ronan modification - calculate minimum and maximum space, minimum and maximum time
-# #spacealist = []
-# #for i in spacea:
-# #    spacealist.extend(i)
-# #spacemin = min(spacealist)
-# #spacemax = max(spacealist)
-# #timemin = min(timea)
-# #timemax = max(timea)
-#
-# 	intervals = []
-# 	start = timea[0]
-# 	end = timea[1]
-# 	temp1 = start
-# 	temp2 = start+agg
-# 	while temp2 < end:
-# 		intervals.append((temp1, temp2))
-# 		temp1 = temp2
-# 		temp2 += agg
-# 	intervals.append((temp1, end))
-#
-#
-# 	# ([time frame], [space])
-# 	regions = [[([],[]) for j in intervals] for i in spacea]
-#
-# 	for id in meas:
-# 		data = meas[id]
-#         #ronan modification  - prune data so we don't have to look over as many datapoints
-# #data = data[np.all([data[:,1] < timemax, data[:,1]>timemin], axis=0)]
-# #data = data[np.all([data[:,2] < spacemax, data[:,2]>spacemin], axis=0)]
-#
-# 		region_contained = []
-# 		region_data = {}  # key: tid, sid
-# 		for i in data:
-# 			t = i[1]
-# 			s = i[2]
-# 			t_id = -1
-# 			s_id = -1
-#
-# 			for j in range(len(intervals)):
-# 				if t<=intervals[j][1] and t>=intervals[j][0]:
-# 					t_id = j
-# 					break
-# 			for j in range(len(spacea)):
-# 				if s<=spacea[j][1] and s>=spacea[j][0]:
-# 					s_id = j
-# 					break
-# 			if t_id == -1 or s_id == -1:
-# 				continue
-# 			id_key = str(t_id)+" "+str(s_id)
-# 			if id_key not in region_data:
-# 				# in t, in s, out t, out s
-# 				region_data[id_key] = [t,s,-1,-1]
-# 			else:
-# 				region_data[id_key][2] = t
-# 				region_data[id_key][3] = s
-# 		for i in region_data:
-# 			t_id, s_id = i.split(" ")
-# 			t_id = int(t_id)
-# 			s_id = int(s_id)
-#
-#
-# 			regions[s_id][t_id][0].append(region_data[i][2]-region_data[i][0])
-# 			regions[s_id][t_id][1].append(region_data[i][3] - region_data[i][1])
-#
-# 	for i in range(len(regions)):
-# 		for j in range(len(regions[0])):
-# 			area = (spacea[i][1]-spacea[i][0]) * (intervals[j][1]-intervals[j][0])
-# 			q[i].append(sum(regions[i][j][1])/area)
-# 			k[i].append(sum(regions[i][j][0])/area)
-# 	return q, k
 
 
 def calculateflows(meas, spacea, timea, agg, lane = None, method = 'area', h = .1):
-    #debugged/refactored by me on 5/9/20
+    #meas = measurements, in usual format (dictionary where keys are vehicle IDs, values are numpy arrays
+ 	#spacea - reads as ``space A'' (where A is the region where the macroscopic quantities are being calculated). 
+        #list of lists, each nested list is a length 2 list which ... represents the starting and ending location on road. 
+        #So if len(spacea) >1 there will be multiple regions on the road which we are tracking e.g. spacea = [[200,400],[800,1000]], 
+        #calculate the flows in regions 200 to 400 and 800 to 1000 in meas.
+ 	#timea - reads as ``time A'', should be a list of the times (in the local time of thedata). 
+        #E.g. timea = [1000,3000] calculate times between 1000 and 3000.
+ 	#agg - aggregation length, float number which is the length of each aggregation interval. 
+        #E.g. agg = 300 each measurement of the macroscopic quantities is over 300 time units in the data, 
+        #so in NGSim where each time is a frameID with length .1s, we are aggregating every 30 seconds.
     #h specifies unit conversion - i.e. if 1 index in data = .1 of units you want, h = .1 
-    #e.g. ngsim has .1 seconds between measurements, so h = .1 yields units of seconds for time. no conversion for space units 
+        #e.g. ngsim has .1 seconds between measurements, so h = .1 yields units of seconds for time. no conversion for space units 
     #area method (from laval paper), or flow method (count flow into space region, calculate space mean speed, get density from flow/speed)
-    #area method is better
+        #area method is better
     
     #for each space region, value is a list of floats of the value at the correpsonding time interval 
     q = [[] for i in spacea]
@@ -817,12 +749,6 @@ def calculateflows(meas, spacea, timea, agg, lane = None, method = 'area', h = .
     flows = [[0 for j in intervals] for i in spacea] #used if method = 'flow', indexed by space, then time, int of how many vehicles enter region
     for vehid in meas:
         alldata = meas[vehid]
-#        #heuristic for selecting shorter region of data; many trajectories we can potentially ignore
-#        alldata = meas[vehid]
-#        alldata = alldata[np.all([alldata[:,1] < timemax, alldata[:,1]>timemin], axis=0)]
-#        alldata = alldata[np.all([alldata[:,2] < spacemax, alldata[:,2]>spacemin], axis=0)]
-#        if len(alldata) == 0:
-#           continue
        
         #if lane is given we need to find the segments of data inside the lane
         if lane is not None: 
@@ -861,22 +787,6 @@ def calculateflows(meas, spacea, timea, agg, lane = None, method = 'area', h = .
                         if firstpos < spacea[j][0] and lastpos > spacea[j][0]:
                             flows[j][i] += 1
                             
-                
-                
-#                dataInterval = data[start:end]
-#                spaceInterval = [j[2] for j in dataInterval]
-    
-#                for j in range(len(spacea)):
-#                    try:
-#                        start = min(bisect.bisect_left(spaceInterval, spacea[j][0]), len(dataInterval)-1)
-#                        end = min(bisect.bisect_left(spaceInterval, spacea[j][1]), len(dataInterval)-1)
-#                        if start == end:
-#                            continue
-#                        regions[j][i][0].append(dataInterval[end][1] - dataInterval[start][1])
-#                        regions[j][i][1].append(dataInterval[end][2] - dataInterval[start][2])
-#    
-#                    except:
-#                        print("out index")
     if method == 'area':
         for i in range(len(spacea)):
             for j in range(len(intervals)):
@@ -1210,16 +1120,16 @@ def add_arrow(line, arrow_interval=20, direction='right', size=15, color=None, p
     plot_color_line = True - if True, line is a tuple of (line collection object, norm) not line2d object
     """
     if plot_color_line: 
-        line, norm = line[:]
+        line, norm = line[:] #norm is min/max float
         
         my_cmap = line.get_cmap()
-        colorarray = line.get_array()
+        colorarray = line.get_array() #floats used to color data
         
-        def color_helper(index):
+        def color_helper(index): #gets the color (in terms of matplotlib float array format) from index
             myint = (colorarray[index]-1 - norm[0])/(norm[1] - norm[0]+1)
             return my_cmap(myint)
         
-        temp = line.get_segments()
+        temp = line.get_segments() #actual plotting data
         xdata = [temp[0][0][0]]
         ydata = [temp[0][0][1]]
         for i in temp: 
@@ -1263,32 +1173,6 @@ def add_arrow(line, arrow_interval=20, direction='right', size=15, color=None, p
             )
             
 
-#    x_max = max(xdata)
-#    x_min = min(xdata)
-#    num_arrows = math.floor((x_max - x_min) / arrow_interval) # // TO DO could compute distance traveled and put arrows based on that  low priority 
-#
-#    for i in range(0, num_arrows):
-#        position = x_min + i * arrow_interval
-#
-#        # find closest index
-#        start_ind = np.argmin(np.absolute(xdata - position))
-#
-#        # To avoid index out of bounds, skip if
-#        # start_ind is either index 0, or xdata.length - 1
-#        if start_ind == 0 or start_ind == len(xdata) - 1:
-#            continue
-#
-#        if direction == 'right':
-#            end_ind = start_ind + 1
-#        else:
-#            end_ind = start_ind - 1
-#
-#        line.axes.annotate('',
-#            xytext=(xdata[start_ind], ydata[start_ind]),
-#            xy=(xdata[end_ind], ydata[end_ind]),
-#            arrowprops=dict(arrowstyle="->", color=color),
-#            size=size
-#        )
 
 def animatevhd(meas, sim, platooninfo, platoon, lentail=20, timerange=[None, None], 
                lane = None, opacity = .2, interval = 10, rp = None, h=.1, delay=0):
