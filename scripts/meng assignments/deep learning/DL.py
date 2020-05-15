@@ -409,8 +409,8 @@ def generate_random_keys(num, meas, platooninfo):
 # print('before training rmse on test dataset is '+str(tf.cast(m,tf.float32))+' rmse on train dataset is '+str(m2))
 
 #every 4 batches go ahead and check rmse?
-
 val_ids, nlc_len = generate_random_keys(100, meas, platooninfo)
+final_model = model
 previous_error = float("inf")
 break_loop = False
 for epoch in range(5):
