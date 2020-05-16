@@ -696,6 +696,7 @@ def breakcycles(totfollist, leaders, platooninfo, cycle_num):
     #for addition of cycles early, you want to check that the cycle actually exists (as opposed 
     #to the normal addition of cycles, where we know it will exist), so you can use addcycles 
     #note that addcycles2 is by far the fastest; in particular things can get slow if you use addcyclesearly alot
+    #maybe possible to refactor addcyclesearly to be faster. That is only used for early addition of loops. Does it even help? 
 def addcyclesearly(totfollist, leaders, platooninfo, cycle_num, Y):
     #for adding cycles early; in this case we need to check for cycles 
     G, depth = makedepgraph(totfollist,leaders,platooninfo,math.inf)
@@ -1028,6 +1029,19 @@ def lanevehlist(data, lane, vehs, meas, platooninfo, needmeas = False):
         return sortedvehlist, meas, platooninfo
     else: 
         return sortedvehlist
+    
+def sortveh(vehlist, lane, meas, platooninfo):
+    #a new sorting algorithm that maybe works
+    #step 1 - get all vehicles which don't have leaders in vehlist
+    
+    #code to iteratively get batches of vehicles to add 
+    
+    #check for circular dependency in the batch to be added 
+    
+    #if no circular, assign values according to leader/follower relationships, and sort
+    
+    #if circular, somehow use sortveh3
+    return 
 
 def sortveh3(vehlist,lane,meas,platooninfo):
     #third attempt at a platoon ordering algorithm 
@@ -1168,94 +1182,90 @@ def sortveh3(vehlist,lane,meas,platooninfo):
             
     return out
 
-def overlaphelp(meas1, meas2):
-    #for two vehicles meas1 and meas2, computes the overlap between them and returns the data which can be directly compared; this is useful for various things 
-    #this is meant to be used when you have somethign like meas[meas[:,7] == lane] and meas2[meas2[:,7] == lane] and then you want all the times where there is overlap. 
-    #uses functions sequential and indjumps from calibration 
+def overlaphelp(meas1, meas2, return_times = False):
+    #meas1 - observations as 2d numpy array where rows are observations, 1st column is times, and observations aren't necessarily sequential in time
+    #meas2 - same as meas1
+    #return_times - if True, we return a list of tuples where each tuple are sequential times where meas1 and meas2 both have observations. 
+    #times are in slices format, meaning the second time has +1 added. 
+    #if False, we return 2 new numpy arrays with the same shape, which give all observations of meas1/meas2 at the same time
+    
+    #this is meant to be used when you have two data like meas1[meas1[:,7]==2], meas2[meas2[:,7]==2] and want to compute their overlaps. Used for sorting
     
     #get indices of the sequential data 
     ind1 = helper.sequential(meas1)
     ind2 = helper.sequential(meas2)
     
     #change the indices into times 
-    times1 = helper.indtotimes(ind1,meas1)
+    times1 = helper.indtotimes(ind1,meas1) #call these times but really they are the times for slices, i.e. second time has 1 extra
     times2 = helper.indtotimes(ind2,meas2)
-    #booking keeping, output will be the parts of meas we can use to compute the distance 
+    #output
     outtimes = []
     outind1 = []
     outind2 = []
-    #need to keep track of where we are 
+    #track of where we are 
     count1 = 0 
-    count2 = 0
+    prevcount2 = 0
     while count1 < len(times1): #iterate over the first meas
         cur1 = times1[count1]
+        count2 = prevcount2
         while count2 < len(times2): #iterate over the second meas 
             cur2 = times2[count2]
             if cur2[0] < cur1[0] and cur2[1] < cur1[0]: #trivial case, check next 2 block 
-                count2 += 1
-                continue
+                pass
             elif cur2[0] > cur1[1] and cur2[1] > cur1[1]: #other trivial case, done checking 2 blocks and check next 1 block 
-                count2 = 0
-                count1 += 1
                 break 
             elif cur2[0] <= cur1[0] and cur2[1] >= cur1[0] and cur2[1] <= cur1[1]:
-                curtimes = (cur1[0], cur2[1])
-                #code to convert the times back into indices
-                outtimes.append(curtimes)
-                temp1 = (curtimes[0]-cur1[0]+cur1[2], curtimes[1]-cur1[0]+cur1[2])
-                outind1.append(temp1)
-                temp1 = (curtimes[0]-cur2[0]+cur2[2],curtimes[1]-cur2[0]+cur2[2])
-                outind2.append(temp1)
-                #update for next iteration 
-                #check the next 2 block 
-                count2 += 1 
-                continue
+                curtimes = (cur1[0], cur2[1]) #actual times of observations in slices format
+                #convert times into output type
+                overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_times)
+
             elif cur2[0] <= cur1[0] and cur2[1] >= cur1[1]:
                 curtimes = (cur1[0],cur1[1])
-                
-                outtimes.append(curtimes)
-                temp1 = (curtimes[0]-cur1[0]+cur1[2], curtimes[1]-cur1[0]+cur1[2])
-                outind1.append(temp1)
-                temp1 = (curtimes[0]-cur2[0]+cur2[2],curtimes[1]-cur2[0]+cur2[2])
-                outind2.append(temp1)
-                #check the next 1 block 
-                count1 += 1 
+                overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_times)
                 break
             elif cur1[0] <= cur2[0] and cur1[1] >= cur2[1]:
                 curtimes = (cur2[0],cur2[1])
-                
-                outtimes.append(curtimes)
-                temp1 = (curtimes[0]-cur1[0]+cur1[2], curtimes[1]-cur1[0]+cur1[2])
-                outind1.append(temp1)
-                temp1 = (curtimes[0]-cur2[0]+cur2[2],curtimes[1]-cur2[0]+cur2[2])
-                outind2.append(temp1)
-                #check the next 2 block 
-                count2 += 1
-                continue
+                overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_times)
+
             else: #cur1[0] < cur2[0] and cur1[1] < cur2[1]
                 curtimes = (cur2[0], cur1[1])
-                
-                outtimes.append(curtimes)
-                temp1 = (curtimes[0]-cur1[0]+cur1[2], curtimes[1]-cur1[0]+cur1[2])
-                outind1.append(temp1)
-                temp1 = (curtimes[0]-cur2[0]+cur2[2],curtimes[1]-cur2[0]+cur2[2])
-                outind2.append(temp1)
-                
-                #check next 1 block
-                count1 += 1
+                overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_times)
                 break
+            #update iteration
+            count2 += 1
         count1 += 1
+        prevcount2 = count2
             
-    #now get the final data to return
-    dim = np.shape(meas1)[1]
-    out1 = np.zeros((0,dim))
-    for i in outind1:
-        out1 = np.append(out1,meas1[int(i[0]):int(i[1])],axis=0)
-    out2 = np.zeros((0,dim))
-    for i in outind2:
-        out2 = np.append(out2,meas2[int(i[0]):int(i[1])],axis=0)
+    #output
+    if not return_times:
+        out1, out2 = [], []
+        for i in outind1:
+            out1.append(meas1[int(i[0]):int(i[1])])
+        for i in outind2:
+            out2.append(meas2[int(i[0]):int(i[1])])
+        dims = np.shape(out1)
+        out1 = np.reshape(out1, (dims[0]*dims[1], dims[2]))
+        out2 = np.reshape(out2, (dims[0]*dims[1], dims[2]))
+        return out1, out2
+    else: 
+        return outtimes
+    # dim = np.shape(meas1)[1]
+    # out1 = np.zeros((0,dim))
+    # for i in outind1:
+    #     out1 = np.append(out1,meas1[int(i[0]):int(i[1])],axis=0)
+    # out2 = np.zeros((0,dim))
+    # for i in outind2:
+    #     out2 = np.append(out2,meas2[int(i[0]):int(i[1])],axis=0)
     
-    return out1, out2
+def overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_times):
+    if return_times:
+        # curtimes[1] = curtimes[1] - 1
+        outtimes.append(curtimes)
+    else:
+        temp1 = (curtimes[0]-cur1[0]+cur1[2], curtimes[1]-cur1[0]+cur1[2])
+        outind1.append(temp1)
+        temp1 = (curtimes[0]-cur2[0]+cur2[2],curtimes[1]-cur2[0]+cur2[2])
+        outind2.append(temp1)
     
 
 def sortveh_disthelper(out, curveh, vehfollist,vehlist, lane, meas, platooninfo):
@@ -1290,7 +1300,7 @@ def sortveh_disthelper(out, curveh, vehfollist,vehlist, lane, meas, platooninfo)
         temp = temp[temp[:,7]==lane]
 #        print(curveh)
 #        print(i)
-        lead,fol = overlaphelp(curmeas,temp) #something is wrong with overlaphelp it seems like its not working properly 
+        lead,fol = overlaphelp(curmeas,temp)
         
         curdist = np.mean(lead[:,2] - fol[:,2])
         distlist[i] = curdist #

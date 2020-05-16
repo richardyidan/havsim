@@ -98,7 +98,7 @@ def indtotimes(indjumps,data, dataind = 1):
     for i in range(len(indjumps)-1):
         starttime = data[indjumps[i],dataind]
         endtime = data[indjumps[i+1]-1,dataind]+1
-        temp = (starttime, endtime, indjumps[i]) #indjumps[i] included because 
+        temp = (starttime, endtime, indjumps[i]) #indjumps[i] included to keep track of how many measurements total
         out.append(temp)
     
     return out 
