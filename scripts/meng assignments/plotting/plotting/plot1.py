@@ -17,7 +17,7 @@ from havsim.calibration.opt import platoonobjfn_obj, platoonobjfn_objder
 #from havsim.simulation.simulation import eq_circular, simulate_cir, update2nd_cir, update_cir
 from havsim.simulation.models import IDM_b3, IDM_b3_eql
 #plotting 
-from havsim.plotting import platoonplot, plotflows, animatevhd, plotvhd, animatetraj, plotspacetime, optplot, selectoscillation, plotformat, selectvehID
+from havsim.plotting import platoonplot, plotflows, animatevhd, plotvhd, animatetraj, plotspacetime, optplot, selectoscillation, plotformat, selectvehID, checksort
 #data processing
 from havsim.calibration.algs import makeplatoonlist, sortveh3
 #%% #load data
@@ -94,3 +94,5 @@ platoonlist = [1763, 1756, 1791, 1794]
 selectvehID(meas,platooninfo, 3, all_veh_list, None, [1763, 1756, 1791, 1794])
 
 
+#%%
+checksort(all_veh_list, meas, 3)

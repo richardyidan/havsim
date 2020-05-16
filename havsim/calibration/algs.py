@@ -442,7 +442,7 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, vehicles_ad
 #
 #    n = 10: n controls how big the maximum platoon size is. n is the number of following vehicles (i.e. simulated vehicles)
     
-    #X = None - every X vehicles, we attempt to resolve a circular dependency
+    #X = math.inf - every X vehicles, we attempt to resolve a circular dependency
     
     #Y = 0 - when resolving circular dependencies early, this is the maximum depth of the cycle allowed. 
     #the depth of a cycle is defined as the minimum depth of all vehicles involved in the cycle. 
@@ -695,6 +695,7 @@ def breakcycles(totfollist, leaders, platooninfo, cycle_num):
     #and 2 forms less dependency graphs. 
     #for addition of cycles early, you want to check that the cycle actually exists (as opposed 
     #to the normal addition of cycles, where we know it will exist), so you can use addcycles 
+    #note that addcycles2 is by far the fastest; in particular things can get slow if you use addcyclesearly alot
 def addcyclesearly(totfollist, leaders, platooninfo, cycle_num, Y):
     #for adding cycles early; in this case we need to check for cycles 
     G, depth = makedepgraph(totfollist,leaders,platooninfo,math.inf)
@@ -780,7 +781,7 @@ def addcycles3(totfollist, leaders, platooninfo, cycle_num):
 #        count += 1
 #    return list(bestCurFix.nodes())
 
-def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= None, vehs = None,cycle_num=5e5, X =  10, Y = 0, cirdep = False, maxn = False):
+def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= None, vehs = None,cycle_num=5e5, X =  math.inf, Y = 0, cirdep = False, maxn = False):
     
     #this runs makeplatooninfo and makeplatoon on the data, returning the measurements (meas), information on each vehicle (platooninfo), 
     #and the list of platoons to calibrate 
@@ -894,7 +895,7 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
         return useless, platind
     
     useless, platind = getUseless(platoonlist, platooninfo, meas) #list of tuple (vehicle, platoon, platoonindex) for each useless vehicle
-    print("Useless vehlcles before:", len(useless))
+    # print("Useless vehlcles before:", len(useless))
     mustbeuseless = []
     for i in useless:
         veh = i[0]
@@ -962,9 +963,9 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
         count += 1
 
     platoonlist = [j for j in platoonlist if j != []]
-    useless2, platind = getUseless(platoonlist, platooninfo, meas)
-    print("Useless vehlcles after:", len(useless2))
-    print("Vehicles which must be useless:", len(mustbeuseless))
+    # useless2, platind = getUseless(platoonlist, platooninfo, meas)
+    # print("Useless vehlcles after:", len(useless2))
+    # print("Vehicles which must be useless:", len(mustbeuseless))
 
     if not extra_output:
         return meas, platooninfo, platoonlist
@@ -1029,24 +1030,9 @@ def lanevehlist(data, lane, vehs, meas, platooninfo, needmeas = False):
         return sortedvehlist
 
 def sortveh3(vehlist,lane,meas,platooninfo):
-    """
-    better sorting logic - 
-    instead of always using distances, try to first use ordering (only possible when circular dependency does not exist)
-    then can use distances only for circular dependencies or other edge cases. 
-    this can still fail in some rare edge cases
-    """
     #third attempt at a platoon ordering algorithm 
     #this one is more hueristic based but should work pretty much always 
     #[1736.0, 1696.0, 1745.0, 1757.0, 1748.0, 1756.0, 1737.0] wrong order [1757 1737 1748 1756]
-    """
-    main way to improve this functions 
-    
-    -come up with some clever way to sort vehicles. I've thought about it for a long time and this is pretty much the best I came up with. 
-    
-    -main way to improve speed is that when you are going over the leftover, you should check if you can add stuff to vehfollist, and potentially use the sortveh_disthelper again. 
-    because the way we are adding vehicles in the leftover is very very slow (n^2) and the way sortveh_disthelper does it looks like (n), so if a bunch of stuff ends up in leftover
-    it can potentially kill your performance. so if you need to sort stuff where alot of the vehicles end up in leftover you probably want to make that modification. 
-    """
     
     #initialization 
     vehlist = sorted(list(vehlist), key = lambda veh: platooninfo[veh][0]) #initial guess of order

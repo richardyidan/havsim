@@ -167,6 +167,8 @@ def makeleadinfo(platoon, platooninfo, sim, *args):
     #requires platooninfo so it can know the simulated times. 
     #also requires sim to know the leader at each observation
     
+    #may be faster to use np.unique with return_inverse and sequential
+    
     #EXAMPLE: 
 #    platoon = [[],5,7] means we want to calibrate vehicles 5 and 7 in a platoon
 #    
@@ -817,79 +819,69 @@ def chain_metric(platoon, platooninfo, meas, k=.9, metrictype='lead'):
     res = 0
     for i in platoon:
         T = set(range(platooninfo[i][1], platooninfo[i][2]+1))
-        res += c_metric(i, platoon, T, platooninfo, meas=meas, k=k, metrictype=metrictype)
+        res += c_metric(i, platoon, T, platooninfo, meas, k=k, metrictype=metrictype)
     return res
 
 
-def c_metric(veh, platoon, T, platooninfo, meas, k=.9, metrictype='lead', depth=0):
+def c_metric(veh, platoon, T, platooninfo, meas, k=.9, metrictype='lead', depth=0, targetsdict = {}):
     #defines how good a single vehicle in a specific time is. 
     #refer to platoon formation pdf for exact definition 
     
-    # leadinfo, folinfo= makeleadinfo(platoon, platooninfo, meas),  makefolinfo(platoon, platooninfo, meas)
-    # if veh not in platoon:
-    #     return 0
-    # targetsList = leadinfo[platoon.index(veh)] if type == 'lead' else folinfo[platoon.index(veh)]
     veh = int(veh)
-    if metrictype == 'lead':
-        leadinfo = makeleadinfo([veh], platooninfo, meas)
-        targetsList = leadinfo[0]
+    if veh in targetsdict:
+        targetsList = targetsdict[veh]
     else:
-        folinfo = makefolinfo([veh], platooninfo, meas)
-        # targetsList = folinfo[0]
-        temp = folinfo[0]
-        targetsList = []
-        for i in temp:
-            Tnstart = platooninfo[i[0]][1]
-            Tnm1 = platooninfo[i[0]][2]
-            start = max(Tnstart, i[1])
-            end = min(Tnm1, i[2])
-            if start<end:
-                targetsList.append([i[0], start, end])
+        if metrictype == 'lead':
+            leadinfo = makeleadinfo([veh], platooninfo, meas)
+            targetsList = leadinfo[0]
+        else:
+            folinfo = makefolinfo([veh], platooninfo, meas)
+            # targetsList = folinfo[0]
+            temp = folinfo[0]
+            targetsList = []
+            for i in temp:
+                Tnstart = platooninfo[i[0]][1]
+                Tnm1 = platooninfo[i[0]][2]
+                start = max(Tnstart, i[1])
+                end = min(Tnm1, i[2])
+                if start<end:
+                    targetsList.append([i[0], start, end])
+        targetsdict[veh] = targetsList
 
-
-
-
-    def getL(veh, platoon, T):
-        L = set([])
-        # if veh not in platoon:
-        #     return L
-        # targetsList = leadinfo[platoon.index(veh)]
-        temp = set([])
-        for i in targetsList:
-            if i[0] not in platoon:
-                continue
-            temp.update(range(i[1], i[2]+1))
-        L = T.intersection(temp)
-        # if len(L)>0:
-        #     print(veh, len(L), depth)
-        return L
-
-    def getLead(veh, platoon, T):
-        # if veh not in platoon:
-        #     return []
-        # targetsList = leadinfo[platoon.index(veh)]
-        leads = []
-        for i in targetsList:
-            if i[0] in platoon and (i[1] in T or i[2] in T):
-                leads.append(i[0])
-        leads = list(set(leads))
-        return leads
-
-    def getTimes(veh, lead, T):
-        # targetsList = leadinfo[platoon.index(veh)]
-        temp = set([])
-        for i in targetsList:
-            if i[0] == lead:
-                temp.update(range(i[1], i[2]+1))
-        temp = T.intersection(temp)
-        return temp
-
-    res = len(getL(veh, platoon, T))
-    leads = getLead(veh, platoon, T)
+    res = len(getL(veh, platoon, T, targetsList))
+    leads = getLead(veh, platoon, T, targetsList)
 
     for i in leads:
-        res += k * c_metric(i, platoon, getTimes(veh, i, T), platooninfo, meas=meas, k=k, metrictype=metrictype, depth=depth + 1)
+        res += k * c_metric(i, platoon, getTimes(veh, i, T, targetsList), platooninfo, meas, k=k, metrictype=metrictype, depth=depth + 1,targetsdict = targetsdict)
     return res
+
+def getL(veh, platoon, T, targetsList):
+    L = set([])
+    temp = set([])
+    for i in targetsList:
+        if i[0] not in platoon:
+            continue
+        temp.update(range(i[1], i[2]+1))
+    L = T.intersection(temp)
+    return L
+    
+def getTimes(veh, lead, T, targetsList):
+    temp = set([])
+    for i in targetsList:
+        if i[0] == lead:
+            temp.update(range(i[1], i[2]+1))
+    temp = T.intersection(temp)
+    return temp
+
+def getLead(veh, platoon, T, targetsList):
+    leads = []
+    for i in targetsList:
+        if i[0] in platoon and (i[1] in T or i[2] in T):
+            leads.append(i[0])
+    leads = list(set(leads))
+    return leads
+
+
 
 def cirdep_metric(platoonlist, platooninfo, meas, k=.9, metrictype='veh'):
     #platoonlist - list of platoons 
