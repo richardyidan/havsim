@@ -103,7 +103,19 @@ def indtotimes(indjumps,data, dataind = 1):
     
     return out 
 
+def indtopos(indjumps, data, dataind = 2):
+    #takes indjumps, data and returns the positions corresponding to boundaries of sequential periods
+    #each sequential section of data has a len 2 tuple of beginning, ending position
+    out = []
+    for i in range(len(indjumps)-1):
+        startpos  = data[indjumps[i],dataind]
+        endpos = data[indjumps[i+1]-1,dataind]
+        temp = (startpos, endpos)
+        out.append(temp)
+    return out
+
 def interp1ds(X,Y,times):
+    #??? this is the same as interpolate function?? Only difference is this one can have output start at a different time
     #given time series data X, Y (such that each (X[i], Y[i]) tuple is an observation), 
     #and the array times, interpolates the data onto times. 
     
