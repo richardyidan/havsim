@@ -1030,7 +1030,39 @@ def lanevehlist(data, lane, vehs, meas, platooninfo, needmeas = False):
     else: 
         return sortedvehlist
     
-def sortveh(vehlist, lane, meas, platooninfo):
+def sortveh(lane, meas, vehset = None):
+    #get list of vehicles to sort
+    if vehset == None: 
+        vehset = []
+        for vehid in meas.keys(): 
+            if lane in meas[vehid][:,7]:
+                vehset.add(vehid)
+    if type(vehset) == list: 
+        vehset = set(vehset)
+    #data for each vehicle and starting vehicles
+    vehinfo = {}
+    starting_vehs = []
+    for veh in vehset: 
+        lanedata = meas[veh]
+        lanedata = lanedata[lanedata[:,7]==lane]
+        leaders = set(np.unique(lanedata[:,4]))
+        leaders = leaders.intersection(vehset)
+        followers = set(np.unique(lanedata[:,5]))
+        followers = followers.intersection(vehset)
+        vehinfo[veh] = (lanedata, leaders, followers)
+        if len(leaders) == 0:
+            starting_vehs.append(veh)
+    
+    sorted_vehs = {}
+    max_value = -1
+    for starting_veh in starting_vehs: 
+        sorted_vehs[starting_veh] = max_value +1
+        #get batch to add
+        
+    
+    
+    
+    
     #a new sorting algorithm that maybe works
     #step 1 - get all vehicles which don't have leaders in vehlist
     
@@ -1042,6 +1074,15 @@ def sortveh(vehlist, lane, meas, platooninfo):
     
     #if circular, somehow use sortveh3
     return 
+
+def make_veh_batch(seeding_vehs, vehinfo, vehset):
+    #seeding_vehs - iterable of vehicle IDs
+    #vehinfo - dict with keys as vehicle IDs, values as observations, leaders, followers
+    #vehset - these vehicles are not added to the batch. must be hashable with keys as vehicle IDs. 
+    
+    #returns - a set of vehicle IDs
+    #makes a batch of vehicles by adding all followers of seeding_vehs, and any leaders they need. We don't add vehicles if they are in vehset though. 
+    
 
 def sortveh3(vehlist,lane,meas,platooninfo):
     #third attempt at a platoon ordering algorithm 
@@ -1089,39 +1130,31 @@ def sortveh3(vehlist,lane,meas,platooninfo):
             leftover.reverse() #iterate over it in reverse 
             
             for i in leftover: #if we have leftover, we will go through and add each vehicle one at a time. 
+            
                 #first check if we can trivially add the vehicle to either the beginning or end. 
                 platoont_nstar = platooninfo[out[0]][0] #first time in the platoon 
                 platoonT_n = platooninfo[out[-1]][3] #last time in the platoon 
                 if platooninfo[i][3] < platoont_nstar: 
-#                    newout = out.copy()
-#                    newout.insert(0,i)
                     out.insert(0,i)
                     continue
                 if platooninfo[i][0] > platoonT_n:
-#                    newout = out.copy()
-#                    newout.append(i)
                     out.append(i)
                     continue 
-                    
-                #now we will go through each vehicle in the platoon and measure distance from the vehicle to the leftover. The very first vehicle with a positive value
-                #must be the vehicle which is directly after the leftover. 
+                #now we will go through each vehicle in the platoon and measure distance from the vehicle to the leftover. 
                 leftovermeas = meas[i]
                 leftovermeas = leftovermeas[leftovermeas[:,7]==lane]
-#                times = leftovermeas[:,1] #times the vehicle is in the target lane 
-                leftovert_nstar = platooninfo[i][0] #t_nstar for the leftover
                 
                 count2 = 0 #keep track of which vehicle we are currently on 
                 case = False
+                prevpositive = False
                 for j in out: #now we need to iterate over each vehicle in the platoon to get the distance for the leftover. 
                     curmeas = meas[j]
                     curmeas = curmeas[curmeas[:,7]==lane]
 #                    curmeas = curmeas[curmeas[:,1]==times] #correct times #bug here 
                     curleftovermeas, curmeas = overlaphelp(leftovermeas,curmeas)
                     if len(curmeas) >0: #assuming we have any sort of overlap we can compute the distance
-#                        timeinds = curmeas[:,1]-leftovert_nstar
-#                        curleftovermeas = leftovermeas[timeinds]
                         curdist = np.mean(curleftovermeas[:,2]-curmeas[:,2]) #get dist for the current vehicle j 
-                        if curdist > 0: #you are directly behind the current vehicle 
+                        if curdist > 0: #you are directly in front of the current vehicle 
                             newout = copy.deepcopy(out) #need to create copy becuase for loop goes over out
                             newout.insert(count2,i)
                             break #exit loop
@@ -1146,37 +1179,13 @@ def sortveh3(vehlist,lane,meas,platooninfo):
                         else: #put at end 
                             newout = copy.deepcopy(out)
                             newout.append(i)
-                    #note that there is still one edge case we don't handle, where there is no overlap at all, but it doesn't actually
-                    #go to the end, it's just kind of snuck in there
                     
                 out = newout
-                #improvement would be after you successfully add i, see if you can add to vehfollist, and if you can then you can use sortveh_disthelper again. 
-
-            ################
-            #deprecated  -  we always just want to call the sortveh_disthelper unless we don't have anything to add. 
-#        elif len(vehfollist)==1: #just 1 follower can just add it don't need to get any special ordering. 
-#            out.append(vehfollist[0])
-            ###################
-            
-        else: #get order among followers, this should only be called once, and then we should either go to the if and immediately terminate or go to the elif
-            #note that this is pretty slow to only call this once potentially, since we don't like adding leftovers. So if you wanted to optimize this you could 
-            #make it so if you add a leftover which has followers, you can then use sortveh_disthelper again, add everything 
-            if count > 1: #count should be 1 and it should never be any other value. 
-                print('bug')
+        else: 
+            if count > 1: #currently sortveh  disthelper should only be used once, in the beginning of the call
+                print('bug') 
             out = sortveh_disthelper(out, curveh, vehfollist, vehlist, lane, meas, platooninfo)
             vehfollist = []
-            #old notes 
-            #possibly sortveh2 is the better approach. see notes we can have lists of vehicles you follow to try to get ordering, need to check for times we get multiple on same
-            #level, and check for circular dependency. Can resolve these using average distance between follower and leader as discussed below.
-            #for after having added multiple followers need a way to dealing with possibly getting multiple followers again. maybe just use last trajectory and do some thing
-            #with the ranking. 
-            
-            #thinking its possible to order this by looking at distance between followers and their leader. then order by the average distance. 
-            #edge cases of vehicle which does not follow anything else in platoon. these can be moved in front of their follower. if there are two such vehicles 
-            #and they have same follower can do distance compared to the follower. 
-            #after adding multiple followers, need to add all followers of followers, so may have multiple followers to add again. 
-            #if this happens, compare everything to the leader which origianlly gave multiple followers. keep adding followers until we get to case where there is only 
-            #1 vehicle to logically add next. Note that trajectories can be extended using np.diff or similar if needed. 
             pass
             
             
@@ -1243,6 +1252,11 @@ def overlaphelp(meas1, meas2, return_times = False):
             out1.append(meas1[int(i[0]):int(i[1])])
         for i in outind2:
             out2.append(meas2[int(i[0]):int(i[1])])
+        if len(out1) == 0: #handle case of empty array 
+            dim2 = np.shape(meas1)[1]
+            out1 = np.zeros((0,dim2))
+            out2 = out1
+            return out1, out2
         dims = np.shape(out1)
         out1 = np.reshape(out1, (dims[0]*dims[1], dims[2]))
         out2 = np.reshape(out2, (dims[0]*dims[1], dims[2]))
@@ -1348,7 +1362,10 @@ def sortveh_disthelper(out, curveh, vehfollist,vehlist, lane, meas, platooninfo)
                     lastmeas = lastmeas[lastmeas[:,7]==lane]
                     temp = meas[k]
                     temp = temp[temp[:,7]==lane]
-                    last, cur = overlaphelp(lastmeas,temp)
+                    try:
+                        last, cur = overlaphelp(lastmeas,temp)
+                    except:
+                        print('hello')
                     if len(last) == 0: #nbothing to check 
                         out.append(k)
                     elif np.mean(last[:,2]-cur[:,2]) > 0: #if this is positive it means the order is right 
