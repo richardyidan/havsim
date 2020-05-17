@@ -21,7 +21,7 @@ import palettable
 
 from .calibration import helper
 from .calibration.helper import sequential
-from havsim.calibration.algs import makeplatoonlist, sortveh3
+from havsim.calibration.algs import makeplatoonlist, sortveh
 from havsim.calibration.opt import r_constant
 
 
@@ -1824,7 +1824,7 @@ def selectoscillation(meas, platooninfo, timeint = 50, xint = 70, lane=1, use_av
 
         if event.key in ['N', 'n']:
             #sort vehicles to form all vehicles which can be shown
-            all_veh_list = sortveh3(vehlist, lane, meas, platooninfo)
+            all_veh_list = sortveh(lane, meas, vehlist)
             
             #form platoonlists for start,end vertices for all regions in vertlist
             platoonlist = list(range(len(vertlist)*2))

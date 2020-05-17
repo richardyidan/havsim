@@ -984,7 +984,8 @@ def makeplatoonlist_s(data, n = 1, lane = 1, vehs = []):
     else:
         meas, platooninfo = makeplatoonlist(data,1,False)
         vehIDs = np.unique(data[data[:,7]==lane,0])
-        sortedvehID = sortveh3(vehIDs,lane,meas,platooninfo) #algorithm for sorting vehicle IDs
+        # sortedvehID = sortveh3(vehIDs,lane,meas,platooninfo) #algorithm for sorting vehicle IDs
+        sortedvehID = sortveh(lane, meas, vehID)
     
     sortedplatoons = []
     nvehs = len(sortedvehID)
@@ -1018,7 +1019,8 @@ def lanevehlist(data, lane, vehs, meas, platooninfo, needmeas = False):
     data = data[np.all([data[:,1]>=firsttime, data[:,1]<=lasttime, data[:,7] == lane],axis=0)]
     vehlist = list(np.unique(data[:,0]))
     
-    sortedvehlist = sortveh3(vehlist, lane, meas, platooninfo)
+    # sortedvehlist = sortveh3(vehlist, lane, meas, platooninfo)
+    sortedvehlist = sortveh(lane, meas, vehlist)
     for count, i in enumerate(sortedvehlist): 
         if i == vehs[0]:
             inds = [count]
@@ -1030,10 +1032,11 @@ def lanevehlist(data, lane, vehs, meas, platooninfo, needmeas = False):
     else: 
         return sortedvehlist
     
-def sortveh(lane, meas, vehset = None):
+def sortveh(lane, meas, vehset = None, verbose = False):
     #lane - lane to sort 
     #meas - data in dictionary format
     #vehset - specify a set or list of vehicles, or if None, we will get every vehicle in meas in lane
+    #verbose - give warning for ambiguous orders
     
     #returns - sorted list of vehicles
     
@@ -1047,6 +1050,8 @@ def sortveh(lane, meas, vehset = None):
     #one way to handle circular dependency case is to check for it when adding vehicle (in last for loop) - 
         #if found, we could order  all the vehicles in the circular dep and add all at once
         #this is a lot of work for an edge case though
+    #there are also some edge cases where the order is ambiguous, in such cases it is not really possible to give an order in such cases, 
+    #and thus I don't consider it a bug. 
     
     #get list of vehicles to sort
     if vehset == None: 
@@ -1096,7 +1101,7 @@ def sortveh(lane, meas, vehset = None):
                 curind = veh2ind[guessveh]
                 
                 #find a position we can compare
-                posoverlap = overlaphelp(all_traj[veh], all_traj[guessveh], True, True)
+                posoverlap = overlaphelp(all_traj[veh], all_traj[guessveh], True, True, False, True)
                 if len(posoverlap) == 0: 
                     #go to nextguess
                     continue
@@ -1118,13 +1123,12 @@ def sortveh(lane, meas, vehset = None):
                         lastind = len(sorted_veh)
                         break
         else: #search list for starting guess
-            guessind = 0
             for curind in range(len(sorted_veh)):
                 guessveh = sorted_veh[curind]
                 #copy paste code from above
                 
                 #find a position we can compare
-                posoverlap = overlaphelp(all_traj[veh], all_traj[guessveh], True, True)
+                posoverlap = overlaphelp(all_traj[veh], all_traj[guessveh], True, True, False, True)
                 if len(posoverlap) == 0: 
                     #go to nextguess
                     continue
@@ -1162,20 +1166,90 @@ def sortveh(lane, meas, vehset = None):
         else: #in this case we need to order everything in the interval we found
             probvehs = sorted_veh[vehinds[0]+1:vehinds[1]] #want to sort probvehs and veh
             #3 ways to try to sort multiple vehicles - 
-            #a - try to find a consistent position for all vehicles
-            posoverlap = overlaphelp(all_traj[veh], all_traj[probvehs[0]], return_times = True, return_pos = True)
-        
-            #none of these cases are currently implemented
             
-            #b - try to find a consistent time for all vehicles 
-            #c - try to find a consistent leader/follower for all vehicles
-            #for a,b you can use overlaphelper with options to find overlap (need to tweak how options work)
-            #for c, you can tweak how vehicles leaders/followers are initiailized
+            #a - try to find a consistent position for all vehicles###
+            for i in range(len(probvehs)):
+                if i == 0:
+                    posoverlap = overlaphelp(all_traj[veh], all_traj[probvehs[0]],True, True, False, True)
+                else:
+                    posoverlap = overlaphelp(posoverlap, all_traj[probvehs[i]], False, True, False, True)
+                if len(posoverlap)==0:
+                    break
+            else: #if we get through for loop then we found overlap
+                usepos = (posoverlap[0][0] + posoverlap[0][1])/2
+                tiebreaking = {} #all vehicles get sorted using the position we found
+                for i in probvehs:
+                    tiebreaking[i] = time_at_pos(all_traj[i],usepos)
+                tiebreaking[veh] = time_at_pos(all_traj[veh],usepos)
+                fixedvehs = probvehs.copy()
+                fixedvehs.append(veh)
+                fixedvehs = sorted(fixedvehs, key = lambda veh: tiebreaking[veh])
+                
+                #fixedvehs has the correct order - now update sorted_veh and veh2ind
+                sorted_veh.insert(vehinds[0]+1, veh)
+                for count,i in enumerate(range(vehinds[0]+1, vehinds[1]+1)):
+                    sorted_veh[i] = fixedvehs[count]
+                veh2ind = update_inds(sorted_veh, veh2ind, vehinds[0]+1)
+                continue #done
             
+            #b - try to find a consistent time for all vehicles###
+            for i in range(len(probvehs)):
+                if i == 0:
+                    timeoverlap = overlaphelp(all_traj[veh], all_traj[probvehs[0]],True, True, False, False)
+                else:
+                    timeoverlap = overlaphelp(timeoverlap, all_traj[probvehs[i]], False, True, False, False)
+                if len(timeoverlap)==0:
+                    break
+            else: #if we get through for loop then we found overlap
+                usetime = timeoverlap[0][0]
+                tiebreaking = {}
+                for i in probvehs:
+                    t_nstar = meas[i][0,1]
+                    tiebreaking[i] = meas[i][int(usetime - t_nstar),2]
+                t_nstar = meas[veh][0,1]
+                tiebreaking[veh] = meas[veh][int(usetime - t_nstar),2]
+                fixedvehs = probvehs.copy()
+                fixedvehs.append(veh)
+                fixedvehs = sorted(fixedvehs, key = lambda veh: tiebreaking[veh], reverse = True)
+                
+                #fixedvehs has the correct order - now update sorted_veh and veh2ind
+                sorted_veh.insert(vehinds[0]+1, veh)
+                for count,i in enumerate(range(vehinds[0]+1, vehinds[1]+1)):
+                    sorted_veh[i] = fixedvehs[count]
+                veh2ind = update_inds(sorted_veh, veh2ind, vehinds[0]+1)
+                continue #done
+                
+            #c - try to find consistent leader/follower for all vehicles###
+            leadfoloverlap = guessvehs[veh]
+            for i in probvehs:
+                leadfoloverlap = leadfoloverlap.intersection(guessvehs[i])
+                if len(leadfoloverlap) == 0:
+                    break
+            else: #if we get through for loop then we found overlap
+                fixveh = leadfoloverlap.pop()
+                fixvehtraj = all_traj[fixveh]
+                tiebreaking = {}
+                for i in probvehs: 
+                    data1, data2 = overlaphelp(fixvehtraj, all_traj[i])
+                    tiebreaking[i] = np.mean(data1[:,2] - data2[:,2])
+                data1, data2 = overlaphelp(fixvehtraj, all_traj[veh])
+                tiebreaking[veh] = np.mean(data1[:,2] - data2[:,2])
+                fixedvehs = probvehs.copy()
+                fixedvehs.append(veh)
+                fixedvehs = sorted(fixedvehs, key = lambda veh: tiebreaking[veh])
+                
+                #fixedvehs has the correct order - now update sorted_veh and veh2ind
+                sorted_veh.insert(vehinds[0]+1, veh)
+                for count,i in enumerate(range(vehinds[0]+1, vehinds[1]+1)):
+                    sorted_veh[i] = fixedvehs[count]
+                veh2ind = update_inds(sorted_veh, veh2ind, vehinds[0]+1)
+                continue #done
             
-            # sorted_veh.insert(vehinds[0]+1, veh) #for sake of testing
-            # veh2ind = update_inds(sorted_veh, veh2ind, vehinds[0]+1)
-            # print('warning - ambiguous order for '+ str(sorted_veh[vehinds[0]:vehinds[1]+2])+' - no tie breaking rules are implemented')
+            #we failed to completely sort the vehicles and are left with an ambiguous order
+            sorted_veh.insert(vehinds[0]+1, veh) 
+            veh2ind = update_inds(sorted_veh, veh2ind, vehinds[0]+1)
+            if verbose:
+                print('warning - ambiguous order for '+ str(sorted_veh[vehinds[0]+1:vehinds[1]+1]))
         
         
         
@@ -1205,11 +1279,11 @@ def sortveh_helper_search(firstind, lastind, search, veh, sorted_veh, all_traj):
         prevvehind = firstind - 1
         vehind = lastind
     
-    vehinds = prevvehind
+    # vehinds = prevvehind
     for guessind in inds: 
         guessveh = sorted_veh[guessind]
         #find a position we can compare
-        posoverlap = overlaphelp(all_traj[veh], all_traj[guessveh], True, True)
+        posoverlap = overlaphelp(all_traj[veh], all_traj[guessveh],True, True, False, True)
         if len(posoverlap) == 0: 
             #go to nextguess
             continue
@@ -1256,7 +1330,7 @@ def time_at_pos(traj, pos, reverse = False):
             prev = cur
         else:
             return None
-    if reverse: 
+    if reverse: #copy pasted
         inds = reversed(inds)
         cur = traj[-1,2]
         if cur < pos: 
@@ -1404,39 +1478,66 @@ def sortveh3(vehlist,lane,meas,platooninfo):
             
     return out
 
-def overlaphelp(meas1, meas2, return_times = False, return_pos = False, input_pos = False):
-    #meas1 - observations as 2d numpy array where rows are observations, 1st column is times, and observations aren't necessarily sequential in time
-    #meas2 - same as meas1
-    #return_times - if True, we return a list of tuples where each tuple are sequential times where meas1 and meas2 both have observations. 
-    #    times are in slices format, meaning the second time has +1 added. 
-    #    if False, we return 2 new numpy arrays with the same shape, which give all observations of meas1/meas2 at the same time
-    #if return_pos, we return positions in tuple format where trajectories have position overlap
-    #if input_pos, meas1 and meas2 are lists of tuples of positions
+def overlaphelp(meas1, meas2, meas1_isdata = True, meas2_isdata = True, return_data = True, get_pos = False):
+    #meas1 - either a list of tuples, or a 2d array of data with rows as observations
+    #meas2 - either a list of tuples, or a 2d array of data with rows as observations
+    #meas1_isdata - if True, meas1 is data, otherwise meas1 is a list of tuple
+    #meas2_isdata - if True, meas2 is data, otherwise meas1 is a list of tuple
+    #return_data - If True, we return two 2d arrays which give all observations for meas1, meas2 with the same times
+        #if False, we return a list of tuples where each tuple gives the overlap between the data
+        #if get_pos = True, return_data must be False
+    #get_pos - whether the function finds overlaps in positions (if True), or overlap in times
     
+    #this function can compute the overlap between two datas, either overlap in times (times where both data have observations)
+    #or overlap in pos (positions where both data have sequential observations)
+    
+    #common format for this function is a list of tuples, where each tuple is representing the boundaries for a region
     #this is meant to be used when you have two data like meas1[meas1[:,7]==2], meas2[meas2[:,7]==2] and want to compute their overlaps. Used for sorting
+    #can be used to compute their overlaps in positions or times, and can be used to compute the overlap between several vehicles by using the options
     
     
     #get indices of the sequential data 
+    if get_pos: 
+        if not return_data:
+            return_data = False
     
-    if return_pos: 
-        if not return_times: 
-            print('setting return_times to True')
-            return_times = True #must be in this format for return_pos
-            #possible to give an option to 
-        if input_pos: #True True True
-            times1 = meas1
-            times2 = meas2
-        else: #True True
-            ind1 = helper.sequential(meas1)
-            ind2 = helper.sequential(meas2)
-            times1 = helper.indtopos(ind1, meas1)
-            times2 = helper.indtopos(ind2, meas2)
-    else: #____ False False
-        #change the indices into times 
+    if meas1_isdata: 
         ind1 = helper.sequential(meas1)
+        if get_pos: 
+            times1 = helper.indtopos(ind1, meas1)
+        else: 
+            times1 = helper.indtotimes(ind1,meas1)
+    else:
+        times1 = meas1
+    
+    if meas2_isdata:
         ind2 = helper.sequential(meas2)
-        times1 = helper.indtotimes(ind1,meas1) #call these times but really they are the times for slices, i.e. second time has 1 extra
-        times2 = helper.indtotimes(ind2,meas2)
+        if get_pos:
+            times2 = helper.indtopos(ind2, meas2)
+        else:
+            times2 = helper.indtotimes(ind2, meas2)
+    else:
+        times2 = meas2
+    
+    # if return_pos: 
+    #     if not return_times: 
+    #         print('setting return_times to True')
+    #         return_times = True #must be in this format for return_pos
+    #         #possible to give an option to 
+    #     if input_pos: #True True True
+    #         times1 = meas1
+    #         times2 = meas2
+    #     else: #True True
+    #         ind1 = helper.sequential(meas1)
+    #         ind2 = helper.sequential(meas2)
+    #         times1 = helper.indtopos(ind1, meas1)
+    #         times2 = helper.indtopos(ind2, meas2)
+    # else: #____ False False
+    #     #change the indices into times 
+    #     ind1 = helper.sequential(meas1)
+    #     ind2 = helper.sequential(meas2)
+    #     times1 = helper.indtotimes(ind1,meas1) #call these times but really they are the times for slices, i.e. second time has 1 extra
+    #     times2 = helper.indtotimes(ind2,meas2)
     #output
     outtimes = []
     outind1 = []
@@ -1456,19 +1557,19 @@ def overlaphelp(meas1, meas2, return_times = False, return_pos = False, input_po
             elif cur2[0] <= cur1[0] and cur2[1] >= cur1[0] and cur2[1] <= cur1[1]:
                 curtimes = (cur1[0], cur2[1]) #actual times of observations in slices format
                 #convert times into output type
-                overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_times)
+                overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_data)
 
             elif cur2[0] <= cur1[0] and cur2[1] >= cur1[1]:
                 curtimes = (cur1[0],cur1[1])
-                overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_times)
+                overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_data)
                 break
             elif cur1[0] <= cur2[0] and cur1[1] >= cur2[1]:
                 curtimes = (cur2[0],cur2[1])
-                overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_times)
+                overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_data)
 
             else: #cur1[0] < cur2[0] and cur1[1] < cur2[1]
                 curtimes = (cur2[0], cur1[1])
-                overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_times)
+                overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_data)
                 break
             #update iteration
             count2 += 1
@@ -1476,7 +1577,7 @@ def overlaphelp(meas1, meas2, return_times = False, return_pos = False, input_po
         prevcount2 = count2
             
     #output
-    if not return_times:
+    if return_data:
         out1, out2 = [], []
         for i in outind1:
             out1.append(meas1[int(i[0]):int(i[1])])
@@ -1501,8 +1602,8 @@ def overlaphelp(meas1, meas2, return_times = False, return_pos = False, input_po
     # for i in outind2:
     #     out2 = np.append(out2,meas2[int(i[0]):int(i[1])],axis=0)
     
-def overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_times):
-    if return_times:
+def overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_data):
+    if not return_data:
         # curtimes[1] = curtimes[1] - 1
         outtimes.append(curtimes)
     else:
@@ -1592,10 +1693,10 @@ def sortveh_disthelper(out, curveh, vehfollist,vehlist, lane, meas, platooninfo)
                     lastmeas = lastmeas[lastmeas[:,7]==lane]
                     temp = meas[k]
                     temp = temp[temp[:,7]==lane]
-                    try:
-                        last, cur = overlaphelp(lastmeas,temp)
-                    except:
-                        print('hello')
+                    # try:
+                    last, cur = overlaphelp(lastmeas,temp)
+                    # except:
+                    #     print('hello')
                     if len(last) == 0: #nbothing to check 
                         out.append(k)
                     elif np.mean(last[:,2]-cur[:,2]) > 0: #if this is positive it means the order is right 
