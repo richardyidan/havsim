@@ -1032,11 +1032,13 @@ def lanevehlist(data, lane, vehs, meas, platooninfo, needmeas = False):
     else: 
         return sortedvehlist
     
-def sortveh(lane, meas, vehset = None, verbose = False):
+def sortveh(lane, meas, vehset = None, verbose = False, method = 'leadfol'):
     #lane - lane to sort 
     #meas - data in dictionary format
     #vehset - specify a set or list of vehicles, or if None, we will get every vehicle in meas in lane
     #verbose - give warning for ambiguous orders
+    #method = 'leadfol' - leadfol enforces leader/follower relationships in the order, using a heuristic to break ties. 
+        #if method is not leadfol, only the heuristic is used. 
     
     #returns - sorted list of vehicles
     
@@ -1044,14 +1046,18 @@ def sortveh(lane, meas, vehset = None, verbose = False):
     #we find a position 'minpos' and get the times all vehicles pass this position. #then we sort vehicles according to those times
     #for vehicles which don't pass that position, they are added one at a time by finding vehicles they can fit between. 
     #we do that by using overlaphelp to find positinos we can compare, then use time_at_pos to get times at the position, compare the times
-    #if the order is ambiguous, we do an extra sort
+    #If the order is ambiguous, we order vehicles using their leader/follower relationships ('leadfol' method). We also break ties 
+    #using a heuristic strategy in sortveh_heuristic. 
+    #if the method is not 'leadfol', only the heuristic strategy is used. 
+    #the leadfol method isn't 100% perfect
+    #there are also some rare edge cases where the order is ambiguous
+    #in particular there may be some edge cases where there are chains of vehicles which can't be compared to each other, but the beginning of the chains
+    #both share a common leader. E.g. [230, 231, 240, 245, 257, 267] or [3343, 299, 3344, 311, 309]
+    #we do not consistently handle circular dependencies
+        #one way to handle circular dependency case is to check for it when adding vehicle (in last for loop) - 
+            #if found, we could order  all the vehicles in the circular dep and add all at once
+            #this is a lot of work for an edge case though
     
-    #currently this algorithm can give a robust order except for circular dependencies, which do not have any guarenteed orders
-    #one way to handle circular dependency case is to check for it when adding vehicle (in last for loop) - 
-        #if found, we could order  all the vehicles in the circular dep and add all at once
-        #this is a lot of work for an edge case though
-    #there are also some edge cases where the order is ambiguous, in such cases it is not really possible to give an order in such cases, 
-    #and thus I don't consider it a bug. 
     
     #get list of vehicles to sort
     if vehset == None: 
@@ -1066,17 +1072,19 @@ def sortveh(lane, meas, vehset = None, verbose = False):
     all_traj = {} #trajectories in lane
     minpos = math.inf #minimum position
     guessvehs = {} #values are vehicles we guess are close to key 
+    leads = {}
     for veh in vehset: 
         lanedata = meas[veh]
         lanedata = lanedata[lanedata[:,7]==lane]
         all_traj[veh] = lanedata 
         
         leaders = set(np.unique(lanedata[:,4]))
-        leaders = leaders.union(set(np.unique(lanedata[:,5])))
-        guessvehs[veh] = leaders.intersection(vehset) #guessvehs has all leaders/followers
+        leads[veh] = leaders
+        temp = leaders.union(set(np.unique(lanedata[:,5])))
+        guessvehs[veh] = temp.intersection(vehset) #guessvehs has all leaders/followers
         if lanedata[0,2] < minpos: 
             minpos = lanedata[0,2]
-    minpos += 10
+    minpos += 50 #magic number
     
     #sort many vehicles with some common position
     sorted_veh = [] #sorted vehicles - the output
@@ -1092,9 +1100,9 @@ def sortveh(lane, meas, vehset = None, verbose = False):
     for count, veh in enumerate(sorted_veh): 
         veh2ind[veh] = count
         vehset.remove(veh)
-        
+    
     #add each remaining vehicle in vehset
-    for veh in vehset: 
+    for veh in vehset:         
         #find initial guess #########
         for guessveh in guessvehs[veh]: 
             if guessveh in veh2ind: 
@@ -1165,96 +1173,211 @@ def sortveh(lane, meas, vehset = None, verbose = False):
             veh2ind = update_inds(sorted_veh, veh2ind, vehinds[-1])
         else: #in this case we need to order everything in the interval we found
             probvehs = sorted_veh[vehinds[0]+1:vehinds[1]] #want to sort probvehs and veh
-            #3 ways to try to sort multiple vehicles - 
             
-            #a - try to find a consistent position for all vehicles###
-            for i in range(len(probvehs)):
-                if i == 0:
-                    posoverlap = overlaphelp(all_traj[veh], all_traj[probvehs[0]],True, True, False, True)
+            if method == 'leadfol':
+                #leader/follower based approach - ###
+                #prepare data
+                sortedleads = {} #keys are vehicles, values are leaders for key which have been sorted
+                probleads = {} #values are leaders for key which are in allprobvehs
+                allprobvehs = probvehs.copy()
+                allprobvehs.append(veh) #we want to sort allprobvehs
+                for i in allprobvehs: 
+                    sortedleads[i] = leads[i].intersection(sorted_veh).difference(probvehs)
+                    probleads[i] = leads[i].intersection(allprobvehs)
+                    
+                #assign scores to each veh based on lead relationships
+                # #initialize scores old
+                # leadfoltiebreak = {i:0 for i in allprobvehs} #values are a score based on leadfollower relationships - we use this to sort at the end
+                # for i in allprobvehs: 
+                #     mymax = -math.inf
+                #     for j in sortedleads[i]: 
+                #         temp = veh2ind[j] - vehinds[0] #or just always -1/1? 
+                #         if temp > mymax: 
+                #             mymax = temp
+                #     if mymax != -math.inf:
+                #         leadfoltiebreak[i] = mymax
+                #new way maybe works
+                leadfoltiebreak = {i:1 for i in allprobvehs} #values are a score based on leadfollower relationships - we use this to sort at the end
+                for i in allprobvehs: 
+                    if len(sortedleads[i]) > 0: 
+                        leadfoltiebreak[i] = 0
+                #give scores
+                for i in range(len(allprobvehs)-1):
+                    for j in allprobvehs: 
+                        for k in probleads[j]:
+                            if leadfoltiebreak[k] >= leadfoltiebreak[j]:
+                                leadfoltiebreak[j] = leadfoltiebreak[k] + 1
+                #check for ties in score
+                chkties = {}
+                for i in allprobvehs: 
+                    score = leadfoltiebreak[i]
+                    if score in chkties: 
+                        chkties[score].append(i)
+                    else:
+                        chkties[score] = [i]
+
+                #resolve ties if necessary
+                dt= 1e-5 #if we resolve ties its by adding this small amount
+                for score in chkties.keys(): 
+                    if len(chkties[score]) > 1: 
+                        temp = chkties[score]
+                        fixedvehs, success = sortveh_heuristic(temp[0], temp[1:], all_traj, meas, guessvehs)
+                        if not success: 
+                            print('warning - ambiguous order for '+str(temp))
+                            tiebreaking = [all_traj[curveh][0,1] for curveh in probvehs]
+                            mytime = all_traj[veh][0,1]
+                            for count, j in enumerate(tiebreaking): 
+                                if mytime < j: 
+                                    ind = count
+                            else:
+                                ind = count + 1
+                            fixedvehs = probvehs.copy()
+                            fixedvehs.insert(ind, veh)
+                        for count, i in enumerate(fixedvehs): 
+                            leadfoltiebreak[i] += count*dt
+                #sorting from lead/fol method
+                fixedvehs = sorted(allprobvehs, key = lambda veh: leadfoltiebreak[veh])
+
+                #if vehicles have negative values they can get put before the interval
+                negind = len(fixedvehs) #negind is the number of vehicles that get added before vehinds[0]
+                for count, i in enumerate(fixedvehs): 
+                    if leadfoltiebreak[i] >= 0: 
+                        negind = count
+                        break
+                # negind = 0 #if you can give negative scores then this turns it off. But in current way it's always off. 
+                negvehs = fixedvehs[0:negind]
+                fixedvehs = fixedvehs[negind:]
+                
+                #updat vehicles that get put before interval 
+                needinsert = True
+                if negind == 0:
+                    pass
+                else: 
+                    for i in negvehs: 
+                        if i == veh: #i is new vehicle 
+                            tempind = math.floor(leadfoltiebreak[i]) + vehinds[0] + 1 #where it gets inserted
+                            sorted_veh.insert(tempind, i)
+                            needinsert = False
+                            veh2ind = update_inds(sorted_veh, veh2ind, tempind)
+                            vehinds = (vehinds[0]+1, vehinds[1])
+                            
+                        else: #i has already been sorted
+                            tempind = math.floor(leadfoltiebreak[i]) + vehinds[0] + 1 #where it needs to go
+                            sorted_veh.pop(veh2ind[i])
+                            sorted_veh.insert(tempind,i)
+                            veh2ind = update_inds(sorted_veh, veh2ind, tempind)
+                            vehinds = (vehinds[0]+1, vehinds[1])
+                        
+                #update sorted list
+                if len(fixedvehs) == 0:
+                    pass
                 else:
-                    posoverlap = overlaphelp(posoverlap, all_traj[probvehs[i]], False, True, False, True)
-                if len(posoverlap)==0:
-                    break
-            else: #if we get through for loop then we found overlap
-                usepos = (posoverlap[0][0] + posoverlap[0][1])/2
-                tiebreaking = {} #all vehicles get sorted using the position we found
-                for i in probvehs:
-                    tiebreaking[i] = time_at_pos(all_traj[i],usepos)
-                tiebreaking[veh] = time_at_pos(all_traj[veh],usepos)
-                fixedvehs = probvehs.copy()
-                fixedvehs.append(veh)
-                fixedvehs = sorted(fixedvehs, key = lambda veh: tiebreaking[veh])
+                    if needinsert:
+                        sorted_veh.insert(vehinds[0]+1, veh) #we only insert to add an extra vehicle - this gets overwritten
+                    for count,i in enumerate(range(vehinds[0]+1, vehinds[1]+1)):
+                        sorted_veh[i] = fixedvehs[count]
+                    veh2ind = update_inds(sorted_veh, veh2ind, vehinds[0]+1)
+                    
+            else:
+                #heuristic based approach - ### #old method 
+                fixedvehs, success = sortveh_heuristic(veh, probvehs, all_traj, meas, guessvehs)
                 
-                #fixedvehs has the correct order - now update sorted_veh and veh2ind
-                sorted_veh.insert(vehinds[0]+1, veh)
-                for count,i in enumerate(range(vehinds[0]+1, vehinds[1]+1)):
-                    sorted_veh[i] = fixedvehs[count]
-                veh2ind = update_inds(sorted_veh, veh2ind, vehinds[0]+1)
-                continue #done
-            
-            #b - try to find a consistent time for all vehicles###
-            for i in range(len(probvehs)):
-                if i == 0:
-                    timeoverlap = overlaphelp(all_traj[veh], all_traj[probvehs[0]],True, True, False, False)
+                if success:
+                    #fixedvehs has the correct order - now update sorted_veh and veh2ind
+                    sorted_veh.insert(vehinds[0]+1, veh)
+                    for count,i in enumerate(range(vehinds[0]+1, vehinds[1]+1)):
+                        sorted_veh[i] = fixedvehs[count]
+                    veh2ind = update_inds(sorted_veh, veh2ind, vehinds[0]+1)
                 else:
-                    timeoverlap = overlaphelp(timeoverlap, all_traj[probvehs[i]], False, True, False, False)
-                if len(timeoverlap)==0:
-                    break
-            else: #if we get through for loop then we found overlap
-                usetime = timeoverlap[0][0]
-                tiebreaking = {}
-                for i in probvehs:
-                    t_nstar = meas[i][0,1]
-                    tiebreaking[i] = meas[i][int(usetime - t_nstar),2]
-                t_nstar = meas[veh][0,1]
-                tiebreaking[veh] = meas[veh][int(usetime - t_nstar),2]
-                fixedvehs = probvehs.copy()
-                fixedvehs.append(veh)
-                fixedvehs = sorted(fixedvehs, key = lambda veh: tiebreaking[veh], reverse = True)
-                
-                #fixedvehs has the correct order - now update sorted_veh and veh2ind
-                sorted_veh.insert(vehinds[0]+1, veh)
-                for count,i in enumerate(range(vehinds[0]+1, vehinds[1]+1)):
-                    sorted_veh[i] = fixedvehs[count]
-                veh2ind = update_inds(sorted_veh, veh2ind, vehinds[0]+1)
-                continue #done
-                
-            #c - try to find consistent leader/follower for all vehicles###
-            leadfoloverlap = guessvehs[veh]
-            for i in probvehs:
-                leadfoloverlap = leadfoloverlap.intersection(guessvehs[i])
-                if len(leadfoloverlap) == 0:
-                    break
-            else: #if we get through for loop then we found overlap
-                fixveh = leadfoloverlap.pop()
-                fixvehtraj = all_traj[fixveh]
-                tiebreaking = {}
-                for i in probvehs: 
-                    data1, data2 = overlaphelp(fixvehtraj, all_traj[i])
-                    tiebreaking[i] = np.mean(data1[:,2] - data2[:,2])
-                data1, data2 = overlaphelp(fixvehtraj, all_traj[veh])
-                tiebreaking[veh] = np.mean(data1[:,2] - data2[:,2])
-                fixedvehs = probvehs.copy()
-                fixedvehs.append(veh)
-                fixedvehs = sorted(fixedvehs, key = lambda veh: tiebreaking[veh])
-                
-                #fixedvehs has the correct order - now update sorted_veh and veh2ind
-                sorted_veh.insert(vehinds[0]+1, veh)
-                for count,i in enumerate(range(vehinds[0]+1, vehinds[1]+1)):
-                    sorted_veh[i] = fixedvehs[count]
-                veh2ind = update_inds(sorted_veh, veh2ind, vehinds[0]+1)
-                continue #done
-            
-            #we failed to completely sort the vehicles and are left with an ambiguous order
-            sorted_veh.insert(vehinds[0]+1, veh) 
-            veh2ind = update_inds(sorted_veh, veh2ind, vehinds[0]+1)
-            if verbose:
-                print('warning - ambiguous order for '+ str(sorted_veh[vehinds[0]+1:vehinds[1]+1]))
+                    #we failed to completely sort the vehicles and are left with an ambiguous order
+                    #arbitrary 
+                    # sorted_veh.insert(vehinds[0]+1, veh) 
+                    # veh2ind = update_inds(sorted_veh, veh2ind, vehinds[0]+1)
+                    
+                    #maybe this is a better tie breaking rule
+                    tiebreaking = [all_traj[curveh][0,1] for curveh in probvehs]
+                    mytime = all_traj[veh][0,1]
+                    for count, j in enumerate(tiebreaking): 
+                        if mytime < j: 
+                            ind = count + vehinds[0]+1
+                            break
+                    else:
+                        ind = vehinds[1]
+                    sorted_veh.insert(ind, veh)
+                    veh2ind = update_inds(sorted_veh, veh2ind, ind)
+                    if verbose:
+                        print('warning - ambiguous order for '+ str(sorted_veh[vehinds[0]+1:vehinds[1]+1])+' between vehicles '+str((sorted_veh[vehinds[0]], sorted_veh[vehinds[1]+1])))
         
         
         
         
     return sorted_veh
+
+def sortveh_heuristic(veh, probvehs, all_traj, meas, guessvehs):
+    #a - try to find a consistent position for all vehicles###
+    for i in range(len(probvehs)):
+        if i == 0:
+            posoverlap = overlaphelp(all_traj[veh], all_traj[probvehs[0]],True, True, False, True)
+        else:
+            posoverlap = overlaphelp(posoverlap, all_traj[probvehs[i]], False, True, False, True)
+        if len(posoverlap)==0:
+            break
+    else: #if we get through for loop then we found overlap
+        usepos = (posoverlap[0][0] + posoverlap[0][1])/2
+        tiebreaking = {} #all vehicles get sorted using the position we found
+        for i in probvehs:
+            tiebreaking[i] = time_at_pos(all_traj[i],usepos)
+        tiebreaking[veh] = time_at_pos(all_traj[veh],usepos)
+        fixedvehs = probvehs.copy()
+        fixedvehs.append(veh)
+        fixedvehs = sorted(fixedvehs, key = lambda veh: tiebreaking[veh])
+        
+        return fixedvehs, True
+    
+    #b - try to find a consistent time for all vehicles###
+    for i in range(len(probvehs)):
+        if i == 0:
+            timeoverlap = overlaphelp(all_traj[veh], all_traj[probvehs[0]],True, True, False, False)
+        else:
+            timeoverlap = overlaphelp(timeoverlap, all_traj[probvehs[i]], False, True, False, False)
+        if len(timeoverlap)==0:
+            break
+    else: #if we get through for loop then we found overlap
+        usetime = timeoverlap[0][0]
+        tiebreaking = {}
+        for i in probvehs:
+            t_nstar = meas[i][0,1]
+            tiebreaking[i] = meas[i][int(usetime - t_nstar),2]
+        t_nstar = meas[veh][0,1]
+        tiebreaking[veh] = meas[veh][int(usetime - t_nstar),2]
+        fixedvehs = probvehs.copy()
+        fixedvehs.append(veh)
+        fixedvehs = sorted(fixedvehs, key = lambda veh: tiebreaking[veh], reverse = True)
+        
+        return fixedvehs, True
+        
+    #c - try to find consistent leader/follower for all vehicles###
+    leadfoloverlap = guessvehs[veh]
+    for i in probvehs:
+        leadfoloverlap = leadfoloverlap.intersection(guessvehs[i])
+        if len(leadfoloverlap) == 0:
+            break
+    else: #if we get through for loop then we found overlap
+        fixveh = leadfoloverlap.pop()
+        fixvehtraj = all_traj[fixveh]
+        tiebreaking = {}
+        for i in probvehs: 
+            data1, data2 = overlaphelp(fixvehtraj, all_traj[i])
+            tiebreaking[i] = np.mean(data1[:,2] - data2[:,2])
+        data1, data2 = overlaphelp(fixvehtraj, all_traj[veh])
+        tiebreaking[veh] = np.mean(data1[:,2] - data2[:,2])
+        fixedvehs = probvehs.copy()
+        fixedvehs.append(veh)
+        fixedvehs = sorted(fixedvehs, key = lambda veh: tiebreaking[veh])
+        
+        return fixedvehs, True
+    
+    return None, False
 
 def update_inds(sorted_veh, veh2ind, startind):
     #helper for sortveh
@@ -1399,7 +1522,7 @@ def time_at_pos(traj, pos, reverse = False):
 def sortveh3(vehlist,lane,meas,platooninfo):
     #########DEPRECATED############
     #use sortveh instead
-    
+    print('use sortveh instead')
     #initialization 
     vehlist = sorted(list(vehlist), key = lambda veh: platooninfo[veh][0]) #initial guess of order
     out = [vehlist[0]] #initialize output 
@@ -1589,8 +1712,13 @@ def overlaphelp(meas1, meas2, meas1_isdata = True, meas2_isdata = True, return_d
             out2 = out1
             return out1, out2
         dims = np.shape(out1)
-        out1 = np.reshape(out1, (dims[0]*dims[1], dims[2]))
-        out2 = np.reshape(out2, (dims[0]*dims[1], dims[2]))
+        try:
+            # out1 = np.reshape(out1, (dims[0]*dims[1], dims[2]))
+            out1 = np.concatenate(out1, axis = 0)
+        except: 
+            print('hello')
+        # out2 = np.reshape(out2, (dims[0]*dims[1], dims[2]))
+        out2 = np.concatenate(out2, axis =0)
         return out1, out2
     else: 
         return outtimes
