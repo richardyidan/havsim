@@ -62,7 +62,7 @@ def mobil( veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, 
     #2 - politeness
     #3 - bias on left side 
     #4 - bias on right side
-    #5 - probability of checking LC while in discretionary state
+    #5 - probability of checking LC while in discretionary state (scaled by timestep)
     
     #naming convention - l/r = left/right respectively, current lane if no l/r
     #new indicates that it would be the configuration after potential change 
@@ -72,7 +72,7 @@ def mobil( veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, 
     
     #calculate cura, fola, newfola
     if not userelax_cur and veh.in_relax: 
-        cura = veh.call_cf_helper(veh.hd, veh.speed, veh.lead, veh.lane, timeind, dt, False)
+        cura = veh.get_cf(veh.hd, veh.speed, veh.lead, veh.lane, timeind, dt, False)
     else: 
         cura = veh.acc #more generally could use a method to return acceleration 
     fola, newfola = mobil_helper(veh.fol, veh, veh.lead, newfolhd, timeind, dt, userelax_cur, userelax_new)
@@ -84,7 +84,7 @@ def mobil( veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, 
         lfola, newlfola = mobil_helper(lfol, llead, veh, newlfolhd, timeind, dt, userelax_cur, userelax_new)
         
         userelax = userelax_new and veh.in_relax
-        newla = veh.call_cf_helper(newlhd, veh.speed, llead, veh.llane, timeind, dt, userelax)
+        newla = veh.get_cf(newlhd, veh.speed, llead, veh.llane, timeind, dt, userelax)
         
         lincentive = newla - cura + p[2]*(newlfola - lfola + newfola - fola) + p[3]
     
@@ -95,7 +95,7 @@ def mobil( veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, 
         rfola, newrfola = mobil_helper(rfol, rlead, veh, newrfolhd, timeind, dt, userelax_cur, userelax_new)
         
         userelax = userelax_new and veh.in_relax
-        newra = veh.call_cf_helper(newrhd, veh.speed, rlead, veh.rlane, timeind, dt, userelax)
+        newra = veh.get_cf(newrhd, veh.speed, rlead, veh.rlane, timeind, dt, userelax)
                 
         rincentive = newra - cura + p[2]*(newrfola - rfola + newfola - fola) + p[4]
         
@@ -306,31 +306,23 @@ def mobil_helper(fol, curlead, newlead, newhd, timeind, dt, userelax_cur, userel
         newfola = 0
     else: 
         if not userelax_cur and fol.in_relax:
-            fola = fol.call_cf_helper(fol.hd, fol.speed, curlead, fol.lane, timeind, dt, False)
+            fola = fol.get_cf(fol.hd, fol.speed, curlead, fol.lane, timeind, dt, False)
         else: 
             fola = fol.acc
             
         userelax = userelax_new and fol.in_relax
-        newfola = fol.call_cf_helper(newhd, fol.speed, newlead, fol.lane, timeind, dt, userelax)
+        newfola = fol.get_cf(newhd, fol.speed, newlead, fol.lane, timeind, dt, userelax)
         
     return  fola, newfola
 
 
-def generate_IDM_parameters(*args): 
+def IDM_parameters(*args): 
     cf_parameters = [27, 1.2, 2, 1.1, 1.5] #note speed is supposed to be in m/s
-#    cf_parameters[0] += np.random.rand()*6
-    cf_parameters[0] += np.random.rand()*25-15 #give vehicles very different speeds for testing purposes
-    lc_parameters = [-1.5, .1, .2, 0, .2, .25]
+    cf_parameters[0] += np.random.rand()*6
+    # cf_parameters[0] += np.random.rand()*25-15 #give vehicles very different speeds for testing purposes
+    lc_parameters = [-1.5, .2, .2, 0, .2, .5]
     
-    kwargs = {'length':3,
-              'relaxp': 15, 
-              'cfmodel': IDM, 
-              'free_cf': IDM_free, 
-              'lcmodel' : mobil, 
-              'eqlfun' : IDM_eql 
-              }
-    
-    return cf_parameters, lc_parameters, kwargs
+    return cf_parameters, lc_parameters
     
 
 #####################stuff for older code 
