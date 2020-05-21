@@ -1058,7 +1058,17 @@ def sortveh(lane, meas, vehset = None, verbose = False, method = 'leadfol'):
             #if found, we could order  all the vehicles in the circular dep and add all at once
             #this is a lot of work for an edge case though
     
+    #to make this '100% perfect' you would need to give all vehicles a score representing it's 'leader score'
+    #if you used this 'leader score' instead of veh2ind to initialize the negative scores, then the order would be perfect. 
+    #Issue now is when a leader has multiple followers which don't overlap at all, 
+    #and each of the followers also has its own (sub-)follower, where the (sub-)follower overlaps only with the follower
+    #In that case (e.g. (230, 231, 240, 245, 257, 267)), 230/231 are the followers - their order is arbitrary and they need to have the same score. 
+    #240 and 245 both have 230 or 231 as a leader, and need 1 higher score. But currently because we use veh2ind for the score, the order isn't arbitrary 
+    #because whichever of the 230 or 231 comes first, they give their follower higher priority. 
+    #fairly complicated to implement these leader scores as it forces you to go through all the relationships when adding vehicles as opposed to 
+    #the current way where we can simply iterate through all the vehicles
     
+    vehset = vehset.copy() #avoid making in-place modifications to input
     #get list of vehicles to sort
     if vehset == None: 
         vehset = set()
@@ -1223,7 +1233,8 @@ def sortveh(lane, meas, vehset = None, verbose = False, method = 'leadfol'):
                         temp = chkties[score]
                         fixedvehs, success = sortveh_heuristic(temp[0], temp[1:], all_traj, meas, guessvehs)
                         if not success: 
-                            print('warning - ambiguous order for '+str(temp))
+                            if verbose:
+                                print('warning - ambiguous order for '+str(temp))
                             tiebreaking = [all_traj[curveh][0,1] for curveh in probvehs]
                             mytime = all_traj[veh][0,1]
                             for count, j in enumerate(tiebreaking): 
@@ -1244,7 +1255,7 @@ def sortveh(lane, meas, vehset = None, verbose = False, method = 'leadfol'):
                     if leadfoltiebreak[i] >= 0: 
                         negind = count
                         break
-                # negind = 0 #if you can give negative scores then this turns it off. But in current way it's always off. 
+                # negind = 0 #if you can give negative scores then this turns it off.########
                 negvehs = fixedvehs[0:negind]
                 fixedvehs = fixedvehs[negind:]
                 

@@ -2,7 +2,7 @@
 """
 @author: rlk268@cornell.edu
 """
-#imports 
+#%% imports 
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
