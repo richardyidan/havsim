@@ -414,10 +414,10 @@ def update_lrfol(veh):
         veh.lfol.rlead.add(veh)
         lfol.rlead.remove(veh)
         
-        try:
-            lfol.rfol.llead.remove(lfol) #this throws error
-        except:
-            print('hello')
+        # try:
+        lfol.rfol.llead.remove(lfol) #this throws error #debugging
+        # except:
+        #     print('hello')
         lfol.rfol = veh
         veh.llead.add(lfol)
         
@@ -428,7 +428,10 @@ def update_lrfol(veh):
         veh.rfol.llead.add(veh)
         rfol.llead.remove(veh)
         
+        # try:
         rfol.lfol.rlead.remove(rfol)
+        # except:
+            # print('hello')
         rfol.lfol = veh
         veh.rlead.add(rfol)
         
@@ -585,12 +588,12 @@ def update_leadfol_after_lc(veh, lcsidelane, newlcsidelane, side, timeind):
     getattr(fol, lcsidelead).add(veh)
     #update cur lc side follower for vehicle 
     lcfol = getattr(veh, lcsidefol)
+    lclead = lcfol.lead
     lcfol.lead = veh
     lcfol.leadmem.append((veh, timeind+1))
     getattr(lcfol, opsidelead).remove(veh)
     veh.fol = lcfol
     #update lc side leader
-    lclead = lcfol.lead
     veh.lead = lclead
     veh.leadmem.append((lclead, timeind+1))
     
@@ -641,8 +644,11 @@ def get_guess(lcfol, lclead, veh, lcsidefol, newlcsidelane):
     guess = getattr(lcfol, lcsidefol)
     anchor = newlcsidelane.anchor
     if guess == None or guess.lane.anchor is not anchor: 
-        guess = getattr(lclead, lcsidefol)
-        if guess == None or guess.lane.anchor is not anchor: 
+        if lclead != None:
+            guess = getattr(lclead, lcsidefol)
+            if guess == None or guess.lane.anchor is not anchor: 
+                guess = anchor
+        else:
             guess = anchor
     return guess 
 
@@ -1461,7 +1467,7 @@ class lane:
         #used to initialize the new lc side follower/leader when new lanes become available
         #because this is only used when a new lane becomes available, there will always be a follower returned
         #it is possible that the leader is None, or that there is a leader but it can't have veh as a follower. 
-        
+        # counter = 0 #debugging
         if side == 'r':
             checkfol = 'lfol'
         else:
@@ -1474,11 +1480,15 @@ class lane:
                 return nextguess, guess
             nexthd = get_dist(veh, nextguess)
             while nexthd < 0: 
+                # counter += 1
                 guess = nextguess 
                 nextguess = guess.lead
                 if nextguess == None:
                     return nextguess, guess
                 nexthd = get_dist(veh, nextguess)
+                # if counter > 100:
+                #     print('uh oh')
+                #     break
                 
             if getattr(nextguess,checkfol) == None: 
                 nextguess = None
@@ -1489,11 +1499,16 @@ class lane:
                 return guess, nextguess
             nexthd = get_dist(veh, nextguess)
             while nexthd > 0:
+                # counter +=1
                 guess = nextguess
                 nextguess = guess.fol
                 if nextguess.cf_parameters == None: #reached anchor -> beginning of network
                     return guess, nextguess
                 nexthd = get_dist(veh, nextguess)
+                # if counter > 100: 
+                #     print('nuh uh')
+                #     break
+                
             if getattr(guess,checkfol) == None: 
                 guess = None
             return guess, nextguess
