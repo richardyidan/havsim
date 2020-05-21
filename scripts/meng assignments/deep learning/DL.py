@@ -123,7 +123,7 @@ maxvelocity = 0
 #get headways for all vehicles
 maxheadway = 0
 #define how the state should look
-statemem = 10
+statemem = 5
 
 maxcurrvelocity = 0
 
@@ -209,15 +209,17 @@ class Model(tf.keras.Model):
         self.conv1 = kls.Conv1D(32, 3, activation='relu', input_shape=(5, 1))
         self.conv2 = kls.Conv1D(32, 3, activation='relu', input_shape=(5, 1))
         self.conv3 = kls.Conv1D(32, 3, activation='relu', input_shape=(5, 1))
-        self.hidden1 = kls.Dense(32, activation = 'relu')
-        self.hidden2 = kls.Dense(32,activation = 'relu')
-        self.hidden3 = kls.Dense(32,activation = 'relu')
+        self.hidden1 = kls.Dense(64, activation = 'relu', kernel_regularizer = tf.keras.regularizers.l2(l=.14))
+        self.hidden2 = kls.Dense(64,activation = 'relu', kernel_regularizer = tf.keras.regularizers.l2(l=.14))
+        self.hidden3 = kls.Dense(64,activation = 'relu', kernel_regularizer = tf.keras.regularizers.l2(l=.14))
         self.batch = kls.BatchNormalization()
-        self.hidden4 = kls.Dense(32)
+        self.hidden4 = kls.Dense(32,activation = 'relu', kernel_regularizer = tf.keras.regularizers.l2(l=.14))
+        self.hidden5 = kls.Dense(10,activation = 'relu', kernel_regularizer = tf.keras.regularizers.l2(l=.14))
         self.flatten = kls.Flatten()
         self.batch2 = kls.BatchNormalization()
         self.out = kls.Dense(1)
         self.out2 = kls.Dense(2, activation='sigmoid')
+        # self.out2 = kls.Dense(1)
 
         self.lstm = kls.LSTM(32, input_shape=(10,3))
 
@@ -231,6 +233,8 @@ class Model(tf.keras.Model):
         # return (fin)
         if mode == "RNN":
             x = self.lstm(x)
+            x = self.hidden4(x)
+            x = self.hidden5(x)
             return self.out(x)
 
 
@@ -243,6 +247,7 @@ class Model(tf.keras.Model):
             x3 = self.hidden3(y3)
             con = tf.concat([x1, x2, x3], 1)
             x = self.hidden4(con)
+            x = self.hidden5(x)
             flat = self.flatten(x)
             return self.out(flat), self.out2(flat)
         if mode == "normal":
@@ -267,6 +272,8 @@ optimizer = tf.keras.optimizers.RMSprop(learning_rate=2e-5)
 loss_fn = tf.keras.losses.MeanSquaredError(name='train_test_loss')
 
 loss_fn_2 = tf.keras.losses.BinaryCrossentropy(name="train_test_loss1")
+
+# loss_fn_2 = tf.keras.losses.MeanSquaredError(name='train_test_loss1')
 
 
 def mytestmetric(y,yhat):
@@ -308,7 +315,7 @@ def create_output2(xtest, minoutput, maxoutput, maxvelocity, maxheadway, headway
 
     #vector to put into NN
     xtest = np.asarray([xtest], np.float32)
-    xtest = normalization_input(xtest, maxheadway, maxvelocity, 10)
+    xtest = normalization_input(xtest, maxheadway, maxvelocity, 5)
     predicted = model(xtest)
     if mode == "extra":
         simulated_val = (predicted[0].numpy()[0][0]) * (maxoutput - minoutput) - minoutput
@@ -345,7 +352,7 @@ def create_output2(xtest, minoutput, maxoutput, maxvelocity, maxheadway, headway
 
 def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutput, minaoutput, maxvelocity, maxheadway, v_speed):
     #how many samples we should look back
-    statemem = 10
+    statemem = 5
 
 
 
@@ -419,7 +426,7 @@ for epoch in range(5):
         break
     for x, yhat, yhat1 in train_ds:
         i += 1
-        if i % 300 == 0:
+        if i % 250 == 0:
             error_arr = []
             for vec_id in val_ids:
                 unused, unused, rmse, unused = predict_trajectory(model,vec_id ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, True)
@@ -430,7 +437,7 @@ for epoch in range(5):
             print(curr_error - previous_error)
             if curr_error <= previous_error:
                 previous_error = curr_error
-                model.save_weights('LSTM_testing2')
+                model.save_weights('extraq_diffarch')
             else:
                 break_loop = True
                 break
@@ -443,7 +450,7 @@ for epoch in range(5):
 
 
 
-model.load_weights('data/LSTM_testing2/LSTM_testing2')
+model.load_weights('extraq_diffarch')
 
 
 
@@ -467,10 +474,10 @@ for count, i in enumerate(meas.keys()):
 
 
 
-with open('ngsim3_5LSTM2.pickle', 'wb') as handle:
+with open('extraq_diffarch.pickle', 'wb') as handle:
    pickle.dump(sim, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-with open('ngsim3_info_5LSTM2.pickle', 'wb') as handle:
+with open('extraq_info_diffarch.pickle', 'wb') as handle:
    pickle.dump(sim_info, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 # with open('sim_info_relax.pickle', 'rb') as handle:

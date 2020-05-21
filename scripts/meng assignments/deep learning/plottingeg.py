@@ -24,12 +24,15 @@ with open(path_reconngsim, 'rb') as f:
 meas, platooninfo = makeplatoonlist(data,1, False)
 
 #
-with open("ngsim2_info_10.pickle", 'rb') as f:
+with open("data/extraq_diffarch/extraq_info_diffarch.pickle", 'rb') as f:
     data = pickle.load(f)
 
-
-with open("ngsim2_10.pickle", 'rb') as f:
+with open("data/extraq_diffarch/extraq_diffarch.pickle", 'rb') as f:
     data1 = pickle.load(f)
+
+
+
+
 
 
 
@@ -61,5 +64,16 @@ for i in data:
 print(np.mean(lange_change_error))
 print(np.mean(stay_error))
 
-# data["note"] = "this is the results for highd data with three inputs (vec speed, lead speed, headway) with a statemem of 10 using the normal NN"
-# data1["note"] = "this is the results for highd data with three inputs (vec speed, lead speed, headway) with a statemem of 10 using the normal NN"
+data["note"] = "this is the results for highd data with three inputs (vec speed, lead speed, headway) with a statemem of 5 using normal NN with L2 reg"
+data1["note"] = "this is the results for highd data with three inputs (vec speed, lead speed, headway) with a statemem of 5 using normal NN with L2 reg"
+
+
+
+with open('data/extraq_diffarch/extraq_info_diffarch.pickle', 'wb') as handle:
+   pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+with open('data/extraq_diffarch/extraq_diffarch.pickle', 'wb') as handle:
+   pickle.dump(data1, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+print(data["note"])
