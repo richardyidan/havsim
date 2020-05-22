@@ -320,7 +320,7 @@ def IDM_parameters(*args):
     cf_parameters = [27, 1.2, 2, 1.1, 1.5] #note speed is supposed to be in m/s
     cf_parameters[0] += np.random.rand()*6
     # cf_parameters[0] += np.random.rand()*25-15 #give vehicles very different speeds for testing purposes
-    lc_parameters = [-1.5, .3, .2, 0, .1, .5]
+    lc_parameters = [-1.5, .2, .2, 0, .1, .5]
     
     return cf_parameters, lc_parameters
     

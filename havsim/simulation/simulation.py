@@ -17,10 +17,6 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
         oldfol = veh.fol
         #update leader follower relationships, lane/road
         update_change(lc_actions, veh, timeind) #this cannot be done in parralel
-        
-        #debug 
-        if not veh.__chk_leadfol__(): 
-            print('99 bugs on the wall')
     
         #update tact/coop components
         veh.lcside = veh.coop_veh = veh.lc_urgency = None
@@ -53,8 +49,6 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
     
     #update left and right followers
     for veh in vehicles:
-        if not veh.__chk_leadfol__():
-            print('99 bugs on the wall')
         update_lrfol(veh)
     
     #update merge_anchors
@@ -68,7 +62,7 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
         update_merge_anchors(curlane, lc_actions)
         
     #update roads (lane events) and routes
-    remove_vehicles = []
+    remove_vehicles = set()
     for veh in vehicles: 
         #check vehicle's lane events and route events, acting if necessary 
         update_lane_events(veh, timeind, remove_vehicles)
@@ -83,7 +77,7 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
     for curlane in inflow_lanes: 
         vehid = curlane.increment_inflow(vehicles, vehid, timeind, dt)
                     
-    return vehid
+    return vehid, remove_vehicles
 
 def update_merge_anchors(curlane, lc_actions):
     for i in range(len(curlane.merge_anchors)):
@@ -168,19 +162,14 @@ def update_lane_events(veh, timeind, remove_vehicles):
             fol.lead = None
             fol.leadmem.append((None, timeind+1))
             if veh.lfol != None: 
-                try:
-                    veh.lfol.rlead.remove(veh)
-                except:
-                    print('hello')
+                veh.lfol.rlead.remove(veh)
+
             if veh.rfol != None: 
-                try:
-                    veh.rfol.llead.remove(veh)
-                except:
-                    print('hello')
+                veh.rfol.llead.remove(veh)
             
             #to remove the vehicle set its endtime and put it in the remove_vehicles
             veh.endtime = timeind
-            remove_vehicles.append(veh)
+            remove_vehicles.add(veh)
     return
             
                 
@@ -425,10 +414,8 @@ def set_route_events(veh):
                 curpos = prevlane_events[0]['pos']
             make_route_helper(p, veh.cur_route, veh.road, newlane.laneind, prevlane.laneind, curpos)
         else: #on new road - we need to generate new cur_route and update the vehicle's route
-            try:
-                veh.cur_route = make_cur_route(p, newlane, veh.route.pop(0))
-            except:
-                print('hello')
+            veh.cur_route = make_cur_route(p, newlane, veh.route.pop(0))
+            
         
         veh.route_events = veh.cur_route[newlane].copy()
     
@@ -450,10 +437,8 @@ def update_lrfol(veh):
         veh.lfol.rlead.add(veh)
         lfol.rlead.remove(veh)
         
-        try:
-            lfol.rfol.llead.remove(lfol) #this throws error #debugging
-        except:
-            print('hello')
+
+        lfol.rfol.llead.remove(lfol) 
         lfol.rfol = veh
         veh.llead.add(lfol)
         
@@ -463,11 +448,8 @@ def update_lrfol(veh):
         veh.rfol = rfol.fol
         veh.rfol.llead.add(veh)
         rfol.llead.remove(veh)
-        
-        try:
-            rfol.lfol.rlead.remove(rfol)
-        except:
-            print('hello')
+    
+        rfol.lfol.rlead.remove(rfol)
         rfol.lfol = veh
         veh.rlead.add(rfol)
         
@@ -688,10 +670,11 @@ def get_guess(lcfol, lclead, veh, lcsidefol, newlcsidelane):
     return guess 
 
 class simulation: 
-    def __init__(self, inflow_lanes, merge_lanes, vehicles = None, vehid = 0, timeind = 0, dt = .25): 
+    def __init__(self, inflow_lanes, merge_lanes, vehicles = None, all_vehicles = None, vehid = 0, timeind = 0, dt = .25): 
         self.inflow_lanes = inflow_lanes
         self.merge_lanes = merge_lanes
         self.vehicles = set() if vehicles == None else vehicles
+        self.all_vehicles = set() if all_vehicles == None else all_vehicles
         self.vehid = vehid
         self.timeind = timeind
         self.dt = dt
@@ -700,6 +683,7 @@ class simulation:
             cf_parameters, lc_parameters, kwargs = curlane.new_vehicle()
             curlane.newveh = vehicle(self.vehid, curlane, cf_parameters, lc_parameters, **kwargs)
             self.vehid += 1
+        
     
     def step(self, timeind):
         lc_actions = {}
@@ -710,9 +694,10 @@ class simulation:
         for veh in self.vehicles: 
             veh.set_lc(lc_actions, self.timeind, self.dt)
             
-        self.vehid = update_net(self.vehicles, lc_actions, self.inflow_lanes, self.merge_lanes, self.vehid, self.timeind, self.dt)
+        self.vehid, remove_vehicles = update_net(self.vehicles, lc_actions, self.inflow_lanes, self.merge_lanes, self.vehid, self.timeind, self.dt)
         
         self.timeind += 1
+        self.all_vehicles.update(remove_vehicles)
         
     def simulate(self, timesteps):
         for i in range(timesteps):
@@ -1527,10 +1512,8 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -1
             #update simulation
             self.inflow_buffer += -1
             vehicles.add(newveh)
-            try:
-                vehid = vehid + 1
-            except:
-                print('lol!')
+            vehid = vehid + 1
+
         
             #create next vehicle
             cf_parameters, lc_parameters, kwargs = self.new_vehicle()
@@ -1597,7 +1580,7 @@ class lane:
         #used to initialize the new lc side follower/leader when new lanes become available
         #because this is only used when a new lane becomes available, there will always be a follower returned
         #it is possible that the leader is None, or that there is a leader but it can't have veh as a follower. 
-        # counter = 0 #debugging
+        
         if side == 'r':
             checkfol = 'lfol'
         else:
@@ -1616,9 +1599,7 @@ class lane:
                 if nextguess == None:
                     return nextguess, guess
                 nexthd = get_dist(veh, nextguess)
-                # if counter > 100:
-                #     print('uh oh')
-                #     break
+                
                 
             if getattr(nextguess,checkfol) == None: 
                 nextguess = None
@@ -1635,9 +1616,7 @@ class lane:
                 if nextguess.cf_parameters == None: #reached anchor -> beginning of network
                     return guess, nextguess
                 nexthd = get_dist(veh, nextguess)
-                # if counter > 100: 
-                #     print('nuh uh')
-                #     break
+                
                 
             if getattr(guess,checkfol) == None: 
                 guess = None
