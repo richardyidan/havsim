@@ -906,7 +906,7 @@ class vehicle:
         
         #route parameters
         self.route_parameters = [30,120] if routep == None else routep
-        self.route = [] if route == [] else route
+        self.route = [] if route == None else route
         #TODO check if route is empty
         self.routemem = self.route.copy()
         
