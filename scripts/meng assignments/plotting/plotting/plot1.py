@@ -2,7 +2,7 @@
 """
 @author: rlk268@cornell.edu
 """
-#imports 
+#%% imports 
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
@@ -19,7 +19,7 @@ from havsim.simulation.models import IDM_b3, IDM_b3_eql
 #plotting 
 from havsim.plotting import platoonplot, plotflows, animatevhd, plotvhd, animatetraj, plotspacetime, optplot, selectoscillation, plotformat, selectvehID, checksort
 #data processing
-from havsim.calibration.algs import makeplatoonlist, sortveh3
+from havsim.calibration.algs import makeplatoonlist, sortveh
 #%% #load data
 
 with open('reconngsim.pkl','rb') as f:
@@ -85,7 +85,8 @@ selectoscillation(meas, platooninfo, timeint = 50, xint = 70,lane=3)
 # test2 = [[(5562.474476963611, 1476.8050669428), (6311.045414797408, 164.0527611552), (7203.064516129032, 164.0527611552), (6454.493578295235, 1476.8050669428)]]
 # test3 = [224.0, 194.0, 244.0, 240.0, 249.0, 255.0, 260.0, 267.0, 257.0]
 # test4 = [1763, 1756, 1791, 1794]
-all_veh_list = sortveh3(np.unique(data[data[:,7] == 3][:,0]), 3, meas, platooninfo)
+# all_veh_list = sortveh3(np.unique(data[data[:,7] == 3][:,0]), 3, meas, platooninfo)
+all_veh_list = sortveh(3, meas)
 vertlist = [[(4414.870968185483, 1355.605377626593), (4916.225806946236, 260.92819651910133), (6116.838710294354, 260.92819651910133), 
              (5615.483871533602, 1355.605377626593)], [(7330.6451620309135, 1434.8677175502273), (7462.580645915322, 931.4447477649817), 
                                                         (8504.87096860215, 931.4447477649817), (8372.935484717742, 1434.8677175502273)]]
