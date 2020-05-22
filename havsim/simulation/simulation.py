@@ -14,14 +14,28 @@ import havsim.simulation.models as hm
 def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, dt): 
     #update followers/leaders for all lane changes 
     for veh in lc_actions.keys(): 
+        oldfol = veh.fol
+        #update leader follower relationships, lane/road
         update_change(lc_actions, veh, timeind) #this cannot be done in parralel
         
         #debug 
-        if veh.fol == veh.lfol: 
-            print('why u do dis')
+        if not veh.__chk_leadfol__(): 
+            print('99 bugs on the wall')
     
+        #update tact/coop components
+        veh.lcside = veh.coop_veh = veh.lc_urgency = None
         #apply relaxation 
         new_relaxation(veh, timeind, dt)
+        newfol = veh.fol
+        if newfol.cf_parameters == None:
+            pass
+        else:
+            new_relaxation(newfol, timeind, dt)
+        if oldfol.cf_parameters == None:
+            pass
+        else:
+            new_relaxation(oldfol, timeind, dt)
+        
         
         #update a vehicle's lane events and route events for the new lane 
         set_lane_events(veh)
@@ -39,6 +53,8 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
     
     #update left and right followers
     for veh in vehicles:
+        if not veh.__chk_leadfol__():
+            print('99 bugs on the wall')
         update_lrfol(veh)
     
     #update merge_anchors
@@ -139,20 +155,23 @@ def update_lane_events(veh, timeind, remove_vehicles):
         
         elif curevent['event'] == 'exit':
             #update vehicle orders
-            #there shouldn't be any leaders but we will check anyway
+            #there shouldn't be any leaders
             fol = veh.fol
-            if veh.lead is not None:
-                veh.lead.fol = fol
-            for i in veh.llead:
-                i.rfol = fol
-            for i in veh.rlead: 
-                i.lfol = fol
+            # if veh.lead is not None:
+            #     veh.lead.fol = fol
+            # for i in veh.llead:
+            #     i.rfol = fol
+            # for i in veh.rlead: 
+            #     i.lfol = fol
                 
             #update followers
             fol.lead = None
             fol.leadmem.append((None, timeind+1))
             if veh.lfol != None: 
-                veh.lfol.rlead.remove(veh)
+                try:
+                    veh.lfol.rlead.remove(veh)
+                except:
+                    print('hello')
             if veh.rfol != None: 
                 try:
                     veh.rfol.llead.remove(veh)
@@ -490,7 +509,7 @@ def update_veh_lane(veh, oldlane, newlane, timeind, side = None):
     #by default, the l/r attributes are set to discretionary only if the corresponding lane is in the same road 
     #changes to different roads are controlled by route events
     
-    newroad = newlane.road 
+    # newroad = newlane.road 
     newroadname = newlane.roadname
     if side == None:
         if newroadname != veh.road: 
@@ -558,9 +577,6 @@ def update_change(lc_actions, veh, timeind):
             veh.r = 'discretionary'
         else:
             veh.r = None
-    
-    #update tact/coop components
-    veh.lcside = veh.coop_veh = veh.lc_urgency = None
     
         
     ######update all leader/follower relationships#####
@@ -672,10 +688,10 @@ def get_guess(lcfol, lclead, veh, lcsidefol, newlcsidelane):
     return guess 
 
 class simulation: 
-    def __init__(self, inflow_lanes, merge_lanes, vehicles = set(), vehid = 0, timeind = 0, dt = .25): 
+    def __init__(self, inflow_lanes, merge_lanes, vehicles = None, vehid = 0, timeind = 0, dt = .25): 
         self.inflow_lanes = inflow_lanes
         self.merge_lanes = merge_lanes
-        self.vehicles = vehicles
+        self.vehicles = set() if vehicles == None else vehicles
         self.vehid = vehid
         self.timeind = timeind
         self.dt = dt
@@ -886,9 +902,9 @@ class vehicle:
     def __init__(self, vehid,curlane, p, lcp,
                  lead = None, fol = None, lfol = None, rfol = None, llead = None, rlead = None,
                  length = 3, eql_type = 'v',
-                 relaxp = 12,  shiftp = [.4,2], coopp = .2, 
-                 routep = [30,120], route = [],
-                 accbounds = [-7,3], maxspeed = 1e4, hdbounds = (0, 1e4)): 
+                 relaxp = 12,  shiftp = None, coopp = .2, 
+                 routep = None, route = None,
+                 accbounds = None, maxspeed = 1e4, hdbounds = None): 
         self.vehid = vehid
         self.len = length
         self.lane = curlane
@@ -904,19 +920,22 @@ class vehicle:
         self.relax_start = None
         
         #route parameters
-        self.route_parameters = routep
-        self.route = route
+        self.route_parameters = [30,120] if routep == None else routep
+        self.route = [] if route == [] else route
         #TODO check if route is empty
         self.routemem = self.route.copy()
         
         #bounds
-        self.minacc, self.maxacc = accbounds[0], accbounds[1]
+        if accbounds == None:
+            self.minacc, self.maxacc = -7, 3
+        else:
+            self.minacc, self.maxacc = accbounds[0], accbounds[1]
         self.maxspeed = maxspeed    
-        self.hdbounds = hdbounds
+        self.hdbounds = (0, 1e4) if hdbounds == None else hdbounds
         self.eql_type = eql_type
         
         #cooperative/tactical model
-        self.shiftp = shiftp
+        self.shiftp = [.4,2] if shiftp == None else shiftp
         self.coopp = coopp
         self.lcside = None
         self.lc_urgency = None
@@ -1118,47 +1137,51 @@ class vehicle:
         if self.rfol == None:
             print('no right follower')
         else:
-            print('right follower is '+str(self.lfol))
+            print('right follower is '+str(self.rfol))
         
-        print('-------'+str(len(self.llead)+' left leaders-------')
+        print('-------'+str(len(self.llead))+' left leaders-------')
         for i in self.llead:
             print(i)
-        print('-------'+str(len(self.rlead)+' right leaders-------')
+        print('-------'+str(len(self.rlead))+' right leaders-------')
         for i in self.rlead:
             print(i)
         return 
     
     def __chk_leadfol__(self, verbose = False):
         lfolpass = True
-        if veh.lfol != None: 
-            if veh.lfol is veh:
+        if self.lfol != None: 
+            if self.lfol is self:
                 lfolpass = False
                 lfolflag = 0
-            if veh not in veh.lfol.rlead:
+            if self not in self.lfol.rlead:
                 lfolpass = False
                 lfolflag = 1
+            if self.lfol.lane.anchor is not self.llane.anchor:
+                lfolpass = False
         rfolpass = True
-        if veh.rfol != None: 
-            if veh.rfol is veh:
+        if self.rfol != None: 
+            if self.rfol is self:
                 rfolpass = False
                 rfolflag = 0
-            if veh not in veh.rfol.llead:
+            if self not in self.rfol.llead:
                 rfolpass = False
                 rfolflag = 1
+            if self.rfol.lane.anchor is not self.rlane.anchor:
+                rfolpass = False
         rleadpass = True
-        for i in veh.rlead: 
-            if i.lfol is not veh:
+        for i in self.rlead: 
+            if i.lfol is not self:
                 rleadpass = False
         lleadpass = True
-        for i in veh.llead: 
-            if i.rfol is not veh:
+        for i in self.llead: 
+            if i.rfol is not self:
                 lleadpass = False
         leadpass = True
-        if veh.lead != None: 
-            if veh.lead.fol is not veh: 
+        if self.lead != None: 
+            if self.lead.fol is not self: 
                 leadpass = False
         folpass = True
-        if veh.fol.lead is not veh:
+        if self.fol.lead is not self:
             folpass = False
             
         if verbose: 
@@ -1169,7 +1192,7 @@ class vehicle:
             print('llead passing: '+str(lleadpass))
             print('rlead passing: '+str(rleadpass))
         
-        return (lfolpass and rfolapss and rleadpass and lleadpass and leadpass and folpass)
+        return (lfolpass and rfolpass and rleadpass and lleadpass and leadpass and folpass)
         
             
     
@@ -1281,7 +1304,7 @@ def downstream_wrapper(speed_fun = None, method = 'speed', congested = True,
 
 class anchor_vehicle: 
     #anchor vehicles have cf_parameters as None 
-    def __init__(self, curlane, inittime, lfol = None, rfol = None, lead = None, rlead = set(), llead = set()):
+    def __init__(self, curlane, inittime, lfol = None, rfol = None, lead = None, rlead = None, llead = None):
         self.cf_parameters = None 
         self.lane = curlane
         self.road = curlane.road['name']
@@ -1289,8 +1312,9 @@ class anchor_vehicle:
         self.lfol = lfol #I think anchor vehicles just need the lead/llead/rlead attributes and none of the fol attributes
         self.rfol = rfol
         self.lead = lead
-        self.rlead = rlead
-        self.llead = llead
+        self.rlead = set() if rlead == None else rlead
+        self.llead = set() if llead == None else llead
+            
         
         self.pos = curlane.start
         self.speed = 0
@@ -1455,7 +1479,7 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -1
                 out = speed_inflow(self, speed_fun, timeind, dt, accel_bound = accel_bound)
             
             if out == None:  
-                return
+                return vehid
             #add vehicle with the given initial conditions
             pos, speed, hd = out[:]
             newveh = self.newveh
@@ -1503,7 +1527,10 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -1
             #update simulation
             self.inflow_buffer += -1
             vehicles.add(newveh)
-            vehid = vehid + 1
+            try:
+                vehid = vehid + 1
+            except:
+                print('lol!')
         
             #create next vehicle
             cf_parameters, lc_parameters, kwargs = self.new_vehicle()
@@ -1516,8 +1543,8 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -1
         
     
 class lane: 
-    def __init__(self, start, end, road, laneind, connect_left = [(0, None)], connect_right = [(0, None)],
-                 downstream = {}, increment_inflow = {}, get_inflow = {}, new_vehicle = None):
+    def __init__(self, start, end, road, laneind, connect_left = None, connect_right =None,
+                 downstream = None, increment_inflow = None, get_inflow = None, new_vehicle = None):
         
         self.laneind = laneind
         self.road = road
@@ -1526,20 +1553,20 @@ class lane:
         self.start = start
         self.end = end
         #connect_left/right has format of list of (pos (float), lane (object)) tuples where lane is the connection starting at pos 
-        self.connect_left = connect_left
-        self.connect_right = connect_right
+        self.connect_left = connect_left if connect_left != None else [(0, None)]
+        self.connect_right = connect_right if connect_right != None else [(0, None)]
         self.connect_to = None
         
-        if downstream != {}:
+        if downstream != None:
             self.call_downstream = downstream_wrapper(**downstream).__get__(self, lane)
             
-        if get_inflow != {}:
+        if get_inflow != None:
             self.get_inflow = get_inflow_wrapper(**get_inflow).__get__(self, lane)
             
         if new_vehicle != None:
             self.new_vehicle = new_vehicle
             
-        if increment_inflow != {}:
+        if increment_inflow != None:
             self.inflow_buffer = 0
             # cf_parameters, lc_parameters, kwargs = self.new_vehicle()
             # self.newveh = vehicle(vehid, self, cf_parameters, lc_parameters, **kwargs)
@@ -1637,7 +1664,7 @@ class lane:
         return not(self is other)
     
     def __repr__(self):
-        return (self.roadname+' ('str(self.laneind)+')')
+        return (self.roadname+' ('+str(self.laneind)+')')
     
     def __str__(self):
         return self.__repr__()

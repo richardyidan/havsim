@@ -36,7 +36,10 @@ def mainroad_parameters(*args):
     kwargs = {'route':['exit'], 'maxspeed': cf_p[0]-1e-6}
     return cf_p, lc_p, kwargs
 def onramp_inflow(timeind, *args):
-    return .08 + np.random.rand()/25
+    if timeind % 1000 > 800:
+        return .15+np.random.rand()/25
+    else:
+        return .08 + np.random.rand()/25
 def mainroad_inflow(*args):
     return .58
 get_inflow1 = {'speed_fun':onramp_inflow}
@@ -49,11 +52,11 @@ road = {'name': 'main road', 'len': 900, 'laneinds':2, 0: None, 1: None}
 road['connect to'] = {'exit': (900, 'continue', (0,1), None, None)}
 onramp = {'name': 'on ramp', 'len': 200, 'laneinds':1, 0: None}
 onramp['connect to'] = {'main road': ((100,200), 'merge', 0, 'l', road)}
-lane0 = lane(0,800, road, 0, downstream = downstream1, increment_inflow = increment_inflow, get_inflow = get_inflow1, new_vehicle = mainroad_parameters)
-lane1 = lane(0,800, road, 1, downstream = downstream1, increment_inflow = increment_inflow, get_inflow = get_inflow1, new_vehicle = mainroad_parameters)
+lane0 = lane(0,800, road, 0, downstream = downstream1, increment_inflow = increment_inflow, get_inflow = get_inflow2, new_vehicle = mainroad_parameters)
+lane1 = lane(0,800, road, 1, downstream = downstream1, increment_inflow = increment_inflow, get_inflow = get_inflow2, new_vehicle = mainroad_parameters)
 road[0] = lane0
 road[1] = lane1
-lane2 = lane(0,200,onramp,0, increment_inflow = increment_inflow, get_inflow = get_inflow2, new_vehicle = onramp_parameters)
+lane2 = lane(0,200,onramp,0, increment_inflow = increment_inflow, get_inflow = get_inflow1, new_vehicle = onramp_parameters)
 downstream2 = {'method':'merge', 'merge_anchor_ind':0, 'target_lane': lane1, 'selflane':lane2}
 lane2.call_downstream = downstream_wrapper(**downstream2).__get__(lane2, lane)
 onramp[0] = lane2
