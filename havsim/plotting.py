@@ -1824,7 +1824,6 @@ def selectoscillation(meas, platooninfo, timeint = 50, xint = 70, lane=1, use_av
 
         if event.key in ['N', 'n']:
             #sort vehicles to form all vehicles which can be shown
-            print(vehlist)
             all_veh_list = sortveh(lane, meas, vehlist)
             
             #form platoonlists for start,end vertices for all regions in vertlist
@@ -1922,11 +1921,6 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
     # all_veh_list = get_all_vehicles_for_lane(meas, platooninfo, lane, min(timestamps), max(timestamps))
     # all_veh_list = sortveh3(vehlist, lane, meas, platooninfo)
     
-    #TODO - 
-    #axis -4 dont' show numbers on axis - could label the points instead 
-    #axis - 2/3 - add some shifting so its readable with multiple lines (turn off y axis when shifting?)
-    #toggle opaque off - 'T' should leave the box, and don't add opaque lines anymore
-    
     #initialize vehicles shown
     if platoonlist != None:
         if type(platoonlist[0]) == list: #nested list of platoons
@@ -1991,9 +1985,9 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
     ax2 = plt.subplot(2, 2, 2)
     ax3 = plt.subplot(2, 2, 3)
     ax4 = plt.subplot(2, 2, 4)
+    ax4.get_xaxis().set_visible(False)
 
     scale = np.arange(15, 100)  # for wavelet transform
-    # counter4 = 0
 
     # The centralized dictionary that stores {veh_id -> list of all 4 artists in ax1, ax2, ax3 and ax4}
     artist_dict = {}
@@ -2005,9 +1999,12 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
     # The vehicle indices currently getting plotted for both ax2 and ax3 (they always show the same vehicle)
     current_ax23_veh_left_index = -1
     current_ax23_veh_right_index = -1
+    #controls visibility of opaque (out of lane) trajectories for each axis 
+    visbool = {ax1:True, ax2:True, ax3:True, ax4:True}
+    
 
     # Base plotting function used for ploting all 4 plots
-    def plot_axis(plot, y_axis, veh, meas, spdstd=None):
+    def plot_axis(plot, y_axis, veh, meas, spdstd=None, vis = True):
         nonlocal artist_to_veh_dict
 
         LCind = generate_LCind(meas[veh], lane)
@@ -2017,11 +2014,14 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
 
         for i in range(len(LCind) - 1):
             kwargs = {'picker':5}
+            show1 = True
             if meas[veh][LCind[i], 7] != lane:
                 kwargs = {'linestyle': '--', 'alpha': .4}
+                show1 = vis
             if spdstd is not None:
                 spdstd = np.append(spdstd, y2[LCind[i]:LCind[i + 1]])
             axis_artist = plot.plot(x[LCind[i]:LCind[i + 1]], y_axis[LCind[i]:LCind[i + 1]], 'C0', **kwargs)
+            axis_artist[0].set_visible(show1)
             axis_artist_list.append(axis_artist)
             for art in axis_artist:
                 artist_to_veh_dict[art] = veh
@@ -2034,7 +2034,7 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
         y1 = meas[veh][:, 2]
         spdstd = np.asarray([])
         artist_dict[veh] = [None] * 4
-        ax1_artist_list, spdstd = plot_axis(ax1, y1, veh, meas, spdstd)
+        ax1_artist_list, spdstd = plot_axis(ax1, y1, veh, meas, spdstd, vis = visbool[ax1])
 
         artist_dict[veh][0] = ax1_artist_list
         spdstd = np.std(spdstd)
@@ -2053,7 +2053,7 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
         current_ax23_veh_left_index = veh_index
         current_ax23_veh_right_index = veh_index
         ax23_artist_dict[veh] = [None] * 2
-        ax2_artist_list, temp = plot_axis(ax2, y2, veh, meas)
+        ax2_artist_list, temp = plot_axis(ax2, y2, veh, meas, vis = visbool[ax2])
 
         artist_dict[veh][1] = ax2_artist_list
         ax23_artist_dict[veh][0] = ax2_artist_list
@@ -2071,7 +2071,7 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
         veh_index = all_veh_list.index(veh)
         current_ax23_veh_left_index = veh_index
         current_ax23_veh_right_index = veh_index
-        ax3_artist_list, temp = plot_axis(ax3, energy, veh, meas)
+        ax3_artist_list, temp = plot_axis(ax3, energy, veh, meas, vis = visbool[ax3])
 
         artist_dict[veh][2] = ax3_artist_list
         ax23_artist_dict[veh][1] = ax3_artist_list
@@ -2080,14 +2080,11 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
     def plot_ax4(veh, meas, platooninfo, spdstd):
         nonlocal artist_dict
         nonlocal artist_to_veh_dict
-        # nonlocal counter4
-
-        # if vehind < len(ax4.lines):  # something behind
-        #     counter4 += -1
-        #     ax4_artist = ax4.plot(counter4, spdstd, 'C0.', picker=5)
-        # else:
-        #     ax4_artist = ax4.plot(vehind + counter4, spdstd, 'C0.', picker=5)
-        ax4_artist = ax4.plot(all_veh_list.index(veh), spdstd, 'C0.', picker=5)
+        
+        x,y = all_veh_list.index(veh), spdstd
+        ax4_artist = ax4.plot(x, y, 'C0.', picker=5)
+        # ax4_annotate = ax4.annotate(str(veh), (x+.1, y), fontsize = 'small')
+        # ax4_artist.append(ax4_annotate)
         artist_dict[veh][3] = ax4_artist
         for art in ax4_artist:
             artist_to_veh_dict[art] = veh
@@ -2100,6 +2097,7 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
         plot_ax2(veh, meas, platooninfo)
         plot_ax3(veh, meas, platooninfo)
         plot_ax4(veh, meas, platooninfo, spdstd)
+        selected_veh = veh
 
     plt.suptitle('Left click on trajectory to select vehicle\nPress \'H\' to view key press options')
 
@@ -2108,6 +2106,7 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
     def on_pick(event):
         nonlocal artist_dict
         nonlocal artist_to_veh_dict
+        nonlocal selected_veh
 
         selected_veh = artist_to_veh_dict[event.artist]
 
@@ -2142,6 +2141,7 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
 
     # Utility functions respond to various key press events
     def add_vehicle_ax14_key_press_response(new_veh):
+        nonlocal selected_veh
         spdstd = plot_ax1(new_veh, meas, platooninfo)
         plot_ax2(new_veh, meas, platooninfo)
         plot_ax3(new_veh, meas, platooninfo)
@@ -2149,6 +2149,7 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
         scale_plot(ax1, y_axis_padding=50, dont_use = boxartist[0])
         scale_plot(ax4, 0.5, 0.25)
         plt.draw()
+        selected_veh = new_veh
 
     def remove_vehicle_ax14_key_press_response(veh_tbr):
         ax1_artist_list = artist_dict[veh_tbr][0]
@@ -2161,10 +2162,10 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
             ax4_artist.remove()
             del ax4_artist
         # scale_plot(ax1, y_axis_padding=50, dont_use = boxartist[0])
-        scale_plot(ax4, 0.5, 0.25)
+        # scale_plot(ax4, 0.5, 0.25)
         plt.draw()
 
-    def add_vehicle_ax23_key_press_response(new_veh):
+    def add_vehicle_ax23_key_press_response(new_veh, curindex):
         LCind = generate_LCind(meas[new_veh], lane)
         x = meas[new_veh][:, 1]
         y2 = meas[new_veh][:, 3]
@@ -2172,14 +2173,26 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
 
         ax2_artist_list = []
         ax3_artist_list = []
+        
+        ax2shift = 10*-(curindex - all_veh_list.index(selected_veh))
+        ax3shift = 1000*-(curindex - all_veh_list.index(selected_veh))
+        
+        curvis2 = visbool[ax2]
+        curvis3 = visbool[ax3]
 
-        for i in range(len(LCind) - 1):
+        for i in range(len(LCind) - 1): #why is this plotting not use plot_ax3??
             kwargs = {}
+            show2 = True
+            show3 = True
             if meas[new_veh][LCind[i], 7] != lane:
                 kwargs = {'linestyle': '--', 'alpha': .4}
-            ax2_artist = ax2.plot(x[LCind[i]:LCind[i + 1]], y2[LCind[i]:LCind[i + 1]], 'C0', picker=5, **kwargs)
+                show2 = curvis2
+                show3 = curvis3
+            ax2_artist = ax2.plot(x[LCind[i]:LCind[i + 1]], y2[LCind[i]:LCind[i + 1]]+ax2shift, 'C0', picker=5, **kwargs)
+            ax2_artist[0].set_visible(show2)
             ax2_artist_list.append(ax2_artist)
-            ax3_artist = ax3.plot(x[LCind[i]:LCind[i + 1]], energy[LCind[i]:LCind[i + 1]], 'C0', picker=5, **kwargs)
+            ax3_artist = ax3.plot(x[LCind[i]:LCind[i + 1]], energy[LCind[i]:LCind[i + 1]]+ax3shift, 'C0', picker=5, **kwargs)
+            ax3_artist[0].set_visible(show3)
             ax3_artist_list.append(ax3_artist)
         ax23_artist_dict[new_veh] = [None] * 2
         ax23_artist_dict[new_veh][0] = ax2_artist_list
@@ -2212,32 +2225,30 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
         nonlocal ax23_artist_dict
         nonlocal current_ax23_veh_left_index
         nonlocal current_ax23_veh_right_index
+        nonlocal visbool
 
         if event.key in ['H', 'h']:
-            print("Key press instructions (case insensitive):")
-            print("Press T to add/remove all opaque lines;")
+            # print("Key press instructions (case insensitive):")
+            print("Press T to add/remove out of lane trajectories;")
             print("Press V to print the list of current vehicles;")
             print("Press A to add the previous vehicle into plot 1&4;")
-            print("Press D to remove the first vehicle from plot 1&4;")
-            print("Press Z to add the next vehicle into plot 1&4;")
-            print("Press C to remove the last vehicle from plot 1&4;\n")
+            print("Press D to add the next vehicle into plot 1&4;")
+            print("Press C to remove the first vehicle from plot 1&4;")
+            print("Press Z to remove the last vehicle from plot 1&4;\n")
+            
             print("Press W to add the previous vehicle into plot 2&3;")
-            print("Press E to remove the first vehicle from plot 2&3;")
-            print("Press Y to add the next vehicle into plot 2&3;")
-            print("Press U to remove the last vehicle from plot 2&3;")
+            print("Press E to add the next vehicle into plot 2&3;")
+            print("Press U to remove the first vehicle from plot 2&3;")
+            print("Press Y to remove the last vehicle from plot 2&3;")
             print("Press N to switch to the next study area.")
 
         if event.key in ['T', 't']:  # toggles all opaque lines
-            first = True
-            visbool = None
             ax = event.inaxes
+            visibility = not visbool[ax]
+            visbool[ax] = visibility
             for i in ax.lines:
-                if i.get_alpha() != None:
-                    if first:
-                        visbool = i.get_visible()
-                        visbool = not visbool
-                        first = False
-                    i.set_visible(visbool)
+                if i.get_alpha() != None and i is not boxartist[0]:
+                    i.set_visible(visibility)
             fig.canvas.draw()
 
         if event.key in ['V', 'v']:  # print current vehicle list
@@ -2250,7 +2261,7 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
 
                 add_vehicle_ax14_key_press_response(new_veh)
 
-        if event.key in ['Z', 'z']:  # add a vehicle after in ax1 and ax4
+        if event.key in ['D', 'd']:  # add a vehicle after in ax1 and ax4
             if right_window_index < len(all_veh_list) - 1:
                 right_window_index += 1
                 new_veh = all_veh_list[right_window_index]
@@ -2258,7 +2269,7 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
 
                 add_vehicle_ax14_key_press_response(new_veh)
 
-        if event.key in ['D', 'd']:  # remove a vehicle before in ax1 and ax4
+        if event.key in ['C', 'c']:  # remove a vehicle before in ax1 and ax4
             if right_window_index > left_window_index:
                 veh_tbr = all_veh_list[left_window_index]
                 left_window_index += 1
@@ -2266,7 +2277,7 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
 
                 remove_vehicle_ax14_key_press_response(veh_tbr)
 
-        if event.key in ['C', 'c']:  # remove a vehicle after in ax1 and ax4
+        if event.key in ['Z', 'z']:  # remove a vehicle after in ax1 and ax4
             if right_window_index > left_window_index:
                 veh_tbr = all_veh_list[right_window_index]
                 right_window_index += -1
@@ -2279,23 +2290,23 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
                 new_veh = all_veh_list[current_ax23_veh_left_index - 1]
                 current_ax23_veh_left_index += -1
 
-                add_vehicle_ax23_key_press_response(new_veh)
+                add_vehicle_ax23_key_press_response(new_veh, current_ax23_veh_left_index)
 
-        if event.key in ['Y', 'y']:  # Add a vehicle after in ax2 and ax3
+        if event.key in ['E', 'e']:  # Add a vehicle after in ax2 and ax3
             if current_ax23_veh_right_index < len(all_veh_list) - 1:
                 new_veh = all_veh_list[current_ax23_veh_right_index + 1]
                 current_ax23_veh_right_index += 1
 
-                add_vehicle_ax23_key_press_response(new_veh)
+                add_vehicle_ax23_key_press_response(new_veh, current_ax23_veh_right_index)
 
-        if event.key in ['E', 'e']:  # Remove a vehicle before in ax2 and ax3
+        if event.key in ['U', 'u']:  # Remove a vehicle before in ax2 and ax3
             if current_ax23_veh_left_index <= current_ax23_veh_right_index:
                 veh_tbr = all_veh_list[current_ax23_veh_left_index]
                 current_ax23_veh_left_index += 1
 
                 remove_vehicle_ax23_key_press_response(veh_tbr)
 
-        if event.key in ['U', 'u']:  # Remove a vehicle after in ax2 and ax3
+        if event.key in ['Y', 'y']:  # Remove a vehicle after in ax2 and ax3
             if current_ax23_veh_left_index <= current_ax23_veh_right_index:
                 veh_tbr = all_veh_list[current_ax23_veh_right_index]
                 current_ax23_veh_right_index += -1
