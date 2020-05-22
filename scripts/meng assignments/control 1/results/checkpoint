@@ -1,0 +1,2 @@
+model_checkpoint_path: "dense-560-52-5-1-tanh-value.ckpt"
+all_model_checkpoint_paths: "dense-560-52-5-1-tanh-value.ckpt"
