@@ -2,10 +2,14 @@
 """
 @author: rlk268@cornell.edu
 """
+
+#tests a car following model by doing simple simulation on single lane
+#turn off set_route_events function or else it will throw error
 import numpy as np
 import matplotlib.pyplot as plt
-from havsim.simulation.simulation import vehicle
+from havsim.simulation.simulation import vehicle, set_route_events
 from havsim.simulation.models import IDM, IDM_eql
+import sys
 
 class lane:
     def __init__(self, speedfun, connect_left = [(0, None)], connect_right = [(0, None)]):
@@ -16,27 +20,33 @@ class lane:
         self.connect_left = connect_left
         self.connect_right = connect_right
     def get_headway(self, veh, lead):
-        return lead.pos-veh.pos - lead.length
+        return lead.pos-veh.pos - lead.len
     
     def call_downstream(self, veh, timeind, dt):
         speed = self.timeseries[timeind]
         return (speed - veh.speed)/dt
     
-    def get_connect_left(self, pos):
-        #given position, returns the connection to left 
-        #output is either lane object or None
-        return connect_helper(self.connect_left, pos)
-
-    def get_connect_right(self, pos):
-        return connect_helper(self.connect_right,pos)
+    def get_connect_left(self, *args):
+        return None
+    def get_connect_right(self, *args):
+        return None
     
-def connect_helper(connect, pos):
-    out = connect[-1][1] #default to last lane for edge case or case when there is only one possible connection 
-    for i in range(len(connect)-1):
-        if pos < connect[i+1][0]:
-            out = connect[i][1]
-            break
-    return out 
+    #not necessary 
+#     def get_connect_left(self, pos):
+#         #given position, returns the connection to left 
+#         #output is either lane object or None
+#         return connect_helper(self.connect_left, pos)
+
+#     def get_connect_right(self, pos):
+#         return connect_helper(self.connect_right,pos)
+    
+# def connect_helper(connect, pos):
+#     out = connect[-1][1] #default to last lane for edge case or case when there is only one possible connection 
+#     for i in range(len(connect)-1):
+#         if pos < connect[i+1][0]:
+#             out = connect[i][1]
+#             break
+#     return out 
 
 #number of timesteps and timestep length
 simlen = 2000 
@@ -56,21 +66,29 @@ length = 2
 # build simulation
 vehicles = set()
 curpos = 0
-veh = vehicle(-1, curlane, p, None, curpos, initspeed, None, 0, length = length, cfmodel = IDM, eqlfun = IDM_eql)
-#eql_hd = veh.get_eql(initspeed)
+veh = vehicle(-1, curlane, p, None, length = length)
+try:
+    set_route_events(veh)
+except: 
+    print('turn off set route events function in simulation')
+    sys.exit()
+veh.initialize(curpos, initspeed, None, 0)
+
+
 eql_hd = IDM_eql(p, initspeed) 
 vehicles.add(veh)
 vehlead = veh
 for i in range(nveh -1):
     curpos += -eql_hd - length
-    veh = vehicle(i, curlane, p, None, curpos, initspeed, eql_hd, 0, length = length, cfmodel = IDM, eqlfun = IDM_eql, lead = vehlead)
+    veh = vehicle(i, curlane, p, None, length = length, lead = vehlead)
+    veh.initialize(curpos, initspeed, eql_hd, 0)
     vehicles.add(veh)
     vehlead = veh
     
 def test_cf(vehicles, simlen, dt):
     for i in range(simlen):
         for veh in vehicles: 
-            veh.call_cf( i, dt)
+            veh.set_cf( i, dt)
         
         for veh in vehicles: 
             veh.update(i, dt)
