@@ -1,6 +1,4 @@
-
-"""
-Houses the main code for running simulations.
+"""Houses the main code for running simulations.
 
 A simulation is defined by a collection of lanes/roads (a road network) and an initial
 collection of vehicles. The road network defines both the network topology (i.e. how roads connect
@@ -20,32 +18,35 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
     """Updates all quantities for a road network.
 
     After evaluating all vehicle's longitudinal and latitudinal actions, this function does the rest
-    of the updates. In order - completeing requested lane changes
-    updating all leader/follower relationships,
+    of the updates. In order:
+        completeing requested lane changes
+            -moving vehicle to new lane and setting its new route/lane events
+            -updating all leader/follower relationships (including l/rfol) for all vehicles involved
+            -possibly applying relaxation
+        updating state and memory
+        updating all leader/follower relationships (also updates merge anchors)
+        updating all vehicles lane/route events (including possibly removing vehicles)
+        updating inflow conditions for all lanes with inflow (including possibly adding new vehicles and
+        generating the parameters for the next new vehicle)
 
-    Parameters
-    ----------
-    vehicles : TYPE
-        DESCRIPTION.
-    lc_actions : TYPE
-        DESCRIPTION.
-    inflow_lanes : TYPE
-        DESCRIPTION.
-    merge_lanes : TYPE
-        DESCRIPTION.
-    vehid : TYPE
-        DESCRIPTION.
-    timeind : TYPE
-        DESCRIPTION.
-    dt : TYPE
-        DESCRIPTION.
+    Args:
+        vehicles: set containing all vehicle objects being actively simulated
+        lc_actions: dictionary with keys as vehicles which request lane changes in the current timestep,
+            values are a string either 'l' or 'r' which indicates the side of the change
+        inflow_lanes: iterable of lanes which have upstream (inflow) boundary conditions. These lanes
+            must have get_inflow, increment_inflow, and new_vehicle methods
+        merge_lanes: iterable of lanes which have merge anchors. These lanes must have a merge_anchors
+            attribute
+        vehid: int giving the unique vehicle ID for the next vehicle to be generated
+        timeind: int giving the timestep of the simulation (0 indexed)
+        dt: float of time unit that passes in each timestep
 
-    Returns
-    -------
-    vehid : TYPE
-        DESCRIPTION.
-    remove_vehicles : TYPE
-        DESCRIPTION.
+    Returns:
+        vehid: updated int value of next vehicle ID to be added
+        remove_vehicles: set of vehicles which were removed from simulation at current timestep
+
+        Modifies vehicles in place (potentially all their non-parameter/bounds attributes, e.g. pos/spd,
+        lead/fol relationships, their lane/roads, memory, etc.).
     """
     # update followers/leaders for all lane changes
     for veh in lc_actions.keys():
@@ -54,7 +55,7 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
         update_change(lc_actions, veh, timeind)  # this cannot be done in parralel
 
         # update tact/coop components
-        veh.lcside = veh.coop_veh = veh.lc_urgency = None
+        veh.lc_side = veh.coop_veh = veh.lc_urgency = None
         # apply relaxation
         new_relaxation(veh, timeind, dt)
         newfol = veh.fol
@@ -84,110 +85,78 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
     for veh in vehicles:
         update_lrfol(veh)
 
-    #update merge_anchors
-    #lanes have lists of merge anchors, they are used to update vehicle order for
-    #'new lane' or 'update lanes' events. merge anchors are defined as (vehicle, position) tuples.
-    #If position = None, then the vehicle is an anchor vehicle, and corresponds to the situation
-    #where a new lane starts, and the merge anchor is the anchor for the new lane.
-    #if position is not None, then the merge anchor can be either an anchor vehicle
-    #or a regular vehicle, and this corresponds to the situation where two lanes initially meet.
-    #The merge anchor is a guess which is in the right track, and should
-    #ideally be right before pos, Unlike lfol/rfol, merge anchors are not kept completely updated;
-    #merge anchors are used as guesses for leadfol_find
+    # update merge_anchors
     for curlane in merge_lanes:
         update_merge_anchors(curlane, lc_actions)
 
-    #update roads (lane events) and routes
+    # update roads (lane events) and routes
     remove_vehicles = set()
     for veh in vehicles:
-        #check vehicle's lane events and route events, acting if necessary
+        # check vehicle's lane events and route events, acting if necessary
         update_lane_events(veh, timeind, remove_vehicles)
         update_route(veh)
 
-
-    #remove vehicles which leave
+    # remove vehicles which leave
     for veh in remove_vehicles:
         vehicles.remove(veh)
 
-    #update inflow, adding vehicles if necessary
+    # update inflow, adding vehicles if necessary
     for curlane in inflow_lanes:
         vehid = curlane.increment_inflow(vehicles, vehid, timeind, dt)
 
     return vehid, remove_vehicles
 
-def update_merge_anchors(curlane, lc_actions):
-    for i in range(len(curlane.merge_anchors)):
-        veh, pos = curlane.merge_anchors[i][:]
-        if pos is None:  # merge anchor is always an anchor we do nothing
-            # update_lrfol(veh)  # not needed to update lrfol for anchors
-            pass
-        else:
-            if veh.cf_parameters == None:  #veh is an anchor -> we see if we can make its leader the new merge anchor
-                lead = veh.lead
-                if lead is not None:
-                    temp = curlane.roadlen[lead.road] + lead.pos
-                    if temp - pos < 0:
-                        curlane.merge_anchors[i][0] = lead
-
-            elif veh in lc_actions:
-                if lc_actions[veh] == 'l':
-                    curlane.merge_anchors[i][0] = veh.rfol
-                else:
-                    curlane.merge_anchors[i][0] = veh.lfol
-
-            elif curlane.roadlen[veh.road]+veh.pos - pos > 0:
-                    curlane.merge_anchors[i][0] = veh.fol
-
-
-def update_route(veh):
-    #will check a vehicle's current route events and see if we need to do anything
-    #returns True if we make a change, False otherwise
-    #expect a list of dictionarys, each dict is an event with keys of pos, event, side
-    #giving the position when the event occurs, event type, and side of the event
-    if len(veh.route_events) == 0:
-        return False
-    curevent = veh.route_events[0]
-    if veh.pos > curevent['pos']:
-
-        if curevent['event'] == 'end discretionary':
-            side = curevent['side']
-            setattr(veh, side ,None)
-            if veh.lcside == side: #end tactical/coop if necessary
-                veh.coop_veh = veh.lcside = None
-
-        elif curevent['event'] == 'mandatory':
-            setattr(veh, curevent['side'],'mandatory')
-            veh.lc_urgency = curevent['lc_urgency'] #must always set urgency for mandatory changes
-        veh.route_events.pop(0)
-        return True
-    return False
 
 def update_lane_events(veh, timeind, remove_vehicles):
+    """Check if the next event from a Vehicle's lane_events should be applied, and apply it if so.
+
+    lane_events are a list of events which handle anything related to the network topology,
+    i.e. when the current lane ends, or when the current lane's left or right connections change.
+    Each event is a dictionary with the keys of
+    'pos': the float position the event occurs (relative to the vehicle's current lane)
+    'event': one of
+        'new lane' - occurs when a vehicle reaches the end of its current lane and transitions to a new lane
+        'update lr' - occurs when the current lane's left or right connections change
+        'exit' - occurs when a vehicle reaches the end of its current lane and exits the road network
+    'left': for 'new lane' or 'update lr', if the left connection changes, 'left' needs a value of either
+        'add' if there is a new left lane, or 'remove' if the current left connection is no longer possible
+    'left anchor': if 'left' is 'add', 'left anchor' is an index giving the merge anchor for the
+        new left lane
+    'right': same as left, for right side
+    'right anchor': same as left anchor, for right side
+
+    Args:
+        veh: Vehicle object to update
+        timeind: int giving the timestep of the simulation (0 indexed)
+        remove_vehicles: set of vehicles which will be removed from simulation at current timestep
+
+    Returns:
+        None
+
+        Modifies Vehicle attributes in place, adds to remove_vehicles in place.
+    """
     if len(veh.lane_events) == 0:
         return
     curevent = veh.lane_events[0]
     if veh.pos > curevent['pos']:
-        if curevent['event'] == 'new lane': #needs 'left', 'left merge', 'right' 'right anchor' 'pos'
-            #update lane/road/position
+        if curevent['event'] == 'new lane':
+            # update lane/road/position
             newlane = veh.lane.connect_to
             update_veh_lane(veh, veh.lane, newlane, timeind+1)
 
-            #need to update vehicle orders and lane change state
-            update_lane_helper(veh, newlane, curevent)
+            # updates left and right connections
+            update_lane_lr(veh, newlane, curevent)
 
-            #enter new road/lane = need new lane/route events
+            # enter new road/lane -> need new lane/route events
             set_lane_events(veh)
             set_route_events(veh)
 
-
-        elif curevent['event'] == 'update lr': #needs 'left', 'left merge', 'right' 'right anchor' 'pos'
-            update_lane_helper(veh, veh.lane, curevent)
-            veh.lane_events.pop(0) #event is over, move to next
+        elif curevent['event'] == 'update lr':
+            update_lane_lr(veh, veh.lane, curevent)
+            veh.lane_events.pop(0)  # event is over, so we shouldn't check it in the future
 
         elif curevent['event'] == 'exit':
-            #update vehicle orders
-            #there shouldn't be any leaders
-            fol = veh.fol
+            # there shouldn't be any leaders
             # if veh.lead is not None:
             #     veh.lead.fol = fol
             # for i in veh.llead:
@@ -195,105 +164,178 @@ def update_lane_events(veh, timeind, remove_vehicles):
             # for i in veh.rlead:
             #     i.lfol = fol
 
-            #update followers
+            # update vehicle orders
+            fol = veh.fol
             fol.lead = None
             fol.leadmem.append((None, timeind+1))
-            if veh.lfol != None:
+            if veh.lfol is not None:
                 veh.lfol.rlead.remove(veh)
-
-            if veh.rfol != None:
+            if veh.rfol is not None:
                 veh.rfol.llead.remove(veh)
 
-            #to remove the vehicle set its endtime and put it in the remove_vehicles
+            # to remove the vehicle set its endtime and put it in the remove_vehicles
             veh.endtime = timeind
             remove_vehicles.add(veh)
     return
 
 
+def update_lane_lr(veh, curlane, curevent):
+    """Updates a vehicle's attributes when its lane changes its left/right connections.
 
+    For a Vehicle veh which reaches a point where its curlane.get_connect_left or get_connect_right
+    go from None to some Lane, or some Lane to None, there needs to be 'add' or 'remove' events for the
+    corresponding sides. This handles those events.
+    Updates the vehicle orders and defaults the lane change states to the correct behavior (by default,
+    enter discretionary only if the left/right lane is in the same road as the current lane)
 
-def update_lane_helper(veh, curlane, curevent):
-    #for a vehicle veh which reaches a point where its curlane.get_connect_left or get_connect_right
-    #go from None to a lane, or a lane to None, there needs to be 'add' or 'remove' events
-    #this handles those events
+    Args:
+        veh: Vehicle object to update
+        curlane: the Lane veh is currently on, curlane has the new/ending connections
+        curevent: The event (dictionary) triggering the update
 
-    #updates the vehicle orders and defaults the lane change states to the correct behavior
-    #(enter discretionary by default only if lane is in same road)
+    Returns:
+        None
+
+        Modifies veh attributes in place.
+    """
     if curevent['left'] == 'remove':
         veh.lfol.rlead.remove(veh)
         veh.lfol = None
-        veh.l = None
+        veh.l_lc = None
         veh.llane = None
-        if veh.lcside == 'l': #end tactical/coop if necessary
-                veh.coop_veh = veh.lcside = None
+        if veh.lc_side == 'l':  # end tactical/coop if necessary
+            veh.coop_veh = veh.lc_side = None
     elif curevent['left'] == 'add':
         newllane = curlane.get_connect_left(curevent['pos'])
         merge_anchor = newllane.merge_anchors[curevent['left anchor']][0]
-        unused, newfol = curlane.leadfol_find(veh,merge_anchor,'l')
+        unused, newfol = curlane.leadfol_find(veh, merge_anchor, 'l')
 
         veh.lfol = newfol
         newfol.rlead.add(veh)
         if newllane.roadname == curlane.roadname:
-            veh.l = 'discretionary'
+            veh.l_lc = 'discretionary'
         else:
-            veh.l = None
+            veh.l_lc = None
         veh.llane = newllane
 
-
-    #same thing for right
+    # same thing for right
     if curevent['right'] == 'remove':
         veh.rfol.llead.remove(veh)
         veh.rfol = None
-        veh.r = None
+        veh.r_lc = None
         veh.rlane = None
-        if veh.lcside == 'r': #end tactical/coop if necessary
-                veh.coop_veh = veh.lcside = None
+        if veh.lc_side == 'r':  # end tactical/coop if necessary
+            veh.coop_veh = veh.lc_side = None
     elif curevent['right'] == 'add':
-        newrlane  = curlane.get_connect_right(curevent['pos'])
+        newrlane = curlane.get_connect_right(curevent['pos'])
         merge_anchor = newrlane.merge_anchors[curevent['right anchor']][0]
         unused, newfol = curlane.leadfol_find(veh, merge_anchor, 'r')
 
         veh.rfol = newfol
         newfol.llead.add(veh)
         if newrlane.roadname == curlane.roadname:
-            veh.r = 'discretionary'
+            veh.r_lc = 'discretionary'
         else:
-            veh.r = None
+            veh.r_lc = None
         veh.rlane = newrlane
 
+
 def set_lane_events(veh):
+    """Creates lane_events attribute for Vehicle after entering a new lane.
+
+    Refer to update_lane_events for description of lane events. Note that we only need to add upcoming
+    lane events, and past lane events are not applied (this is in contrast to route_events, where past
+    events ARE applied.)
+
+    Args:
+        veh: Vehicle to be updated
+
+    Returns:
+        None
+
+        Modifies veh in place.
+    """
     veh.lane_events = []
     for i in veh.lane.events:
         if i['pos'] > veh.pos:
             veh.lane_events.append(i)
 
 
+def update_route(veh):
+    """Check if the next event from a vehicle's route_events should be applied, and apply it if so.
+
+    route_events are a list of events which handles any lane changing behavior related to
+    a vehicle's route, i.e. route events ensure that the vehicle follows its route.
+    Each event is a dictionary with the keys of
+    'pos': the float position the event occurs (relative to the vehicle's current lane).
+    'event': 'end discretionary' or 'mandatory', which end discretionary or start mandatory
+        lane changing states
+    'side': 'l' or 'r' the side which is updated by the event
+    'lc_urgency': only for a 'mandatory' event, a tuple giving the position for 0% and 100% forced cooperation
+
+    Args:
+        veh: Vehicle object to update
+
+    Returns:
+        bool: True if we made a change, to the route, False otherwise
+
+    """
+    if len(veh.route_events) == 0:
+        return False
+    curevent = veh.route_events[0]
+    if veh.pos > curevent['pos']:
+
+        if curevent['event'] == 'end discretionary':
+            side = curevent['side']
+            setattr(veh, side, None)
+            if veh.lc_side == side:  # end tactical/coop if necessary
+                veh.coop_veh = veh.lc_side = None
+
+        elif curevent['event'] == 'mandatory':
+            setattr(veh, curevent['side'], 'mandatory')
+            veh.lc_urgency = curevent['lc_urgency']  # must always set urgency for mandatory changes
+        veh.route_events.pop(0)
+        return True
+    return False
+
+
 def make_cur_route(p, curlane, nextroadname):
-    #generates route events with parameters p in lane lane
-    #p - parameters - currently len 2 list with constant, p[0] is a constant which is a like a safety buffer, and p[1]
-    #controls the distance you need for a change (also a constant)
-    #curlane- lane object that the route events start on
-    #nextroad - once you leave curlane.road, you want to end up on nextroad
+    """Creates cur_route attribute (stores route events) for Vehicle after entering a new lane.
 
-    #output - dictionary where keys are lanes, values are the route events a vehicle with
-    #parameters p needs to follow on that lane.
+    Refer to update_route for a description of route events.
+    Explanation of current route model -
+    suppose you need to be in lane '2' by position 'x' and start in lane '1', then starting:
+        at x - 2*p[0] - 2*p[1] you will end discretionary changing into lane '0'
+        at x - p[0] - p[1] you wil begin mandatory changing into lane '2'
+        at x - p[0] your mandatory change will have urgency of 100% which will always force
+            cooperation of your l/rfol (assuming you have cooperation added to your lc model)
+    for lane changing with a merge/diverse (e.g. on/off-ramp) which begins at 'x' and ends at 'y',
+    you will start mandatory at 'x' always, reaching 100% cooperation by 'y' - p[0]
 
-    #explanation of current model -
-    #if  you need to be in lane '2' by position 'x' and start in lane '1',
-    #then starting at x - 2*p[0] - 2*p[1] you will end discretionary changing into lane '0'
-    #at x - p[0] - p[1] you wil begin mandatory changing into lane '2'
-    #at x - p[0] your mandatory change will have urgency of 100% which will always force cooperation of your l/rfol
-    #for merging onto/off an on-ramp which begins at 'x' and ends at 'y', you will start mandatory at 'x' always,
-    #reaching 100% cooperation by 'y' - p[0]
+    Args:
+        p: parameters, length 2 list of floats, where p[0] is a safety buffer for merging and p[1]
+            is a comfortable distance for merging
+        curlane: Lane object to create route events for
+        nextroadname: str name of the next road in the route (the next road you want to be on after leaving
+            curlane's road)
 
-    #TODO low priority we only get the route for the current road - no look ahead to take into account future roads.
-    #(This is non trivial, be careful. Should only have to look forward one road )
+    Returns:
+        cur_route: dictionary where keys are lanes, value is a list of route event dictionaries which
+            defines the route a vehicle with parameters p needs to take on that lane
+    """
+    # TODO low priority we only get the route for the current road - no look ahead to take into account
+    # future roads. This modification may be needed if roads are short.
+    # Should only have to look forward one road at a time.
 
-    #TODO nothing to handle cases where LC cannot be completed successfully // medium priority (put necessary info into cur_route dict)
-    ####if you fail to follow your route, you need to be given a new route, and the code which does this can also be used in vehicle.set_state if route = None at initialization####
-    #would need to know latest point when change can take place ('pos' for 'continue' type or pos[1] for merge type),
-    #in lane changing model, it would need to check if we are getting too close and act accordingly (e.g. slow down) if so
-    #in this function, would need to add events if you miss the change, and in that case you would need to be given a new route
+    # TODO handle cases where LC cannot be completed successfully (put necessary info into cur_route dict)
+    # if you fail to follow your route, you need to be given a new route.
+    # the code which makes a new route can also be used if route = None when creating a vehicle
+    # would need to know latest point when change can take place ('pos' for 'continue' type
+    # or pos[1] for merge type)
+    # in lane changing model, it would need to check if we are getting too close and act accordingly
+    # (e.g. slow down) if needed. in this function, would need to add events if you miss the change,
+    # and in that case you would need to be given a new route.
+    # another option other simulators use is they simply remove a vehicle if it fails to follow its route.
 
     curroad = curlane.road
     curlaneind = curlane.laneind
@@ -491,12 +533,59 @@ def update_lrfol(veh):
         veh.rlead.add(rfol)
 
 
+def update_merge_anchors(curlane, lc_actions):
+    """Updates merge_anchors attribute for curlane.
 
+    Lanes have lists of merge anchors, they are used as guesses for leadfol_find for 'new lane' or
+    'update lanes' events when a left or right lane is added. Thus, merge anchors are used to ensure
+    the leader/follower relationships are updated correctly when the network topology changes.
+    A merge anchor is defined as a (vehicle, position) tuple. vehicle can be either an anchor or normal
+    vehicle. position can be either None or a float position. If position is None, vehicle is an anchor,
+    and does not need to be updated. Otherwise, position is a float of the position on curlane,
+    and the merge anchor is the vehicle on the same track as curlane which is closest to position without
+    yet passing position.
+    position being None corresponds to the situation where a new lane starts.
+    position being a float corresponds to the situation where two lanes initially meet.
+    Unlike lfol/rfol, merge anchors do not need to be completely updated. They should be kept
+    in the same track as curlane however.
+
+    Args:
+        curlane: Lane object to update
+        lc_actions: dictionary with keys as vehicles which request lane changes in the current timestep,
+            values are a string either 'l' or 'r' which indicates the side of the change
+
+    Returns:
+        None
+
+        Modifies merge_anchors attribute for curlane
+    """
+    for i in range(len(curlane.merge_anchors)):
+        veh, pos = curlane.merge_anchors[i][:]
+        if pos is None:  # merge anchor is always an anchor we do nothing
+            # update_lrfol(veh)  # no need to update lrfol for anchors
+            pass
+        else:
+            # veh is an anchor -> we see if we can make its leader the new merge anchor
+            if veh.cf_parameters is None:
+                lead = veh.lead
+                if lead is not None:
+                    temp = curlane.roadlen[lead.road] + lead.pos
+                    if temp - pos < 0:
+                        curlane.merge_anchors[i][0] = lead
+
+            elif veh in lc_actions:
+                if lc_actions[veh] == 'l':
+                    curlane.merge_anchors[i][0] = veh.rfol
+                else:
+                    curlane.merge_anchors[i][0] = veh.lfol
+
+            elif curlane.roadlen[veh.road]+veh.pos - pos > 0:
+                curlane.merge_anchors[i][0] = veh.fol
 
 
 def new_relaxation(veh,timeind, dt):
-    rp = veh.relaxp
-    if veh.lead == None or rp == None:
+    rp = veh.relax_parameters
+    if veh.lead is None or rp is None:
         return
     olds = veh.hd
     news = veh.lane.get_headway(veh, veh.lead)
@@ -579,9 +668,9 @@ def update_change(lc_actions, veh, timeind):
         newlcsidelane = lcsidelane.get_connect_left(veh.pos)
         veh.llane = newlcsidelane
         if newlcsidelane != None and newlcsidelane.roadname == veh.road:
-            veh.l = 'discretionary'
+            veh.l_lc = 'discretionary'
         else:
-            veh.l = None
+            veh.l_lc = None
 
 
     else:
@@ -593,9 +682,9 @@ def update_change(lc_actions, veh, timeind):
         newlcsidelane = lcsidelane.get_connect_right(veh.pos)
         veh.rlane = newlcsidelane
         if newlcsidelane != None and newlcsidelane.roadname == veh.road:
-            veh.r = 'discretionary'
+            veh.r_lc = 'discretionary'
         else:
-            veh.r = None
+            veh.r_lc = None
 
 
     ######update all leader/follower relationships#####
@@ -718,7 +807,7 @@ class simulation:
 
         for curlane in inflow_lanes:
             cf_parameters, lc_parameters, kwargs = curlane.new_vehicle()
-            curlane.newveh = vehicle(self.vehid, curlane, cf_parameters, lc_parameters, **kwargs)
+            curlane.newveh = Vehicle(self.vehid, curlane, cf_parameters, lc_parameters, **kwargs)
             self.vehid += 1
 
 
@@ -840,24 +929,24 @@ def set_lc_helper(veh, chk_lc = 1, get_fol = True):
     #where lside/rside are boolean indicating which sides to call model on, rest are headways
 
     #first determine what situation we are in and which sides we need to check
-    l, r  = veh.l, veh.r
-    if l == None:
-        if r == None:
+    l_lc, r_lc  = veh.l_lc, veh.r_lc
+    if l_lc == None:
+        if r_lc == None:
             return False, None
-        elif r == 'discretionary':
+        elif r_lc == 'discretionary':
             lside, rside = False, True
-            chk_cond = False if veh.lcside != None else True
+            chk_cond = False if veh.lc_side != None else True
         else:
             lside, rside = False, True
             chk_cond = False
-    elif l == 'discretionary':
-        if r == None:
+    elif l_lc == 'discretionary':
+        if r_lc == None:
             lside,rside = True, False
-            chk_cond = False if veh.lcside != None else True
-        elif r == 'discretionary':
-            if veh.lcside != None:
+            chk_cond = False if veh.lc_side != None else True
+        elif r_lc == 'discretionary':
+            if veh.lc_side != None:
                 chk_cond = False
-                if veh.lcside == 'l':
+                if veh.lc_side == 'l':
                     lside, rside = True, False
                 else:
                     lside, rside = False, True
@@ -915,13 +1004,13 @@ def get_new_hd(lcsidefol, veh, lcsidelane):
 
     return newlcsidefolhd, newlcsidehd
 
-class vehicle:
+class Vehicle:
     #TODO implementation of adjoint method for cf, relax, shift parameters
     def __init__(self, vehid,curlane, p, lcp,
                  lead = None, fol = None, lfol = None, rfol = None, llead = None, rlead = None,
                  length = 3, eql_type = 'v',
-                 relaxp = 12,  shiftp = None, coopp = .2,
-                 routep = None, route = None,
+                 relax_parameters = 12,  shift_parameters = None, coop_parameters = .2,
+                 route_parameters = None, route = None,
                  accbounds = None, maxspeed = 1e4, hdbounds = None):
         self.vehid = vehid
         self.len = length
@@ -932,13 +1021,13 @@ class vehicle:
         self.lc_parameters = lcp
 
         #relaxation
-        self.relaxp = relaxp
+        self.relax_parameters = relax_parameters
         self.in_relax = False
         self.relax = None
         self.relax_start = None
 
         #route parameters
-        self.route_parameters = [30,120] if routep == None else routep
+        self.route_parameters = [30, 120] if route_parameters is None else route_parameters
         self.route = [] if route == None else route
         #TODO check if route is empty
         self.routemem = self.route.copy()
@@ -953,9 +1042,9 @@ class vehicle:
         self.eql_type = eql_type
 
         #cooperative/tactical model
-        self.shiftp = [.4,2] if shiftp == None else shiftp
-        self.coopp = coopp
-        self.lcside = None
+        self.shift_parameters = [.4,2] if shift_parameters == None else shift_parameters
+        self.coop_parameters = coop_parameters
+        self.lc_side = None
         self.lc_urgency = None
         self.coop_veh = None
 
@@ -993,18 +1082,18 @@ class vehicle:
         #llane/rlane and l/r
         self.llane = self.lane.get_connect_left(pos)
         if self.llane== None:
-            self.l = None
+            self.l_lc = None
         elif self.llane.roadname == self.road:
-            self.l = 'discretionary'
+            self.l_lc = 'discretionary'
         else:
-            self.l = None
+            self.l_lc = None
         self.rlane = self.lane.get_connect_right(pos)
         if self.rlane== None:
-            self.r = None
+            self.r_lc = None
         elif self.rlane.roadname == self.road:
-            self.r = 'discretionary'
+            self.r_lc = 'discretionary'
         else:
-            self.r = None
+            self.r_lc = None
 
         #set lane/route events - sets lane_events, route_events, cur_route attributes
         self.cur_route = make_cur_route(self.route_parameters, self.lane, self.route.pop(0))
@@ -1072,15 +1161,15 @@ class vehicle:
         return inv_flow_helper(self, x, leadlen, output_type, congested, self.eql_type, (0, self.maxspeed), self.hdbounds)
 
     @staticmethod
-    def shift_eql(p, v, shiftp, state):
+    def shift_eql(p, v, shift_parameters, state):
         #p = CF parameters
         #v = velocity
-        #shiftp = list of deceleration, acceleration parameters. eq'l at v goes to n times of normal, where n is the parameter
-        #state = if state = 'decel' we use shiftp[0] else shiftp[1]
+        #shift_parameters = list of deceleration, acceleration parameters. eq'l at v goes to n times of normal, where n is the parameter
+        #state = if state = 'decel' we use shift_parameters[0] else shift_parameters[1]
         if state == 'decel':
-            temp = shiftp[0]**2
+            temp = shift_parameters[0]**2
         else:
-            temp = shiftp[1]**2
+            temp = shift_parameters[1]**2
 
         return (temp - 1)/temp*p[3]*(1 - (v/p[0])**4)
 
@@ -1550,7 +1639,7 @@ def increment_inflow_wrapper(speed_fun = None, method = 'ceql', accel_bound = -1
 
             #create next vehicle
             cf_parameters, lc_parameters, kwargs = self.new_vehicle()
-            self.newveh = vehicle(vehid, self, cf_parameters, lc_parameters, **kwargs)
+            self.newveh = Vehicle(vehid, self, cf_parameters, lc_parameters, **kwargs)
 
 
         return vehid
@@ -1689,224 +1778,3 @@ def connect_helper(connect, pos):
             out = connect[i][1]
             break
     return out
-
-
-#def CF_wrapper(cfmodel):
-#    #acc_bounds controls [lower, upper] bounds on acceleration
-#    #assumes a second order model which has inputs of (p, state), where state
-#    #is a list of all values needed, p is a list of parameters, and
-#    #output is a float giving the acceleration
-#    def call_cf_helper(self, hd, spd, lead, curlane, timeind, dt, userelax):
-#        if lead is None:
-#            acc = curlane.call_downstream(self, timeind, dt)
-#
-#        else:
-#            if userelax:
-#                currelax = self.relax[timeind - self.relax_start]
-#                hd += currelax #can add check to see if relaxed headway is too small
-#                acc = cfmodel(self.cf_parameters, [hd, spd, lead.speed])
-#                hd += -currelax
-#            else:
-#                acc = cfmodel(self.cf_parameters, [hd, spd, lead.speed])
-#
-#        return acc
-#
-#    return call_cf_helper
-
-#def eql_wrapper(eqlfun, eql_type = 'v', tol = .1, spdbounds = (0, 1e4), hdbounds = (0, 1e4), **kwargs):
-#    #eqlfun -> fun to wrap, needs call signature like (parameters, input, *args)
-#    #eql_type = 's' - if 'v', eqlfun takes in velocity and outputs headway. if 's', it takes in headway and outputs velocity
-#    #if eql_type = 'both', then eqlfun takes in an additional argument (parameters, input, input_type) and will return the other quantity
-#    #bounds = (1e-10, 120) - bounds used when eql_type != find. Should define an interval that the soln is in
-#    #tol = .5 - if need to numerically invert the function, this is the tolerance used
-#
-#    if eql_type != 'both':
-#        if eql_type == 'v':
-#            bracket = spdbounds
-#        else:
-#            bracket = hdbounds
-#        def get_eql(self, x, input_type = 'v'):
-#            if input_type == 'v':
-#                if x < spdbounds[0]:
-#                    x = spdbounds[0]
-#                elif x > spdbounds[1]:
-#                    x = spdbounds[1]
-#            elif input_type == 's':
-#                if x < hdbounds[0]:
-#                    x = hdbounds[0]
-#                elif x > hdbounds[1]:
-#                    x = hdbounds[1]
-#
-#            if input_type == eql_type:
-#                return eqlfun(self.cf_parameters, x)
-#            elif input_type != eql_type:
-#                def inveql(y):
-#                    return x - eqlfun(self.cf_parameters, y)
-#                ans = sc.root_scalar(inveql, bracket = bracket, xtol = tol, method = 'brentq')
-#                if ans['converged']:
-#                    return ans['root']
-#                else:
-#                    raise RuntimeError('could not invert provided equilibrium function')
-#    else:
-#        def get_eql(self, x, input_type = 'v'):
-#            return eqlfun(self.cf_parameters, x, input_type)
-#
-#    return get_eql
-
-
-#def FD_wrapper(eqlfun):
-#    #returns flow based on provided equilibrium function
-#    def get_flow(self, x, leadlen = None, input_type = 'v'):
-#        if leadlen == None:
-#            lead = self.lead
-#            if lead != None:
-#                leadlen = lead.len
-#            else:
-#                leadlen = self.len
-#        if input_type == 'v':
-#            s = self.get_eql(x, input_type = input_type)
-#            return x / (s + leadlen)
-#        elif input_type == 's':
-#            v = self.get_eql(x, input_type = input_type)
-#            return v / (s + leadlen)
-#    return get_flow
-
-#def invFD_wrapper(eqlfun, eql_type = 'v', spdbounds = (0, 1e4), hdbounds = (0, 1e4), tol = .1, ftol = .01, invflowfun = None):
-#    #same call signature as eql_wrapper, tol is for headway/speed tolerance, ftol is for flow tolerance
-#    if eql_type != 'both':
-#        if eql_type == 'v':
-#            bracket = spdbounds
-#        else:
-#            bracket = hdbounds
-#        def inv_flow(self, x, leadlen = None, output_type = 'v', congested = True):
-#            if leadlen == None:
-#                lead = self.lead
-#            if lead != None:
-#                leadlen = lead.len
-#            else:
-#                leadlen = self.len
-#
-#            def maxfun(y):
-#                return -self.get_flow(y, leadlen = leadlen, input_type = eql_type)
-#
-#            res = sc.minimize_scalar(maxfun, bracket = bracket, tol = ftol)
-#            if res['success']:
-#                if congested:
-#                    invbounds = (bracket[0], res['x'])
-#                else:
-#                    invbounds = (res['x'], bracket[1])
-#                if -res['fun'] < x:
-#                    print('warning - inputted flow is too large to be achieved')
-#                    if output_type == eql_type:
-#                        return res['x']
-#                    else:
-#                        return self.get_eql(res['x'], input_type = eql_type)
-#            else:
-#                raise RuntimeError('could not find maximum flow')
-#
-#
-#            if eql_type == 'v':
-#                def invfun(y):
-#                    return x - y/(eqlfun(self.cf_parameters, y) + leadlen)
-#            elif eql_type == 's':
-#                def invfun(y):
-#                    return x - eqlfun(self.cf_parameters, y)/(y+leadlen)
-#
-#            ans = sc.root_scalar(invfun, bracket = invbounds, xtol = tol, method = 'brentq')
-#
-#            if ans['converged']:
-#                if output_type == eql_type:
-#                    return ans['root']
-#                elif output_type == 's':
-#                    return ans['root']/x - leadlen
-#                elif output_type == 'v':
-#                    return (ans['root']+leadlen)*x
-#            else:
-#                raise RuntimeError('could not invert provided equilibrium function')
-#    else:
-#        def inv_flow(self, x, leadlen = None, output_type = 'v', congested = True):
-#            return invflowfun(x, leadlen, output_type, congested)
-#
-#    return inv_flow
-
-
-#def LC_wrapper(lcmodel, get_fol = True, **kwargs): #userelax_cur = True, userelax_new = False
-#    #lcmodel - model to wrap. Assume it takes as input the vehicle,
-#        #new left follower headway, new left headway, new right follower headway, new right headway,
-#        #new follower headway (if get_fol is True), timeind, dt, *args, **kwargs
-#    #get_fol - lc model uses the current follower if True
-#    #kwargs - keyword arguments which are passed to lcmodel
-#
-#    def call_lc(self, lc_actions, timeind, dt):
-#        #first determine what situation we are in and which sides we need to check
-#        l, r  = self.l, self.r
-#        if l == None:
-#            if r == None:
-#                return
-#            elif r == 'discretionary':
-#                lside, rside = False, True
-#                chk_cond = False if self.lcside != None else True
-#            else:
-#                lside, rside = False, True
-#                chk_cond = False
-#        elif l == 'discretionary':
-#            if r == None:
-#                lside,rside = True, False
-#                chk_cond = False if self.lcside != None else True
-#            elif r == 'discretionary':
-#                if self.lcside != None:
-#                    chk_cond = False
-#                    if self.lcside == 'l':
-#                        lside, rside = True, False
-#                    else:
-#                        lside, rside = False, True
-#                else:
-#                    chk_cond = True
-#                    lside, rside = True, True
-#            else:
-#                lside, rside = False, True
-#                chk_cond = False
-#        else:
-#            if r == None:
-#                lside, rside = True, False
-#                chk_cond = False
-#            elif r == 'discretionary':
-#                lside, rside = True, False
-#                chk_cond = False
-#
-#        if chk_cond: #decide if we want to evaluate lc model or not - applies to discretionary state when there is no cooperation or tactical positioning
-#            chk_lc = self.lc_parameters[-1]
-#            if chk_lc >= 1:
-#                pass
-#            elif np.random.rand() > chk_lc:
-#                return
-#
-#        #next we compute quantities to send to LC model for the required sides
-#        if lside:
-#            newlfolhd, newlhd = call_lc_helper(self.lfol, self, self.llane) #better to just store left/right lanes
-#        else:
-#            newlfolhd = newlhd = None
-#
-#        if rside:
-#            newrfolhd, newrhd = call_lc_helper(self.rfol, self, self.rlane)
-#        else:
-#            newrfolhd = newrhd = None
-#
-#        #if get_fol option is given to wrapper, it means model requires the follower's quantities as well
-#        if get_fol:
-#            fol, lead = self.fol, self.lead
-#            if fol.cf_parameters == None:
-#                newfolhd = None
-#            elif lead == None:
-#                newfolhd = None
-#            else:
-#                newfolhd = fol.lane.get_headway(fol, lead)
-#
-#            #do model call now for get_fol = True
-#            lcmodel(self, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,
-#                    **kwargs)
-#        else: #model call signature when get_fol = False
-#            lcmodel(self, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, timeind, dt,
-#                    **kwargs)
-#
-#    return call_lc
