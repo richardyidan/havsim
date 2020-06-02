@@ -1,20 +1,4 @@
-
-"""
-@author: rlk268@cornell.edu
-
-houses all the different models for simulation
-
-models USED TO have the following call signature:
-    veh - list of state of vehicle model is being applied to
-    lead - list of state for vehicle's leader
-    p - parameters
-    leadlen - length of lead vehicle
-    *args - additional inputs should be stored in modelinfo dict, and passed through *args
-    dt = .1 - timestep
-
-    they return the derivative of the state i.e. how to update in the next timestep
-current documentation is in jupyter notebook
-"""
+"""Houses all the different models for simulation."""
 
 import numpy as np
 import scipy.optimize as sc
@@ -54,8 +38,8 @@ def IDM_shift_eql(p, v, shift_parameters, state):
 
 
 
-def mobil( veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,
-          userelax_cur = True, userelax_new = False, use_coop = True, use_tact = True):
+def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,
+          userelax_cur=True, userelax_new=False, use_coop=True, use_tact=True):
     #LC parameters
     #0 - safety criterion
     #1 - incentive criteria

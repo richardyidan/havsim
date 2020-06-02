@@ -1,4 +1,14 @@
 """old models file
+
+models USED TO have the following call signature:
+    veh - list of state of vehicle model is being applied to
+    lead - list of state for vehicle's leader
+    p - parameters
+    leadlen - length of lead vehicle
+    *args - additional inputs should be stored in modelinfo dict, and passed through *args
+    dt = .1 - timestep
+
+    they return the derivative of the state i.e. how to update in the next timestep
 """
 
 def IDM_b3(p, veh, lead, *args,dt=.1):
