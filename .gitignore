@@ -124,3 +124,4 @@ dmypy.json
 # Pyre type checker
 .pyre/
 scripts/2018 AY papers/calculate adjoint system.nb
+scripts/spring 2020/.pylint.d/havsim.simulation.simulation1.stats
