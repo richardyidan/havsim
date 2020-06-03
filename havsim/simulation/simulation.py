@@ -8,8 +8,8 @@ vehicles enter the simulation. Vehicles are implemented in the Vehicle class and
 is made up of instances of the Lane class.
 """
 
-import numpy as np
 import math
+import numpy as np
 import scipy.optimize as sc
 import havsim.simulation.models as hm
 
@@ -129,10 +129,9 @@ def update_lane_events(veh, timeind, remove_vehicles):
 
     Returns:
         None
-
         Modifies Vehicle attributes in place, adds to remove_vehicles in place.
     """
-    if len(veh.lane_events) == 0:
+    if not veh.lane_events:
         return
     curevent = veh.lane_events[0]
     if veh.pos > curevent['pos']:
@@ -277,7 +276,7 @@ def update_route(veh):
         bool: True if we made a change, to the route, False otherwise
 
     """
-    if len(veh.route_events) == 0:
+    if not veh.route_events:
         return False
     curevent = veh.route_events[0]
     if veh.pos > curevent['pos']:
@@ -444,7 +443,7 @@ def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos):
         prevtemplane = curroad[curind+1]
         templane = curroad[curind]
         cur_route[templane] = []
-        while not (curind < curlaneind):
+        while not curind < curlaneind:
             # determine curpos = where the mandatory change starts (different meaning than the 'curpos'
             # which is passed in)
             if templane.end < curpos:  # in case templane ends before the curpos
@@ -483,7 +482,7 @@ def make_route_helper(p, cur_route, curroad, curlaneind, laneind, curpos):
         prevtemplane = curroad[curind - 1]
         templane = curroad[curind]
         cur_route[templane] = []
-        while not (curind > curlaneind):
+        while not curind > curlaneind:
             # determine curpos = where the mandatory change starts
             if templane.end < curpos:
                 curpos = templane.end
@@ -545,7 +544,7 @@ def set_route_events(veh):
         if prevlane.road is newlane.road:  # on same road - use helper function to update cur_route
             # need to figure out what situation we are in to give make route helper right call
             prevlane_events = veh.cur_route[prevlane]
-            if len(prevlane_events) == 0:  # this can only happen for continue event => curpos = end of lane
+            if not prevlane_events:  # this can only happen for continue event => curpos = end of lane
                 curpos = prevlane.end
             elif prevlane_events[0]['event'] == 'end discretionary':
                 curpos = prevlane_events[0]['pos'] + p[0] + p[1]
@@ -561,8 +560,6 @@ def set_route_events(veh):
     curbool = True
     while curbool:
         curbool = update_route(veh)
-
-    return
 
 
 def update_lrfol(veh):
@@ -705,8 +702,6 @@ def new_relaxation(veh, timeind, dt):
         veh.relax_start = timeind + 1
         veh.relax = curr
 
-    return
-
 
 def update_veh_lane(veh, oldlane, newlane, timeind, side=None):
     """When a vehicle enters a new lane, this updates the lane, road, pos, and lanemem attributes.
@@ -737,7 +732,6 @@ def update_veh_lane(veh, oldlane, newlane, timeind, side=None):
             setattr(veh, side, 'discretionary')
     veh.lane = newlane
     veh.lanemem.append((newlane, timeind))
-    return
 
 
 # ######
@@ -1232,14 +1226,14 @@ def set_lc_helper(veh, chk_lc=1, get_fol=True):
             return False, None
         elif r_lc == 'discretionary':
             lside, rside = False, True
-            chk_cond = False if veh.lc_side is not None else True
+            chk_cond = not veh.lc_side
         else:
             lside, rside = False, True
             chk_cond = False
     elif l_lc == 'discretionary':
         if r_lc is None:
             lside, rside = True, False
-            chk_cond = False if veh.lc_side is not None else True
+            chk_cond = not veh.lc_side
         elif r_lc == 'discretionary':
             if veh.lc_side is not None:
                 chk_cond = False
@@ -1734,11 +1728,11 @@ class Vehicle:
 
     def __ne__(self, other):
         """Used for comparing two vehicles with !=."""
-        return not(self.vehid == other.vehid)
+        return not self.vehid == other.vehid
 
     def __repr__(self):
         """Display for vehicle in interactive console."""
-        return ('vehicle '+str(self.vehid)+' on lane '+str(self.lane)+' at position '+str(self.pos))
+        return 'vehicle '+str(self.vehid)+' on lane '+str(self.lane)+' at position '+str(self.pos)
 
     def __str__(self):
         """Convert vehicle to a str representation."""
@@ -1818,10 +1812,10 @@ class Vehicle:
             print('llead passing: '+str(lleadpass))
             print('rlead passing: '+str(rleadpass))
 
-        return (lfolpass and rfolpass and rleadpass and lleadpass and leadpass and folpass)
+        return lfolpass and rfolpass and rleadpass and lleadpass and leadpass and folpass
 
 
-def downstream_wrapper(method='speed', time_series=None,  congested=True, merge_side='l',
+def downstream_wrapper(method='speed', time_series=None, congested=True, merge_side='l',
                        merge_anchor_ind=None, target_lane=None, self_lane=None, shift=1, minacc=-2):
     """Defines call_downstream method for Lane. keyword options control behavior of call_downstream.
 
@@ -2009,7 +2003,7 @@ class AnchorVehicle:
 
     def __repr__(self):
         """Representation in ipython console."""
-        return ('anchor for lane '+str(self.lane))
+        return 'anchor for lane '+str(self.lane)
 
     def __str__(self):
         """Convert to string."""
@@ -2487,11 +2481,11 @@ class Lane:
 
     def __ne__(self, other):
         """Comparison for Lanes using !=."""
-        return not(self is other)
+        return self is not other
 
     def __repr__(self):
         """Representation in ipython console."""
-        return (self.roadname+' ('+str(self.laneind)+')')
+        return self.roadname+' ('+str(self.laneind)+')'
 
     def __str__(self):
         """Convert Lane to a string."""
