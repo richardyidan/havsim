@@ -4,10 +4,10 @@ calibration related functions which define algorithms (such as custom optimizati
 
 @author: rlk268@cornell.edu
 """
-import numpy as np 
+import numpy as np
 from . import helper
 import networkx as nx
-import copy 
+import copy
 import scipy.stats as ss
 from havsim.calibration.helper import chain_metric, c_metric, cirdep_metric
 import math
@@ -15,413 +15,413 @@ import matplotlib.pyplot as plt
 
 
 def makefollowerchain2(leadID, dataset, n=1, picklane = 0 ):
-	
-    #this is the older version. This one will end up selecting more "whole" trajectories (i.e. those without LC). See makefollowerchain for documentation 
-    #but will also sometimes give gaps in the trajectories. 
-    #the newer version will get EVERY vehicle in the lane, but perhaps not in a great order, and certain vehicles might only be simulated a very short time. 
-    
+
+    #this is the older version. This one will end up selecting more "whole" trajectories (i.e. those without LC). See makefollowerchain for documentation
+    #but will also sometimes give gaps in the trajectories.
+    #the newer version will get EVERY vehicle in the lane, but perhaps not in a great order, and certain vehicles might only be simulated a very short time.
+
     #note that this isn't the same as makeplatooninfo: main differences are that followers each have only 1 leader, all vehicles are in the same lane
     #this function is good if you want to grab a platoon with no lane changing
-    #it should be possible to use any "plots" or "calibration" functions on the output even though it is slightly different than makeplatooninfo. 
+    #it should be possible to use any "plots" or "calibration" functions on the output even though it is slightly different than makeplatooninfo.
 
-    meas = {} #this is where the measurements (from data) go 
+    meas = {} #this is where the measurements (from data) go
     followerchain = {} #helpful information about the platoon and the followers
 
-    
+
     lead = dataset[dataset[:,0]==leadID] #get all data for lead vehicle
     lanes, lanes_count = np.unique(lead[:,7], False, False, True) #get all lanes lead vehicle has been in. you can specify a lane manually, default to most traveled lane
-    if picklane == 0: #default to most traveled lane if no lane given 
+    if picklane == 0: #default to most traveled lane if no lane given
         picklane = lanes[np.argmin(-lanes_count)]
-    lead = lead[lead[:,7]==picklane] #get all lead trajectory data for specific lane 
-    
-    lead, _= helper.checksequential(lead) #we only want sequential data for the lead trajectory i.e. don't want leader to change lanes and then change back to first lane 
+    lead = lead[lead[:,7]==picklane] #get all lead trajectory data for specific lane
+
+    lead, _= helper.checksequential(lead) #we only want sequential data for the lead trajectory i.e. don't want leader to change lanes and then change back to first lane
     leadID = lead[0,0]
     #now we have sequential measurments for the leadID in the lane picklane. we want to get followers and form a platoon of size n
-    followerchain[leadID] = [int(lead[0,1]), int(lead[0,1]), int(lead[0,1]), int(lead[-1,1]), -1, -1,-1, []] #we give leader a followerchain entry as well. unused entries are set equal to -1 
-    
+    followerchain[leadID] = [int(lead[0,1]), int(lead[0,1]), int(lead[0,1]), int(lead[-1,1]), -1, -1,-1, []] #we give leader a followerchain entry as well. unused entries are set equal to -1
+
     for i in range(n):
         meas[leadID] = lead #add data of lead vehicle
-        followers, followers_count = np.unique(lead[:,5], False, False, True) #get all followers for specific leader in specific lane 
-        pickfollower = followers[np.argmin(-followers_count)] #next follower is whichever follower has most observations 
-        fullfollower = dataset[np.logical_and(dataset[:,0]==pickfollower, dataset[:,7]==picklane)] #get all measurements for follower in current lane 
-        curfollower = fullfollower[fullfollower[:,4]==leadID] #get all measurements for follower with specific leader 
-        
-        followerchain[leadID][-1].append(pickfollower) #append the new follower to the entry of its leader so we can get the platoon order if needed 
-        
-        #if curfollower is empty it means we couldn't find a follower 
+        followers, followers_count = np.unique(lead[:,5], False, False, True) #get all followers for specific leader in specific lane
+        pickfollower = followers[np.argmin(-followers_count)] #next follower is whichever follower has most observations
+        fullfollower = dataset[np.logical_and(dataset[:,0]==pickfollower, dataset[:,7]==picklane)] #get all measurements for follower in current lane
+        curfollower = fullfollower[fullfollower[:,4]==leadID] #get all measurements for follower with specific leader
+
+        followerchain[leadID][-1].append(pickfollower) #append the new follower to the entry of its leader so we can get the platoon order if needed
+
+        #if curfollower is empty it means we couldn't find a follower
         testshape = curfollower.shape
 
         if testshape[0] ==0:
             print('warning: empty follower')
             return meas, followerchain
-        
-    
+
+
         #need to check all measurements are sequential
-        curfollower, _ = helper.checksequential(curfollower) #curfollower is where we have the lead measurements for follower 
+        curfollower, _ = helper.checksequential(curfollower) #curfollower is where we have the lead measurements for follower
         extrafollower = fullfollower[fullfollower[:,1]>curfollower[-1,1]] #extrafollower is where all the "extra" measurements for follower go - no leader here
         extrafollower, _ = helper.checksequential(extrafollower, 1, True)
-        
+
         testshape1 = extrafollower.shape #this prevents index error which occurs when extrafollower is empty
-        if testshape1[0]==0: 
+        if testshape1[0]==0:
             T_n = curfollower[-1,1]
-        else: 
+        else:
             T_n = extrafollower[-1,1]
-        
+
         if curfollower[-1,1]< lead[-1,1]:
             print('warning: follower trajectory not available for full lead trajectory') #you will get this print out when you use makefollowerchain on data with lane changing.
             #the print out doesn't mean anything has gone wrong, it is just to let you know that for certain vehicles in the platoon, those vehicles can't be simulated
-            #for as long as a time as they should, essentially because they, or their leaders, change lanes 
-            
+            #for as long as a time as they should, essentially because they, or their leaders, change lanes
+
         followerchain[pickfollower]= [int(fullfollower[0,1]), int(curfollower[0,1]), int(curfollower[-1,1]), int(T_n), [leadID], curfollower[0,2], curfollower[0,3], []]
-        
-        #update iteration 
+
+        #update iteration
 #        lead = np.append(curfollower,extrafollower, axis = 0)
         lead = fullfollower #this is what lead needs to be to be consistent with the conventions we are using in makeplatooninfo and makeplatoon
         leadID = pickfollower
-        
+
     meas[leadID] = lead #add data of last vehicle
-    return meas, followerchain 
+    return meas, followerchain
 
 def makefollowerchain(leadID, dataset, n=1, picklane = 0 ):
-	#	given a lead vehicle, makefollowerchain forms a platoon that we can calibrate. The platoon is formed is such a way that there is no lane changing, 
-	#Mainly meant for testing and plotting, you probably want to use makeplatoonlist unless for some reason you don't want to have any lane changing in your calibration 
-	
-	#input: 
-	#    leadID: vehicle ID of leader. this is the first vehicle in the platoon, so the next vehicle will be the follower of this vehicle, and then the vehicle after will be the follower of 
-	#    that vehicle, etc. 
-	#    
-	#    dataset: source of data. it needs to have all the entries that are in dataind for each observation (as well as the vehicle ID and frame ID entries) 
-	#    
-	#    n = 1: this is how many following vehicles will be in the followerchain. 
-	#        
+	#	given a lead vehicle, makefollowerchain forms a platoon that we can calibrate. The platoon is formed is such a way that there is no lane changing,
+	#Mainly meant for testing and plotting, you probably want to use makeplatoonlist unless for some reason you don't want to have any lane changing in your calibration
+
+	#input:
+	#    leadID: vehicle ID of leader. this is the first vehicle in the platoon, so the next vehicle will be the follower of this vehicle, and then the vehicle after will be the follower of
+	#    that vehicle, etc.
+	#
+	#    dataset: source of data. it needs to have all the entries that are in dataind for each observation (as well as the vehicle ID and frame ID entries)
+	#
+	#    n = 1: this is how many following vehicles will be in the followerchain.
+	#
 	#    picklane = 0 : laneID for leader (optional). If you give default value of 0, we just give the lane that has the most observations for the leader as the lane to use
-	#    
-	#output: 
+	#
+	#output:
 	#    meas: all measurements with vehID as key, values as dataset[dataset==meas.val()] i.e. same format as dataset
 	#    This is only for the vehicles in followerchain, and not every single vehicle in the dataset
-	#    
+	#
 	#    followerchain: dictionary with key as vehicle ID
-	#    value is array containing information about the platoon and calibration problem 
+	#    value is array containing information about the platoon and calibration problem
 	#        0 - t_nstar (first recorded time)
 	#        1 - t_n (first simulated time)
 	#        2 - T_nm1 (last simulated time) (read as T_{n minus 1})
 	#        3 - T_n (last recorded time)
 	#        4 - leader ID (in an array so that it is consistent with platooninfo)
-	#        5 - position IC 
-	#        6 - speed IC 
+	#        5 - position IC
+	#        6 - speed IC
 	#        7 - follower ID (in an array)
-	
-    #this is the newer version of makefollowerchain which always gets all vehicles in the lane, even ones which are only simulated a short time. 
-    #however, there is still one thing in this unclear to me which is how it is going to handle the case of a vehicle which is in the lane then merges out of the lane 
-    #and then back in at a later time. I think in that case, it only selects the longest continuous trajectory and ignores the other part. 
-    #so this edge case you need to be careful with. 
-    
 
-    meas = {} #this is where the measurements (from data) go 
+    #this is the newer version of makefollowerchain which always gets all vehicles in the lane, even ones which are only simulated a short time.
+    #however, there is still one thing in this unclear to me which is how it is going to handle the case of a vehicle which is in the lane then merges out of the lane
+    #and then back in at a later time. I think in that case, it only selects the longest continuous trajectory and ignores the other part.
+    #so this edge case you need to be careful with.
+
+
+    meas = {} #this is where the measurements (from data) go
     followerchain = {} #helpful information about the platoon and the followers
 
-    
+
     lead = dataset[dataset[:,0]==leadID] #get all data for lead vehicle
     lanes, lanes_count = np.unique(lead[:,7], False, False, True) #get all lanes lead vehicle has been in. you can specify a lane manually, default to most traveled lane
-    if picklane == 0: #default to most traveled lane if no lane given 
+    if picklane == 0: #default to most traveled lane if no lane given
         picklane = lanes[np.argmin(-lanes_count)]
-    lead = lead[lead[:,7]==picklane] #get all lead trajectory data for specific lane 
-    
-    lead, _= helper.checksequential(lead) #we only want sequential data for the lead trajectory i.e. don't want leader to change lanes and then change back to first lane 
+    lead = lead[lead[:,7]==picklane] #get all lead trajectory data for specific lane
+
+    lead, _= helper.checksequential(lead) #we only want sequential data for the lead trajectory i.e. don't want leader to change lanes and then change back to first lane
     leadID = lead[0,0]
     #now we have sequential measurments for the leadID in the lane picklane. we want to get followers and form a platoon of size n
-    followerchain[leadID] = [int(lead[0,1]), int(lead[0,1]), int(lead[0,1]), int(lead[-1,1]), -1, -1,-1, []] #we give leader a followerchain entry as well. unused entries are set equal to -1 
+    followerchain[leadID] = [int(lead[0,1]), int(lead[0,1]), int(lead[0,1]), int(lead[-1,1]), -1, -1,-1, []] #we give leader a followerchain entry as well. unused entries are set equal to -1
    #modification
     backlog = []
     leadlist = []
     i = 1
-    
+
     while i < n:
 #        print(i)
 #        print(leadlist)
         leadlist.append(leadID)
         meas[leadID] = lead #add data of lead vehicle
-        followers, followers_count = np.unique(lead[:,5], False, False, True) #get all followers for specific leader in specific lane 
+        followers, followers_count = np.unique(lead[:,5], False, False, True) #get all followers for specific leader in specific lane
         #modification
 #        if len(backlog) == 0:
 #            pickfollower = followers[np.argmin(-followers_count)] #next follower is whichever follower has most observations #before it was just this
-#        else: 
+#        else:
 #            pickfollower = backlog.pop()
-        for j in followers: 
-            if j ==0:#don't add 0 
+        for j in followers:
+            if j ==0:#don't add 0
                 continue
             elif j in leadlist or j in backlog:
                 continue
             backlog.append(j) #add everything to the backlog
 
-        pickfollower = backlog[0] #take out the first thing 
+        pickfollower = backlog[0] #take out the first thing
         backlog.remove(pickfollower)
-        
-            
-        fullfollower = dataset[np.logical_and(dataset[:,0]==pickfollower, dataset[:,7]==picklane)] #get all measurements for follower in current lane 
-        #need to change this line 
-#        curfollower = fullfollower[fullfollower[:,4]==leadID] #get all measurements for follower with specific leader 
+
+
+        fullfollower = dataset[np.logical_and(dataset[:,0]==pickfollower, dataset[:,7]==picklane)] #get all measurements for follower in current lane
+        #need to change this line
+#        curfollower = fullfollower[fullfollower[:,4]==leadID] #get all measurements for follower with specific leader
         curfollower = []
         for j in range(len(fullfollower)):
             if fullfollower[j,4] in leadlist:
                 curfollower = np.append(curfollower,fullfollower[j,:])
         curfollower = np.reshape(curfollower,(int(len(curfollower)/9),9))
-        
-        
-        followerchain[leadID][-1].append(pickfollower) #append the new follower to the entry of its leader so we can get the platoon order if needed 
+
+
+        followerchain[leadID][-1].append(pickfollower) #append the new follower to the entry of its leader so we can get the platoon order if needed
         #modification
-        
-        #if curfollower is empty it means we couldn't find a follower 
+
+        #if curfollower is empty it means we couldn't find a follower
         testshape = curfollower.shape
 
         if testshape[0] ==0:
             print('warning: empty follower')
 #            return meas, followerchain
             continue
-        
-    
+
+
         #need to check all measurements are sequential
-        curfollower, _ = helper.checksequential(curfollower) #curfollower is where we have the lead measurements for follower 
+        curfollower, _ = helper.checksequential(curfollower) #curfollower is where we have the lead measurements for follower
         extrafollower = fullfollower[fullfollower[:,1]>curfollower[-1,1]] #extrafollower is where all the "extra" measurements for follower go - no leader here
         extrafollower, _ = helper.checksequential(extrafollower, 1, True)
-        
+
         testshape1 = extrafollower.shape #this prevents index error which occurs when extrafollower is empty
-        if testshape1[0]==0: 
+        if testshape1[0]==0:
             T_n = curfollower[-1,1]
-        else: 
+        else:
             T_n = extrafollower[-1,1]
-        
+
         if curfollower[-1,1]< lead[-1,1]:
             print('warning: follower trajectory not available for full lead trajectory') #you will get this print out when you use makefollowerchain on data with lane changing.
             #the print out doesn't mean anything has gone wrong, it is just to let you know that for certain vehicles in the platoon, those vehicles can't be simulated
-            #for as long as a time as they should, essentially because they, or their leaders, change lanes 
-            
+            #for as long as a time as they should, essentially because they, or their leaders, change lanes
+
         followerchain[pickfollower]= [int(fullfollower[0,1]), int(curfollower[0,1]), int(curfollower[-1,1]), int(T_n), [leadID], curfollower[0,2], curfollower[0,3], []]
-        
-        #update iteration 
+
+        #update iteration
 #        lead = np.append(curfollower,extrafollower, axis = 0)
         lead = fullfollower #this is what lead needs to be to be consistent with the conventions we are using in makeplatooninfo and makeplatoon
         leadID = pickfollower
         i += 1
-        
+
     meas[leadID] = lead #add data of last vehicle
-    return meas, followerchain 
+    return meas, followerchain
 
 
 
 def makeplatooninfo(dataset, simlen = 50):
 #	This looks at the entire dataset, and makes a platooninfo entry for every single vehicle. The platooninfo tells us during which times we calibrate a vehicle. It also contains
-#the vehicles intial conditions, as well as the vehicles leaders, and any followers the vehicle has. note that we modify the folowers it has during the time 
-#we use the makeplatoon function. 
+#the vehicles intial conditions, as well as the vehicles leaders, and any followers the vehicle has. note that we modify the folowers it has during the time
+#we use the makeplatoon function.
 #The function also makes the outputs leaders, G (follower network), simcount, curlead, totfollist, followers, curleadlist
-#All of those things we need to run the makeplatoon function, and all of those are modified everytime makeplatoon runs. 
+#All of those things we need to run the makeplatoon function, and all of those are modified everytime makeplatoon runs.
 #
-#input:     
-#    dataset: source of data, 
-#    
+#input:
+#    dataset: source of data,
+#
 #    dataind: column indices for data entries. e.g. [3,4,9,8,6,2,5] for reconstructed. [5,11,14,15,8,13,12] for raw/reextracted. (optional)
 #    NOTE THAT FIRST COLUMN IS VEHICLE ID AND SECOND COLUMN IS FRAME ID. THESE ARE ASSUMED AND NOT INCLUDED IN DATAIND
-#            0- position, 
-#            1 - speed, 
-#            2 - leader, 
-#            3 - follower. 
-#            4 - length, 
-#            5 - lane, 
+#            0- position,
+#            1 - speed,
+#            2 - leader,
+#            3 - follower.
+#            4 - length,
+#            5 - lane,
 #            6 - length
             #7 -lane
             #8 - acceleration
 #            e.g. data[:,dataind[0]] all position entries for entire dataset, data[data[:,1]] all frame IDs for entire dataset
-#            
-#    simlen = 50: this is the minimum number of observations a vehicle has a leader for it to be calibrated. 
-#    
-#output: 
+#
+#    simlen = 50: this is the minimum number of observations a vehicle has a leader for it to be calibrated.
+#
+#output:
 #    meas: all measurements with vehID as key, values as dataset[dataset==meas.val()] i.e. same format as dataset
-            #rows are observations. 
-            #columns are: 
+            #rows are observations.
+            #columns are:
             #0 - id
             #1 - time
             #2 - position
             #3 - speed
-            #4 - leader 
+            #4 - leader
             #5 - follower
             #6 - length
             #7 - lane
             #8 - acceleration
-#    
+#
 #    platooninfo: dictionary with key as vehicle ID, (excludes lead vehicle)
-#    value is array containing information about the platoon and calibration problem 
+#    value is array containing information about the platoon and calibration problem
 #        0 - t_nstar (first recorded time, t_nstar = t_n for makefollowerchain)
 #        1 - t_n (first simulated time)
 #        2 - T_nm1 (last simulated time)
 #        3 - T_n (last recorded time)
 #        4 - array of lead vehicles
-#        5 - position IC 
-#        6 - speed IC 
+#        5 - position IC
+#        6 - speed IC
 #        7 - [len(followerlist), followerlist], where followerlist is the unique simulated followers of the vehicle. note followerlist =/= np.unique(LCinfo[:,2])
-#        
+#
 #    leaders: list of vehicle IDs which are not simulated. these vehicles should not have any leaders, and their times should indicate that they are not simulated (t_n = T_nm1)
-#    
-#    simcount: count of how many vehicles in the dataset have 1 or more followers that need to be simulated. If simcount is equal to 0, then 
-#    there are no more vehicles that can be simulated. Simcount is not the same as how many vehicles need to be simulated. In above example, simcount is 1. 
+#
+#    simcount: count of how many vehicles in the dataset have 1 or more followers that need to be simulated. If simcount is equal to 0, then
+#    there are no more vehicles that can be simulated. Simcount is not the same as how many vehicles need to be simulated. In above example, simcount is 1.
 #    If vehicles 2 and 4 are both simulated, the simcount will drop to 0, and all vehicles that can be simulated have been simulated.
-#    
+#
 #    curlead: this is needed for makeplatoon. We assign it as None for initialization purposes. This is the most recent vehicle added as a leader to curleadlist
-#    
+#
 #    totfollist: this represents ALL possible followers that may be able to be added based on all the vehicles currently in leaders. list. needed for makeplatoon
-#    
+#
 #    followers: this is NOT all possible followers, ONLY of any vehicle that has been assigned as 'curlead' (so it is the list of all vehicles that can follow anything in curleadlist).
 #    The purpose of this variable in addition to totfollist is that we want to prioritize vehicles that have their leader in the current platoon.
-#    
+#
 #    curleadlist: this is needed for makeplatoon. the current list of leaders that we try to add followers for
 	##########
     #inputs - dataset. it should be organized with rows as observations and columns have the following information
-    #dataind: 0 - vehicle ID, 1- time,  2- position, 3 - speed, 4 - leader, 5 - follower. 6 - length, 7 - lane, 8 - acceleration 
+    #dataind: 0 - vehicle ID, 1- time,  2- position, 3 - speed, 4 - leader, 5 - follower. 6 - length, 7 - lane, 8 - acceleration
     #the data should be sorted. Meaning that all observations for a vehicle ID are sequential (so all the observations are together)
-    #additionally, within all observations for that vehicle time should be increasing. 
-    
-    #simlen = 50 - vehicles need to have a leader for at least this many continuous observations to be simulated. Otherwise we will not simulate. 
-    
-    #this takes the dataset, changes it into a dictionary where the vehicle ID is the key and values are observations. 
-    
-    vehlist, vehind, vehct = np.unique(dataset[:,0], return_index =True, return_counts = True) #get list of all vehicle IDs. we will operate on each vehicle. 
-    
-    meas = {} #data will go here 
-    platooninfo = {} #output 
-    masterlenlist = {} #this will be a dict with keys as veh id, value as length of vehicle. needed to make vehlen, part of platooninfo. not returned 
-    leaders = [] #we will initialize the leader information which is needed for makeplatoon 
-    
-    for z in range(len(vehlist)): #first pass we can almost do everything 
+    #additionally, within all observations for that vehicle time should be increasing.
+
+    #simlen = 50 - vehicles need to have a leader for at least this many continuous observations to be simulated. Otherwise we will not simulate.
+
+    #this takes the dataset, changes it into a dictionary where the vehicle ID is the key and values are observations.
+
+    vehlist, vehind, vehct = np.unique(dataset[:,0], return_index =True, return_counts = True) #get list of all vehicle IDs. we will operate on each vehicle.
+
+    meas = {} #data will go here
+    platooninfo = {} #output
+    masterlenlist = {} #this will be a dict with keys as veh id, value as length of vehicle. needed to make vehlen, part of platooninfo. not returned
+    leaders = [] #we will initialize the leader information which is needed for makeplatoon
+
+    for z in range(len(vehlist)): #first pass we can almost do everything
         i = vehlist[z] #this is what i used to be
-        curveh = dataset[vehind[z]:vehind[z]+vehct[z],:] #current vehicle data 
+        curveh = dataset[vehind[z]:vehind[z]+vehct[z],:] #current vehicle data
 #        LCinfo = curveh[:,[1,dataind[2], dataind[3]]] #lane change info #i'm taking out the LCinfo from the platooninfo since the information is all in meas anyway
-        lanedata = np.nonzero(curveh[:,4])[0] #row indices of LCinfo with a leader 
-        #the way this works is that np.nonzero returns the indices of LCinfo with a leader. then lanedata increases sequentially when there is a leader, 
+        lanedata = np.nonzero(curveh[:,4])[0] #row indices of LCinfo with a leader
+        #the way this works is that np.nonzero returns the indices of LCinfo with a leader. then lanedata increases sequentially when there is a leader,
         #and has jumps where there is a break in the leaders. so this is the exact form we need to use checksequential.
         mylen = len(lanedata)
         lanedata = np.append(lanedata, lanedata) #we need to make this into a np array because of the way checksequential works so we'll just repeat the column
         lanedata = lanedata.reshape((mylen,2) , order = 'F')
-        unused, indjumps = helper.checksequential(lanedata) #indjumps returns indices of lanedata, lanedata itself are the indices of curveh. 
+        unused, indjumps = helper.checksequential(lanedata) #indjumps returns indices of lanedata, lanedata itself are the indices of curveh.
         t_nstar = int(curveh[0,1]) #first time measurement is known
-        T_n = int(curveh[-1,1]) #last time measurement is known 
+        T_n = int(curveh[-1,1]) #last time measurement is known
 
-        masterlenlist[i] = curveh[0,6] #add length of vehicle i to vehicle length dictionary 
-        meas[i] = curveh #add vehicle i to data 
-        
+        masterlenlist[i] = curveh[0,6] #add length of vehicle i to vehicle length dictionary
+        meas[i] = curveh #add vehicle i to data
+
         if np.all(indjumps == [0,0]) or curveh[0,6]==0: #special case where vehicle has no leaders will cause index error; we cannot simulate those vehicles
             #also if the length of the vehicle is equal to 0 we can't simulate the vehicle. If we can't simulate the vehicle, t_nstar = t_n = T_nm1
-            t_n = t_nstar  #set equal to first measurement time in that case. 
+            t_n = t_nstar  #set equal to first measurement time in that case.
             T_nm1 = t_nstar
             platooninfo[i] = [t_nstar, t_n, T_nm1, T_n, [], curveh[0,2], curveh[0, 3], []]
 #            platooninfo[i] = [t_nstar, t_n, T_nm1, T_n, [], [0, []]]
             continue
-            
+
         t_n = int(curveh[lanedata[indjumps[0],0],1]) #simulated time is longest continuous episode with a leader, slice notation is lanedata[indjumps[0]]:lanedata[indjumps[1]]
         T_nm1 = int(curveh[lanedata[indjumps[1]-1,0],1])
-        
+
         if (T_nm1 - t_n) < simlen: #if the simulated time is "too short" (less than 5 seconds) we will not simulate it (risk of overfitting/underdetermined problem)
             t_n = t_nstar
             T_nm1 = t_nstar
-            
-        
-        platooninfo[i] = [t_nstar, t_n, T_nm1, T_n, [], curveh[t_n-t_nstar,2], curveh[t_n-t_nstar, 3], []] #put in everything except for vehicle len and the follower info 
+
+
+        platooninfo[i] = [t_nstar, t_n, T_nm1, T_n, [], curveh[t_n-t_nstar,2], curveh[t_n-t_nstar, 3], []] #put in everything except for vehicle len and the follower info
 #        platooninfo[i] = [t_nstar, t_n, T_nm1, T_n, [], [0, []]]
     for i in vehlist: #second pass we need to construct vehlen dictionary for each vehicle ID. we will also put in the last entry of platooninfo, which gives info on the followers
-#        vehlen = {} #initialize vehlen which is the missing entry in platooninfo for each vehicle ID 
-        curinfo = platooninfo[i] #platooninfo for current veh 
+#        vehlen = {} #initialize vehlen which is the missing entry in platooninfo for each vehicle ID
+        curinfo = platooninfo[i] #platooninfo for current veh
         t_nstar, t_n, T_nm1 = curinfo[0], curinfo[1], curinfo[2]
-        leaderlist = list(np.unique(meas[i][t_n-t_nstar:T_nm1-t_nstar+1,4])) #unique leaders 
-        if 0 in leaderlist: #don't care about 0 entry remove it 
+        leaderlist = list(np.unique(meas[i][t_n-t_nstar:T_nm1-t_nstar+1,4])) #unique leaders
+        if 0 in leaderlist: #don't care about 0 entry remove it
             leaderlist.remove(0)
         for j in leaderlist: #iterate over each leader
 #            if j == 0.0: #vehID = 0 means no vehicle (in this case, no leader)
-#                continue 
-#            vehlen[j] = meas[j][0,dataind[4]] #put in vehicle length of each leader during simulated times 
+#                continue
+#            vehlen[j] = meas[j][0,dataind[4]] #put in vehicle length of each leader during simulated times
             #now we will construct the last entry of platooninfo
             platooninfo[j][-1].append(i) #vehicle j has vehicle i as a follower.
-        platooninfo[i][4] = leaderlist #put in the leader information 
-        
+        platooninfo[i][4] = leaderlist #put in the leader information
+
         #now we have identified all the necessary information to setup the optimization problem.
-        #first thing to do is to identify the vehicles which are not simulated. These are our lead vehicles. 
-        if (T_nm1 - t_n) == 0: #if vehicle not simulated that means it is always a leader    
+        #first thing to do is to identify the vehicles which are not simulated. These are our lead vehicles.
+        if (T_nm1 - t_n) == 0: #if vehicle not simulated that means it is always a leader
 #            curfollowers = np.unique(LCinfo[:,2]) #all unique followers of leader. NOTE THAT JUST BECAUSE IT IS A FOLLOWER DOES NOT MEAN ITS SIMULATED
             leaders.append(i)
-            
-    
-    #explanation of how makeplatoon works:    
-    #the main problem you can run into when forming platoons is what I refer to as "circular dependency". this occurs when veh X has veh Y as BOTH a leader AND follower. 
+
+
+    #explanation of how makeplatoon works:
+    #the main problem you can run into when forming platoons is what I refer to as "circular dependency". this occurs when veh X has veh Y as BOTH a leader AND follower.
     #This is a problem because veh X and Y depend on each other, and you have to arbitrarily pick one as only a leader in order to resolve the loop
-    #this can occur when a follower overtakes a leader. I'm not sure how common that is, but in the interest of generality we will handle these cases. 
-    #the other thing to keep in mind is related to efficiency. since we need to iterate over lists of vehicles twice to form platoons (O(n**2)), if the lists of candidate 
-    #vehicles, or leaders, becomes long, forming the platoons can potentially be very inefficient. size m vehicle platoon, size n lists, potentially m*n**2. 
-    #however, if you are smart about how you form the platoons you can keep the follower list and leader list fairly short, so n will be small. 
+    #this can occur when a follower overtakes a leader. I'm not sure how common that is, but in the interest of generality we will handle these cases.
+    #the other thing to keep in mind is related to efficiency. since we need to iterate over lists of vehicles twice to form platoons (O(n**2)), if the lists of candidate
+    #vehicles, or leaders, becomes long, forming the platoons can potentially be very inefficient. size m vehicle platoon, size n lists, potentially m*n**2.
+    #however, if you are smart about how you form the platoons you can keep the follower list and leader list fairly short, so n will be small.
     #We want to take out leaders once all their followers are in platoons. this keeps the leader list short.
     #to keep the follower list short, you need to check for circular dependency, and also search depth first instead of breadth. (e.g. try to go deep in single lane)
     #end explanation
-    
+
     #now all the "pre-processing" has been completed.
-    
+
     #now we will initialize the platoon formationation algorithm
-    
-    #first make sure there are vehicles which can be used as lead vehicles 
-    #actually you don't necessarily have to do this because you can resolve the circular dependency. 
+
+    #first make sure there are vehicles which can be used as lead vehicles
+    #actually you don't necessarily have to do this because you can resolve the circular dependency.
     if len(leaders)==0:
         print('no leaders identified in data. data is either loaded incorrectly, or lead vehicles have circular dependency')
         print('we will automatically get a leader')
         newlead = None
         newleadt_nstar= float('inf')#initialized as arbitrarily large value
-        for i in vehlist: 
+        for i in vehlist:
             if platooninfo[i][0] < newleadt_nstar:
                 newleadt_nstar = platooninfo[i][0]
                 newlead = i
         platooninfo[newlead][1] = platooninfo[newlead][0] #define the new leader as a vehicle that is never simulated
         platooninfo[newlead][2] = platooninfo[newlead][0] #define the new leader as a vehicle that is never simulated
         leaders.append(newlead)
-            
-        
-        
 
-   
-    
-    curlead = None #initialize curlead as None 
-    
-    for i in leaders: #this will ensure that every vehicle designed as a leader has no leaders and no vehicle has a follower which is designated as a leader. 
+
+
+
+
+
+    curlead = None #initialize curlead as None
+
+    for i in leaders: #this will ensure that every vehicle designed as a leader has no leaders and no vehicle has a follower which is designated as a leader.
         chklead = platooninfo[i][4].copy() #copy because we will potentially be modifying this pointer
-        for j in chklead: 
+        for j in chklead:
             platooninfo[j][-1].remove(i) #remove leader from the follower list of the leader's leaders; meaning the leader is not a follower
-            platooninfo[i][4].remove(j) #the leader should not have any leaders. 
-            
-    #want to make sure there are not any leaders with no followers since we don't want that.         
+            platooninfo[i][4].remove(j) #the leader should not have any leaders.
+
+    #want to make sure there are not any leaders with no followers since we don't want that.
     leadersc = leaders.copy()
-    for i in leadersc:#initialize the simulation with the trajectory of the leaders 
-        if len(platooninfo[i][-1]) ==0: #in case there are any leaders without followers #probably don't need this if but meh we'll leave it in 
+    for i in leadersc:#initialize the simulation with the trajectory of the leaders
+        if len(platooninfo[i][-1]) ==0: #in case there are any leaders without followers #probably don't need this if but meh we'll leave it in
             leaders.remove(i)
-            
-    simcount = 0 #simcount keeps track of how many vehicles still have followers we can simulate. Once no vehicles have followers we can simulate, it means 
+
+    simcount = 0 #simcount keeps track of how many vehicles still have followers we can simulate. Once no vehicles have followers we can simulate, it means
     #we must have simulated every vehicle that we can (thus our job is done)
-    for i in vehlist: 
+    for i in vehlist:
         if len(platooninfo[i][-1])>0:
             simcount += 1
-            
+
     totfollist = []
     followers = []
     curleadlist = []
         #we need to initialize totfollist before we move into the while loop
-    for i in leaders: 
-        #add in all the followers into totfollist, unless i = curlead 
+    for i in leaders:
+        #add in all the followers into totfollist, unless i = curlead
 #        if i == curlead:  #don't need this part when it's in makeplatooninfo because curlead is just None
-#            continue #don't append the thing if i == curlead because it will be done in the beginning of the while loop 
-        for j in platooninfo[i][-1]: 
+#            continue #don't append the thing if i == curlead because it will be done in the beginning of the while loop
+        for j in platooninfo[i][-1]:
             totfollist.append(j) #append all of the followers for vehicle i
     totfollist = list(set(totfollist)) #make list of followers unique
-    
-    
-     #We return the objects we constructed, and can begin to form the platoons iteratively using makeplatoon. 
+
+
+     #We return the objects we constructed, and can begin to form the platoons iteratively using makeplatoon.
     return meas, platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist
 
 
 
 
-def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, vehicles_added, meas=[], 
+def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, vehicles_added, meas=[],
                    cycle_num=5e5, n=10, X = math.inf, Y = 0, cirdep = False,maxn= False, previousPlatoon=[]):
 #	input:
 #    meas, (see function makeplatooninfo)
@@ -432,33 +432,33 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, vehicles_ad
 #
 #    simcount (see function makeplatooninfo), - note that makeplatoon modifies this value; it keeps track of how many vehicles still have followers yet to be simulated
 #
-#    totfollist - output from makeplatooninfo. updated during execution. this is all followers of every vehicle in leaders 
-    
-    #cycle_num = 50000 - if cirdep = True, then this controls how many cycles we resolve at a time. 
-    #Larger is better, lower is faster. 
-    #If cirdep is False, this controls how many loops we will consider adding. 
-    #again, larger is better, lower is faster. 
+#    totfollist - output from makeplatooninfo. updated during execution. this is all followers of every vehicle in leaders
+
+    #cycle_num = 50000 - if cirdep = True, then this controls how many cycles we resolve at a time.
+    #Larger is better, lower is faster.
+    #If cirdep is False, this controls how many loops we will consider adding.
+    #again, larger is better, lower is faster.
     #If infinity (math.inf) is taking too long, you can try something like 1e5-1e7
 #
 #    n = 10: n controls how big the maximum platoon size is. n is the number of following vehicles (i.e. simulated vehicles)
-    
+
     #X = math.inf - every X vehicles, we attempt to resolve a circular dependency
-    
-    #Y = 0 - when resolving circular dependencies early, this is the maximum depth of the cycle allowed. 
-    #the depth of a cycle is defined as the minimum depth of all vehicles involved in the cycle. 
-    #the depth of a vehicle is defined as 0 for vehicles who have a vehicle in leaders as a leader, 
-    #1 for vehicles which have vehicles with depth 0 as leaders, etc. 
-    #actually Y doesn't have any effect so you can just go ahead and ignore it. 
-    
-    #cirdep = False - if False, no circular dependencies will be in the output. 
-    #this means that some platoons may potentially be very large. 
-    #Alternatively, you can pick cirdep = True, and there will be no very large platoons, 
-    #but there may be circular dependencies. cirdep= False is good. 
-    
+
+    #Y = 0 - when resolving circular dependencies early, this is the maximum depth of the cycle allowed.
+    #the depth of a cycle is defined as the minimum depth of all vehicles involved in the cycle.
+    #the depth of a vehicle is defined as 0 for vehicles who have a vehicle in leaders as a leader,
+    #1 for vehicles which have vehicles with depth 0 as leaders, etc.
+    #actually Y doesn't have any effect so you can just go ahead and ignore it.
+
+    #cirdep = False - if False, no circular dependencies will be in the output.
+    #this means that some platoons may potentially be very large.
+    #Alternatively, you can pick cirdep = True, and there will be no very large platoons,
+    #but there may be circular dependencies. cirdep= False is good.
+
     #maxn = False - Only gets used if cirdep is True. If maxn is True, then all platoons
-    #will be of size n except for the last platoon. If maxn is False, then when we resolve 
+    #will be of size n except for the last platoon. If maxn is False, then when we resolve
     #loops platoons may not be of size n (they can be bigger or smaller)
-    
+
     #previousPlatoon - when forming platoons, we remember the previous platoon to use a tie breaking rule when adding the first vehicle
 #
 #
@@ -481,9 +481,9 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, vehicles_ad
     platoons = [] #output
     curn = 0 #current n value
 #    vehicles_added = 0
-    
-#    if previousPlatoon == None: 
-        
+
+#    if previousPlatoon == None:
+
 
     #update leaders, platooninfo, totfollist, simcount so we can add all vehicles in curfix
     def addCurfix(curfix):
@@ -531,7 +531,7 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, vehicles_ad
             platoons.extend(curfix)
             curn = curn + len(curfix)
 
-    #extra heuristic - 
+    #extra heuristic -
     while curn < n and simcount > 0: #loop which will be exited when the platoon is of size desired n or when no more vehicles can be added
         #get scores based on chain metric - we will add vehicles using greedy algorithm
         bestVeh = None
@@ -544,30 +544,30 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, vehicles_ad
 #            print(curfix)
             addCurfix(curfix)
 
-        for i in totfollist: #apply greedy algorithm to select next vehicle 
+        for i in totfollist: #apply greedy algorithm to select next vehicle
             chklead = platooninfo[i][4] #these are all the leaders needed to simulate vehicle i
             if all(j in leaders for j in chklead): #will be true if curlead contains all vehicles in chklead; in that case vehicle i can be simulated
                 T = set(range(platooninfo[i][1], platooninfo[i][2] + 1))
                 if not platoons: #
                     score = c_metric(i, previousPlatoon, T, platooninfo, meas=meas) + c_metric(i,previousPlatoon,T,platooninfo,meas=meas,metrictype='fol')
                 else:
-                    score = c_metric(i, platoons, T, platooninfo, meas=meas) + c_metric(i,platoons,T,platooninfo,meas=meas,metrictype='fol')  
-                if bestScore == None: 
+                    score = c_metric(i, platoons, T, platooninfo, meas=meas) + c_metric(i,platoons,T,platooninfo,meas=meas,metrictype='fol')
+                if bestScore == None:
                     bestScore = score
                     bestVeh = [i]
-                if score == bestScore: 
+                if score == bestScore:
                     bestVeh.append(i)
                 if score > bestScore:
                     bestScore = score
                     bestVeh = [i]
-                    
-        
+
+
         if bestVeh != None: #add the best vehicle; if = None, no vehicles can be added; move to loop resolution
-            if len(bestVeh) > 1: #apply tie breaking rule, this might occur if all scores are 0. 
+            if len(bestVeh) > 1: #apply tie breaking rule, this might occur if all scores are 0.
                 besttime = -1
-                for i in bestVeh: 
+                for i in bestVeh:
                     curtime = platooninfo[i][2] - platooninfo[i][1]
-                    if curtime > besttime: 
+                    if curtime > besttime:
                         best = i
                 bestVeh = best
             elif len(bestVeh)==1:
@@ -586,8 +586,8 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, vehicles_ad
                     simcount += -1  # adjust simcount. if simcount reaches 0 our job is finished and we can return what we have, even if curn is not equal to n
                     leaders.remove(j)  # remove it from the list of leaders
             vehicles_added += 1
-        else: #resolve circular dependency 
-            
+        else: #resolve circular dependency
+
             if cirdep:
                 curfix = breakcycles(totfollist, leaders, platooninfo, cycle_num)
             else:
@@ -600,18 +600,18 @@ def makeplatoon(platooninfo, leaders, simcount, curlead, totfollist, vehicles_ad
 
 
 def makedepgraph(totfollist,leaders,platooninfo, Y):
-    #makes dependency graph and corresponding depths for followers totfollist 
+    #makes dependency graph and corresponding depths for followers totfollist
     #with leaders leaders. Y is maximum depth allowed
     G = nx.DiGraph()
     depth = {j: 0 for j in totfollist}
     curdepth = set(totfollist)
-    alreadyadded = set(totfollist) 
-    dcount = 1 #depth count 
+    alreadyadded = set(totfollist)
+    dcount = 1 #depth count
     while len(curdepth) > 0 and dcount <= Y:
         nextdepth = set()
-        for j in curdepth: 
+        for j in curdepth:
             for i in platooninfo[j][4]:
-                if i not in leaders: 
+                if i not in leaders:
                     G.add_edge(j,i)
                     try:
                         if dcount < depth[i]: #can update depth only if its less
@@ -628,24 +628,24 @@ def makedepgraph(totfollist,leaders,platooninfo, Y):
     return G, depth
 
 def breakcycles(totfollist, leaders, platooninfo, cycle_num):
-    #need to do research to determine whether or not the large platoons are a problem, 
+    #need to do research to determine whether or not the large platoons are a problem,
     #but if they are then you can use breakcycles to ensure that the platoonsize is always
-    #below some threshold. In that case, you'd also want some sort of strategy for dealing 
+    #below some threshold. In that case, you'd also want some sort of strategy for dealing
     #with the circular dependencies which will occur (e.g. calibrating both platoons until some convergeance is achieved)
-    
-    #an obvious way to improve this is as follows: 
-    #first, use the addcycles2 to obtain the cycle which would have been added. 
-    #then, find some collection of vehicles inside the cycle which minimizes some metric, 
-    #e.g. which  minimizes the circular dependency score. When the collection of vehicles is added, 
-    #then the rest of the cycle should be able to be added. Something like that. 
-    
-    #its called break cycles because we take vehicle cycles and don't add them all at once 
+
+    #an obvious way to improve this is as follows:
+    #first, use the addcycles2 to obtain the cycle which would have been added.
+    #then, find some collection of vehicles inside the cycle which minimizes some metric,
+    #e.g. which  minimizes the circular dependency score. When the collection of vehicles is added,
+    #then the rest of the cycle should be able to be added. Something like that.
+
+    #its called break cycles because we take vehicle cycles and don't add them all at once
     #so it's like pretending the cycle isn't there. This will make output have circular dependency
-    
+
     #iterate over all followers, try to find the graph with least amount of followers
     #we do this because we don't use the depth argument to keep track of which cycles are preferable,
     #so instead we will try to add the smaller cyclers first
-    #if you don't do this you will get needlessly large cycles. 
+    #if you don't do this you will get needlessly large cycles.
     Glen = math.inf
     Gedge= math.inf
     for i in totfollist:
@@ -655,7 +655,7 @@ def breakcycles(totfollist, leaders, platooninfo, cycle_num):
             Glen = len(G.nodes())
             Gedge = len(G.edges())
     cyclebasis = nx.simple_cycles(G)
-    
+
     universe = list(G.nodes()) #universe for set cover
     subsets = []
     count = 0
@@ -665,7 +665,7 @@ def breakcycles(totfollist, leaders, platooninfo, cycle_num):
         except:
             break
         count += 1
-    
+
     for i in range(len(subsets)):
         subsets[i] = set(subsets[i])
     #actually we want to solve a hitting set problem, but we do this with a set cover algorithm, so we have some extra conversion to do
@@ -683,25 +683,25 @@ def breakcycles(totfollist, leaders, platooninfo, cycle_num):
     curfix = [universe[HSsubsets.index(i)] for i in result] #curfix will be all the vehicles in the result
     return curfix
 
-#explanatino of addcycles2,3: 
-    #addcyclesearly makes dependency graph, finds cycles, and then sees what needs to be 
-    #added to add the cycles. 
-    #addcycles2 looks over each totfollist, makes its dependency graph, and then 
-    #just adds the smallest dependency grpah. 
-    #addcycles3 makes the dependency graph for all of totfollist, and then for each node of 
-    #that dependency graph, sees what all needs to be added to add the vehicle. 
-    
+#explanatino of addcycles2,3:
+    #addcyclesearly makes dependency graph, finds cycles, and then sees what needs to be
+    #added to add the cycles.
+    #addcycles2 looks over each totfollist, makes its dependency graph, and then
+    #just adds the smallest dependency grpah.
+    #addcycles3 makes the dependency graph for all of totfollist, and then for each node of
+    #that dependency graph, sees what all needs to be added to add the vehicle.
+
     #I am fairly certain that you can just always use 2, as 2 and 3 should output the same answer (?)
-    #and 2 forms less dependency graphs. 
-    #for addition of cycles early, you want to check that the cycle actually exists (as opposed 
-    #to the normal addition of cycles, where we know it will exist), so you can use addcycles 
+    #and 2 forms less dependency graphs.
+    #for addition of cycles early, you want to check that the cycle actually exists (as opposed
+    #to the normal addition of cycles, where we know it will exist), so you can use addcycles
     #note that addcycles2 is by far the fastest; in particular things can get slow if you use addcyclesearly alot
-    #maybe possible to refactor addcyclesearly to be faster. That is only used for early addition of loops. Does it even help? 
+    #maybe possible to refactor addcyclesearly to be faster. That is only used for early addition of loops. Does it even help?
 def addcyclesearly(totfollist, leaders, platooninfo, cycle_num, Y):
-    #for adding cycles early; in this case we need to check for cycles 
+    #for adding cycles early; in this case we need to check for cycles
     G, depth = makedepgraph(totfollist,leaders,platooninfo,math.inf)
     cyclebasis = nx.simple_cycles(G)
-    
+
     count = cycle_num
     bestdepth = math.inf
     bestsize = math.inf
@@ -714,7 +714,7 @@ def addcyclesearly(totfollist, leaders, platooninfo, cycle_num, Y):
             break
         #
         candidates = list(cycle)
-        
+
         curfix, unused = makedepgraph(candidates,leaders,platooninfo,math.inf)
         curdepth = min([depth[i] for i in curfix.nodes()])
         cursize = len(curfix.nodes())
@@ -723,14 +723,14 @@ def addcyclesearly(totfollist, leaders, platooninfo, cycle_num, Y):
                 bestCurFix = curfix
                 bestdepth = curdepth
                 bestsize = cursize
-                
+
     return list(bestCurFix.nodes())
 
 def addcycles2(totfollist, leaders, platooninfo, cycle_num):
 
     bestdepth = math.inf
     bestsize = math.inf
-    for i in totfollist: 
+    for i in totfollist:
         curfix, unused = makedepgraph([i],leaders,platooninfo,math.inf)
         curdepth = 0
         cursize = len(curfix.nodes())
@@ -739,7 +739,7 @@ def addcycles2(totfollist, leaders, platooninfo, cycle_num):
                 bestCurFix = curfix
                 bestdepth = curdepth
                 bestsize = cursize
-                
+
     return list(bestCurFix.nodes())
 
 def addcycles3(totfollist, leaders, platooninfo, cycle_num):
@@ -747,7 +747,7 @@ def addcycles3(totfollist, leaders, platooninfo, cycle_num):
     G, depth = makedepgraph(totfollist,leaders,platooninfo,math.inf)
     bestdepth = math.inf
     bestsize = math.inf
-    for i in G.nodes(): 
+    for i in G.nodes():
         curfix, unused = makedepgraph([i],leaders,platooninfo,math.inf)
         curdepth = 0
         cursize = len(curfix.nodes())
@@ -756,7 +756,7 @@ def addcycles3(totfollist, leaders, platooninfo, cycle_num):
                 bestCurFix = curfix
                 bestdepth = curdepth
                 bestsize = cursize
-                
+
     return list(bestCurFix.nodes())
 
 #def resolveCycleEarly(totfollist, leaders, platooninfo, cycle_num, Y): #deprecated, use addcyclesearly
@@ -783,66 +783,66 @@ def addcycles3(totfollist, leaders, platooninfo, cycle_num):
 #    return list(bestCurFix.nodes())
 
 def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= None, vehs = None,cycle_num=5e5, X =  math.inf, Y = 0, cirdep = False, maxn = False):
-    
-    #this runs makeplatooninfo and makeplatoon on the data, returning the measurements (meas), information on each vehicle (platooninfo), 
-    #and the list of platoons to calibrate 
+
+    #this runs makeplatooninfo and makeplatoon on the data, returning the measurements (meas), information on each vehicle (platooninfo),
+    #and the list of platoons to calibrate
     """
 	this function is slow - need to profile and optimize
     """
 	#inputs -
-	# data - data in numpy format with correct indices 
-	# n = 1 - specified size of platoons to form 
-	# form_platoons = True - if False, will just return meas and platooninfo without forming platoons 
-	# extra_output = False - option to give extra output which is just useful for debugging purposes, making sure you are putting all vehicles into platoon 
-	
+	# data - data in numpy format with correct indices
+	# n = 1 - specified size of platoons to form
+	# form_platoons = True - if False, will just return meas and platooninfo without forming platoons
+	# extra_output = False - option to give extra output which is just useful for debugging purposes, making sure you are putting all vehicles into platoon
+
 	# lane = None - If you give a float value to lane, will only look at vehicles in data which travel in lane
-	# vehs = None - Can be passed as a list of vehicle IDs and the algorithm will calibrate starting from that first vehicle and stopping when it reaches the second vehicle. 
-	# lane and vehs are meant to be used together, i.e. lane = 2 vehs = [582,1146] you can form platoons only focusing on a specific portion of the data. 
-	#I'm not really sure how robust it is, or what will happen if you only give one or the other. 
-    
-    #cycle_num, X, Y, cirdep, maxn - refer to makeplatoon for the options these keywords control 
-    
-    #this also implements a useless vehicle heuristic, which is only designed to work if cirdep = False. if cirdep = True it may or may not work. 
-	
-	#outputs - 
+	# vehs = None - Can be passed as a list of vehicle IDs and the algorithm will calibrate starting from that first vehicle and stopping when it reaches the second vehicle.
+	# lane and vehs are meant to be used together, i.e. lane = 2 vehs = [582,1146] you can form platoons only focusing on a specific portion of the data.
+	#I'm not really sure how robust it is, or what will happen if you only give one or the other.
+
+    #cycle_num, X, Y, cirdep, maxn - refer to makeplatoon for the options these keywords control
+
+    #this also implements a useless vehicle heuristic, which is only designed to work if cirdep = False. if cirdep = True it may or may not work.
+
+	#outputs -
 	# meas - dictionary where keys are vehicles, values are numpy array of associated measurements, in same format as data
-	# platooninfo - dictionary where keys are vehicles, value is list of useful information 
-	# platoonlist - list of lists where each nested list is a platoon to be calibrated 
-	
+	# platooninfo - dictionary where keys are vehicles, value is list of useful information
+	# platoonlist - list of lists where each nested list is a platoon to be calibrated
+
 
     meas, platooninfo, leaders, simcount, curlead, totfollist, followers, curleadlist = makeplatooninfo(data)
     num_of_leaders = len(leaders)
-    num_of_vehicles = len(meas.keys()) - num_of_leaders 
+    num_of_vehicles = len(meas.keys()) - num_of_leaders
     platooninfocopy = copy.deepcopy(platooninfo)
-    platoonoutput = [] 
+    platoonoutput = []
     platoonlist = []
-    
-    if not form_platoons: 
+
+    if not form_platoons:
         return meas, platooninfo
-    
-    if vehs is not None: #in this special case we are giving vehicles which we want stuff to be calibrated between 
-        #note that the first vehicle in vehs is NOT included. So when you are selecting that first vehicle keep that in mind! 
-        #if you really wanted vehs[0] in the thing you could do this by calling the first makeplatoon with n-1 and putting vehs[0] in the front. 
-        
+
+    if vehs is not None: #in this special case we are giving vehicles which we want stuff to be calibrated between
+        #note that the first vehicle in vehs is NOT included. So when you are selecting that first vehicle keep that in mind!
+        #if you really wanted vehs[0] in the thing you could do this by calling the first makeplatoon with n-1 and putting vehs[0] in the front.
+
         vehlist = lanevehlist(data,lane,vehs, meas, platooninfo, needmeas = False) #special functions gets only the vehicles we want to simulate out of the whole dataset
         #after having gotten only the vehicles we want to simulate, we modify the platooninfo, leaders , totfollist, to reflect this
         #lastly we can seed curlead as the vehs[0] to start
         platooninfovehs = platooninfo
         platooninfo = {}
-        for i in vehlist: 
+        for i in vehlist:
             platooninfo[i] = copy.deepcopy(platooninfovehs[i])
             templead = []
             tempfol = []
             for j in platooninfo[i][4]:
-                if j in vehlist: 
+                if j in vehlist:
                     templead.append(j)
             for j in platooninfo[i][-1]:
-                if j in vehlist: 
+                if j in vehlist:
                     tempfol.append(j)
-                    
+
             platooninfo[i][4] = templead
             platooninfo[i][-1] = tempfol
-        
+
         #platooninfo is updated now we need to update the totfollist, simcount, and leaders.
         curlead = vehs[0] #curlead (first vehicle algo starts from) should be the first vehicle in vehs
         simcount = 0
@@ -850,7 +850,7 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
             if len(platooninfo[i][-1]) >0:
                 simcount += 1
         leaders = []
-        for i in vehlist: 
+        for i in vehlist:
             if len(platooninfo[i][4]) == 0:
                 leaders.append(i)
         totfollist = []
@@ -861,12 +861,12 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
 
     vehicles_added = X
     while simcount > 0:
-        
+
         if platoonlist:
             previousPlatoon = platoonlist[-1]
         else:
             previousPlatoon = leaders #just give an arbitrary platoon to initialize previousPlatoon
-            
+
         platooninfo, leaders, simcount, curlead, totfollist, vehicles_added, platoons = makeplatoon(
             platooninfo, leaders, simcount, curlead, totfollist, vehicles_added,
             meas=meas, cycle_num=cycle_num, n=n, cirdep = cirdep, X=X, Y=Y, previousPlatoon=previousPlatoon, maxn = maxn)
@@ -887,22 +887,22 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
                 cur = helper.c_metric(j, i, T, platooninfo, meas=meas)
 
                 cur2 = helper.c_metric(j, i, T, platooninfo, meas=meas, metrictype='follower')
-                
+
                 if cur == 0 and cur2 == 0:
                     cmetriclist.append(True)
                     useless.append((j, i, platcount))
                 else:
                     cmetriclist.append(False)
         return useless, platind
-    
+
     useless, platind = getUseless(platoonlist, platooninfo, meas) #list of tuple (vehicle, platoon, platoonindex) for each useless vehicle
     # print("Useless vehlcles before:", len(useless))
     mustbeuseless = []
     for i in useless:
         veh = i[0]
         index = i[2]
-        
-        #check if the vehicle must be useless 
+
+        #check if the vehicle must be useless
         simulated = False
         leaders = platooninfo[veh][4]
         followers = platooninfo[veh][7]
@@ -913,35 +913,35 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
         if not simulated and len(platooninfo[veh][-1])==0: #if must be useless
             mustbeuseless.append(i)
             continue
-        
+
         #check for a better platoon to put a vehicle in
         leadscore = -math.inf
         folscore = -math.inf
         leadersind = []
-        for j in leaders: 
+        for j in leaders:
             if platooninfo[j][1] == platooninfo[j][2]: #these vehicles don't have entries in platind
                 continue
-            else: 
+            else:
                 leadersind.append(platind[j])
         followersind = [platind[j] for j in followers]
-        T = set(range(platooninfo[veh][1],platooninfo[veh][2]+1)) 
+        T = set(range(platooninfo[veh][1],platooninfo[veh][2]+1))
         if len(leadersind)>0:
             leadind = max(leadersind)
             leadscore = helper.c_metric(veh, platoonlist[leadind], T, platooninfo, meas=meas) + helper.c_metric(veh, platoonlist[leadind], T, platooninfo, meas=meas, metrictype = 'follower')
         if len(followersind)>0:
             folind = min(followersind)
             folscore = helper.c_metric(veh, platoonlist[folind], T, platooninfo, meas=meas) + helper.c_metric(veh, platoonlist[folind], T, platooninfo, meas=meas,metrictype = 'follower')
-        if leadscore != -math.inf or folscore != -math.inf: #if there is a viable platoon to put vehicle into 
-            if leadscore > folscore:  #put it into the better one 
+        if leadscore != -math.inf or folscore != -math.inf: #if there is a viable platoon to put vehicle into
+            if leadscore > folscore:  #put it into the better one
                 platoonlist[index].remove(veh)
                 platoonlist[leadind].append(veh)
                 platind[veh] = leadind
-            else: 
+            else:
                 platoonlist[index].remove(veh)
                 platoonlist[folind].append(veh)
                 platind[veh] = folind
-        
-        #old way 
+
+        #old way
 #        done = False
 #        for j in platoonlist:
 #            for k in j:
@@ -956,8 +956,8 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
 #                        j.remove(veh)
 #            if done:
 #                break
-        
-    count = 0 
+
+    count = 0
     for i in mustbeuseless: #add the useless vehicles by themselves
         platoonlist[i[2]+count].remove(i[0])
         platoonlist.insert(i[2]+count,[i[0]])
@@ -970,27 +970,27 @@ def makeplatoonlist(data, n=1, form_platoons = True, extra_output = False,lane= 
 
     if not extra_output:
         return meas, platooninfo, platoonlist
-    else: 
+    else:
         return meas, platooninfo, platoonlist, platoonoutput, num_of_leaders, num_of_vehicles
 
 def makeplatoonlist_s(data, n = 1, lane = 1, vehs = []):
-    #this makes platoon lists by sorting all the vehicles in a lane, and then 
-    #simply groups the vehicles in the order they were sorted. 
+    #this makes platoon lists by sorting all the vehicles in a lane, and then
+    #simply groups the vehicles in the order they were sorted.
     #only works in a single lane. Supports either entire lane (vehs = [])
-    #or for between vehs. 
-    
+    #or for between vehs.
+
     if len(vehs) > 0:
         sortedvehID, meas, platooninfo = lanevehlist(data, lane, vehs, None, None, needmeas = True)
     else:
         meas, platooninfo = makeplatoonlist(data,1,False)
         vehIDs = np.unique(data[data[:,7]==lane,0])
         # sortedvehID = sortveh3(vehIDs,lane,meas,platooninfo) #algorithm for sorting vehicle IDs
-        sortedvehID = sortveh(lane, meas, vehID)
-    
+        sortedvehID = sortveh(lane, meas, vehIDs)
+
     sortedplatoons = []
     nvehs = len(sortedvehID)
     cur, n = 0, 5
-    while cur < nvehs: 
+    while cur < nvehs:
         curplatoon = []
         curplatoon.extend(sortedvehID[cur:cur+n])
         sortedplatoons.append(curplatoon)
@@ -999,16 +999,16 @@ def makeplatoonlist_s(data, n = 1, lane = 1, vehs = []):
 
 def lanevehlist(data, lane, vehs, meas, platooninfo, needmeas = False):
     #finds all vehicles between vehs[0] and vehs[1] in a specific lane, and returns the SORTED
-    #list of vehicle IDs. 
-    #different than lanevehlist2 since it returns a sortedlist back. Also it should be more robust. 
-    #does not support the edge case where the vehs[0] or vehs[1] are involved in circular dependency. 
-    #the vehicles involved in the circular dependency may, or may not, be included in that case. 
-    
-    #if needmeas = True, then it gets meas and platooninfo for you, and returns those in addition to the sortedvehlist. 
-    #otherwise it just returns the sortedvehlist. 
-    if needmeas: 
+    #list of vehicle IDs.
+    #different than lanevehlist2 since it returns a sortedlist back. Also it should be more robust.
+    #does not support the edge case where the vehs[0] or vehs[1] are involved in circular dependency.
+    #the vehicles involved in the circular dependency may, or may not, be included in that case.
+
+    #if needmeas = True, then it gets meas and platooninfo for you, and returns those in addition to the sortedvehlist.
+    #otherwise it just returns the sortedvehlist.
+    if needmeas:
         meas, platooninfo = makeplatoonlist(data, 1, False)
-    
+
 #    data = data[data[:,7] == lane]
 #    veh0 = vehs[0]; vehm1 = vehs[-1]
 #    veh0traj = data[data[:,0]==veh0]
@@ -1018,112 +1018,112 @@ def lanevehlist(data, lane, vehs, meas, platooninfo, needmeas = False):
     lasttime = platooninfo[vehs[-1]][3]
     data = data[np.all([data[:,1]>=firsttime, data[:,1]<=lasttime, data[:,7] == lane],axis=0)]
     vehlist = list(np.unique(data[:,0]))
-    
+
     # sortedvehlist = sortveh3(vehlist, lane, meas, platooninfo)
     sortedvehlist = sortveh(lane, meas, vehlist)
-    for count, i in enumerate(sortedvehlist): 
+    for count, i in enumerate(sortedvehlist):
         if i == vehs[0]:
             inds = [count]
         elif i == vehs[-1]:
             inds.append(count)
     sortedvehlist = sortedvehlist[inds[0]:inds[1]+1]
-    if needmeas: 
+    if needmeas:
         return sortedvehlist, meas, platooninfo
-    else: 
+    else:
         return sortedvehlist
-    
+
 def sortveh(lane, meas, vehset = None, verbose = False, method = 'leadfol'):
-    #lane - lane to sort 
+    #lane - lane to sort
     #meas - data in dictionary format
     #vehset - specify a set or list of vehicles, or if None, we will get every vehicle in meas in lane
     #verbose - give warning for ambiguous orders
-    #method = 'leadfol' - leadfol enforces leader/follower relationships in the order, using a heuristic to break ties. 
-        #if method is not leadfol, only the heuristic is used. 
-    
+    #method = 'leadfol' - leadfol enforces leader/follower relationships in the order, using a heuristic to break ties.
+        #if method is not leadfol, only the heuristic is used.
+
     #returns - sorted list of vehicles
-    
+
     #explanation of algorithm -
     #we find a position 'minpos' and get the times all vehicles pass this position. #then we sort vehicles according to those times
-    #for vehicles which don't pass that position, they are added one at a time by finding vehicles they can fit between. 
+    #for vehicles which don't pass that position, they are added one at a time by finding vehicles they can fit between.
     #we do that by using overlaphelp to find positinos we can compare, then use time_at_pos to get times at the position, compare the times
-    #If the order is ambiguous, we order vehicles using their leader/follower relationships ('leadfol' method). We also break ties 
-    #using a heuristic strategy in sortveh_heuristic. 
-    #if the method is not 'leadfol', only the heuristic strategy is used. 
+    #If the order is ambiguous, we order vehicles using their leader/follower relationships ('leadfol' method). We also break ties
+    #using a heuristic strategy in sortveh_heuristic.
+    #if the method is not 'leadfol', only the heuristic strategy is used.
     #the leadfol method isn't 100% perfect
     #there are also some rare edge cases where the order is ambiguous
     #in particular there may be some edge cases where there are chains of vehicles which can't be compared to each other, but the beginning of the chains
     #both share a common leader. E.g. [230, 231, 240, 245, 257, 267] or [3343, 299, 3344, 311, 309]
     #we do not consistently handle circular dependencies
-        #one way to handle circular dependency case is to check for it when adding vehicle (in last for loop) - 
+        #one way to handle circular dependency case is to check for it when adding vehicle (in last for loop) -
             #if found, we could order  all the vehicles in the circular dep and add all at once
             #this is a lot of work for an edge case though
-    
+
     #to make this '100% perfect' you would need to give all vehicles a score representing it's 'leader score'
-    #if you used this 'leader score' instead of veh2ind to initialize the negative scores, then the order would be perfect. 
-    #Issue now is when a leader has multiple followers which don't overlap at all, 
+    #if you used this 'leader score' instead of veh2ind to initialize the negative scores, then the order would be perfect.
+    #Issue now is when a leader has multiple followers which don't overlap at all,
     #and each of the followers also has its own (sub-)follower, where the (sub-)follower overlaps only with the follower
-    #In that case (e.g. (230, 231, 240, 245, 257, 267)), 230/231 are the followers - their order is arbitrary and they need to have the same score. 
-    #240 and 245 both have 230 or 231 as a leader, and need 1 higher score. But currently because we use veh2ind for the score, the order isn't arbitrary 
-    #because whichever of the 230 or 231 comes first, they give their follower higher priority. 
-    #fairly complicated to implement these leader scores as it forces you to go through all the relationships when adding vehicles as opposed to 
+    #In that case (e.g. (230, 231, 240, 245, 257, 267)), 230/231 are the followers - their order is arbitrary and they need to have the same score.
+    #240 and 245 both have 230 or 231 as a leader, and need 1 higher score. But currently because we use veh2ind for the score, the order isn't arbitrary
+    #because whichever of the 230 or 231 comes first, they give their follower higher priority.
+    #fairly complicated to implement these leader scores as it forces you to go through all the relationships when adding vehicles as opposed to
     #the current way where we can simply iterate through all the vehicles
-    
+
     vehset = vehset.copy() #avoid making in-place modifications to input
     #get list of vehicles to sort
-    if vehset == None: 
+    if vehset == None:
         vehset = set()
-        for vehid in meas.keys(): 
+        for vehid in meas.keys():
             if lane in meas[vehid][:,7]:
                 vehset.add(vehid)
-    if type(vehset) == list: 
+    if type(vehset) == list:
         vehset = set(vehset)
-        
+
     #make data for algo
     all_traj = {} #trajectories in lane
     minpos = math.inf #minimum position
-    guessvehs = {} #values are vehicles we guess are close to key 
+    guessvehs = {} #values are vehicles we guess are close to key
     leads = {}
-    for veh in vehset: 
+    for veh in vehset:
         lanedata = meas[veh]
         lanedata = lanedata[lanedata[:,7]==lane]
-        all_traj[veh] = lanedata 
-        
+        all_traj[veh] = lanedata
+
         leaders = set(np.unique(lanedata[:,4]))
         leads[veh] = leaders
         temp = leaders.union(set(np.unique(lanedata[:,5])))
         guessvehs[veh] = temp.intersection(vehset) #guessvehs has all leaders/followers
-        if lanedata[0,2] < minpos: 
+        if lanedata[0,2] < minpos:
             minpos = lanedata[0,2]
     minpos += 50 #magic number
-    
+
     #sort many vehicles with some common position
     sorted_veh = [] #sorted vehicles - the output
     initial_sort = {} #sort vehicles at beginning
-    for veh in vehset: 
+    for veh in vehset:
         time = time_at_pos(all_traj[veh], minpos)
-        if time != None: 
+        if time != None:
             initial_sort[veh] = time
             sorted_veh.append(veh)
-    
+
     veh2ind = {} #maps from vehicles to index
     sorted_veh = sorted(sorted_veh, key = lambda veh: initial_sort[veh])
-    for count, veh in enumerate(sorted_veh): 
+    for count, veh in enumerate(sorted_veh):
         veh2ind[veh] = count
         vehset.remove(veh)
-    
+
     #add each remaining vehicle in vehset
-    for veh in vehset:         
+    for veh in vehset:
         #find initial guess #########
-        for guessveh in guessvehs[veh]: 
-            if guessveh in veh2ind: 
+        for guessveh in guessvehs[veh]:
+            if guessveh in veh2ind:
                 curind = veh2ind[guessveh]
-                
+
                 #find a position we can compare
                 posoverlap = overlaphelp(all_traj[veh], all_traj[guessveh], True, True, False, True)
-                if len(posoverlap) == 0: 
+                if len(posoverlap) == 0:
                     #go to nextguess
                     continue
-                else: 
+                else:
                     usepos = (posoverlap[0][0]+posoverlap[0][1])/2
                     timeveh = time_at_pos(all_traj[veh], usepos)
                     # if timeveh == None:
@@ -1144,13 +1144,13 @@ def sortveh(lane, meas, vehset = None, verbose = False, method = 'leadfol'):
             for curind in range(len(sorted_veh)):
                 guessveh = sorted_veh[curind]
                 #copy paste code from above
-                
+
                 #find a position we can compare
                 posoverlap = overlaphelp(all_traj[veh], all_traj[guessveh], True, True, False, True)
-                if len(posoverlap) == 0: 
+                if len(posoverlap) == 0:
                     #go to nextguess
                     continue
-                else: 
+                else:
                     usepos = (posoverlap[0][0]+posoverlap[0][1])/2
                     timeveh = time_at_pos(all_traj[veh], usepos)
                     # if timeveh == None:
@@ -1167,10 +1167,10 @@ def sortveh(lane, meas, vehset = None, verbose = False, method = 'leadfol'):
                         firstind = curind + 1
                         lastind = len(sorted_veh)
                         break
-        
+
             else:
                 print('failed to find a guess for '+str(veh)+ ' so it cannot be sorted')
-            
+
         vehinds = sortveh_helper_search(firstind, lastind, search, veh, sorted_veh, all_traj)
         if vehinds[-1] == 0: #at to beginning
             sorted_veh.insert(0, veh)
@@ -1183,7 +1183,7 @@ def sortveh(lane, meas, vehset = None, verbose = False, method = 'leadfol'):
             veh2ind = update_inds(sorted_veh, veh2ind, vehinds[-1])
         else: #in this case we need to order everything in the interval we found
             probvehs = sorted_veh[vehinds[0]+1:vehinds[1]] #want to sort probvehs and veh
-            
+
             if method == 'leadfol':
                 #leader/follower based approach - ###
                 #prepare data
@@ -1191,94 +1191,94 @@ def sortveh(lane, meas, vehset = None, verbose = False, method = 'leadfol'):
                 probleads = {} #values are leaders for key which are in allprobvehs
                 allprobvehs = probvehs.copy()
                 allprobvehs.append(veh) #we want to sort allprobvehs
-                for i in allprobvehs: 
+                for i in allprobvehs:
                     sortedleads[i] = leads[i].intersection(sorted_veh).difference(probvehs)
                     probleads[i] = leads[i].intersection(allprobvehs)
-                    
+
                 #assign scores to each veh based on lead relationships
                 # #initialize scores old
                 # leadfoltiebreak = {i:0 for i in allprobvehs} #values are a score based on leadfollower relationships - we use this to sort at the end
-                # for i in allprobvehs: 
+                # for i in allprobvehs:
                 #     mymax = -math.inf
-                #     for j in sortedleads[i]: 
-                #         temp = veh2ind[j] - vehinds[0] #or just always -1/1? 
-                #         if temp > mymax: 
+                #     for j in sortedleads[i]:
+                #         temp = veh2ind[j] - vehinds[0] #or just always -1/1?
+                #         if temp > mymax:
                 #             mymax = temp
                 #     if mymax != -math.inf:
                 #         leadfoltiebreak[i] = mymax
                 #new way maybe works
                 leadfoltiebreak = {i:1 for i in allprobvehs} #values are a score based on leadfollower relationships - we use this to sort at the end
-                for i in allprobvehs: 
-                    if len(sortedleads[i]) > 0: 
+                for i in allprobvehs:
+                    if len(sortedleads[i]) > 0:
                         leadfoltiebreak[i] = 0
                 #give scores
                 for i in range(len(allprobvehs)-1):
-                    for j in allprobvehs: 
+                    for j in allprobvehs:
                         for k in probleads[j]:
                             if leadfoltiebreak[k] >= leadfoltiebreak[j]:
                                 leadfoltiebreak[j] = leadfoltiebreak[k] + 1
                 #check for ties in score
                 chkties = {}
-                for i in allprobvehs: 
+                for i in allprobvehs:
                     score = leadfoltiebreak[i]
-                    if score in chkties: 
+                    if score in chkties:
                         chkties[score].append(i)
                     else:
                         chkties[score] = [i]
 
                 #resolve ties if necessary
                 dt= 1e-5 #if we resolve ties its by adding this small amount
-                for score in chkties.keys(): 
-                    if len(chkties[score]) > 1: 
+                for score in chkties.keys():
+                    if len(chkties[score]) > 1:
                         temp = chkties[score]
                         fixedvehs, success = sortveh_heuristic(temp[0], temp[1:], all_traj, meas, guessvehs)
-                        if not success: 
+                        if not success:
                             if verbose:
                                 print('warning - ambiguous order for '+str(temp))
                             tiebreaking = [all_traj[curveh][0,1] for curveh in probvehs]
                             mytime = all_traj[veh][0,1]
-                            for count, j in enumerate(tiebreaking): 
-                                if mytime < j: 
+                            for count, j in enumerate(tiebreaking):
+                                if mytime < j:
                                     ind = count
                             else:
                                 ind = count + 1
                             fixedvehs = probvehs.copy()
                             fixedvehs.insert(ind, veh)
-                        for count, i in enumerate(fixedvehs): 
+                        for count, i in enumerate(fixedvehs):
                             leadfoltiebreak[i] += count*dt
                 #sorting from lead/fol method
                 fixedvehs = sorted(allprobvehs, key = lambda veh: leadfoltiebreak[veh])
 
                 #if vehicles have negative values they can get put before the interval
                 negind = len(fixedvehs) #negind is the number of vehicles that get added before vehinds[0]
-                for count, i in enumerate(fixedvehs): 
-                    if leadfoltiebreak[i] >= 0: 
+                for count, i in enumerate(fixedvehs):
+                    if leadfoltiebreak[i] >= 0:
                         negind = count
                         break
                 # negind = 0 #if you can give negative scores then this turns it off.########
                 negvehs = fixedvehs[0:negind]
                 fixedvehs = fixedvehs[negind:]
-                
-                #updat vehicles that get put before interval 
+
+                #updat vehicles that get put before interval
                 needinsert = True
                 if negind == 0:
                     pass
-                else: 
-                    for i in negvehs: 
-                        if i == veh: #i is new vehicle 
+                else:
+                    for i in negvehs:
+                        if i == veh: #i is new vehicle
                             tempind = math.floor(leadfoltiebreak[i]) + vehinds[0] + 1 #where it gets inserted
                             sorted_veh.insert(tempind, i)
                             needinsert = False
                             veh2ind = update_inds(sorted_veh, veh2ind, tempind)
                             vehinds = (vehinds[0]+1, vehinds[1])
-                            
+
                         else: #i has already been sorted
                             tempind = math.floor(leadfoltiebreak[i]) + vehinds[0] + 1 #where it needs to go
                             sorted_veh.pop(veh2ind[i])
                             sorted_veh.insert(tempind,i)
                             veh2ind = update_inds(sorted_veh, veh2ind, tempind)
                             vehinds = (vehinds[0]+1, vehinds[1])
-                        
+
                 #update sorted list
                 if len(fixedvehs) == 0:
                     pass
@@ -1288,11 +1288,11 @@ def sortveh(lane, meas, vehset = None, verbose = False, method = 'leadfol'):
                     for count,i in enumerate(range(vehinds[0]+1, vehinds[1]+1)):
                         sorted_veh[i] = fixedvehs[count]
                     veh2ind = update_inds(sorted_veh, veh2ind, vehinds[0]+1)
-                    
+
             else:
-                #heuristic based approach - ### #old method 
+                #heuristic based approach - ### #old method
                 fixedvehs, success = sortveh_heuristic(veh, probvehs, all_traj, meas, guessvehs)
-                
+
                 if success:
                     #fixedvehs has the correct order - now update sorted_veh and veh2ind
                     sorted_veh.insert(vehinds[0]+1, veh)
@@ -1301,15 +1301,15 @@ def sortveh(lane, meas, vehset = None, verbose = False, method = 'leadfol'):
                     veh2ind = update_inds(sorted_veh, veh2ind, vehinds[0]+1)
                 else:
                     #we failed to completely sort the vehicles and are left with an ambiguous order
-                    #arbitrary 
-                    # sorted_veh.insert(vehinds[0]+1, veh) 
+                    #arbitrary
+                    # sorted_veh.insert(vehinds[0]+1, veh)
                     # veh2ind = update_inds(sorted_veh, veh2ind, vehinds[0]+1)
-                    
+
                     #maybe this is a better tie breaking rule
                     tiebreaking = [all_traj[curveh][0,1] for curveh in probvehs]
                     mytime = all_traj[veh][0,1]
-                    for count, j in enumerate(tiebreaking): 
-                        if mytime < j: 
+                    for count, j in enumerate(tiebreaking):
+                        if mytime < j:
                             ind = count + vehinds[0]+1
                             break
                     else:
@@ -1318,10 +1318,10 @@ def sortveh(lane, meas, vehset = None, verbose = False, method = 'leadfol'):
                     veh2ind = update_inds(sorted_veh, veh2ind, ind)
                     if verbose:
                         print('warning - ambiguous order for '+ str(sorted_veh[vehinds[0]+1:vehinds[1]+1])+' between vehicles '+str((sorted_veh[vehinds[0]], sorted_veh[vehinds[1]+1])))
-        
-        
-        
-        
+
+
+
+
     return sorted_veh
 
 def sortveh_heuristic(veh, probvehs, all_traj, meas, guessvehs):
@@ -1342,9 +1342,9 @@ def sortveh_heuristic(veh, probvehs, all_traj, meas, guessvehs):
         fixedvehs = probvehs.copy()
         fixedvehs.append(veh)
         fixedvehs = sorted(fixedvehs, key = lambda veh: tiebreaking[veh])
-        
+
         return fixedvehs, True
-    
+
     #b - try to find a consistent time for all vehicles###
     for i in range(len(probvehs)):
         if i == 0:
@@ -1364,9 +1364,9 @@ def sortveh_heuristic(veh, probvehs, all_traj, meas, guessvehs):
         fixedvehs = probvehs.copy()
         fixedvehs.append(veh)
         fixedvehs = sorted(fixedvehs, key = lambda veh: tiebreaking[veh], reverse = True)
-        
+
         return fixedvehs, True
-        
+
     #c - try to find consistent leader/follower for all vehicles###
     leadfoloverlap = guessvehs[veh]
     for i in probvehs:
@@ -1377,7 +1377,7 @@ def sortveh_heuristic(veh, probvehs, all_traj, meas, guessvehs):
         fixveh = leadfoloverlap.pop()
         fixvehtraj = all_traj[fixveh]
         tiebreaking = {}
-        for i in probvehs: 
+        for i in probvehs:
             data1, data2 = overlaphelp(fixvehtraj, all_traj[i])
             tiebreaking[i] = np.mean(data1[:,2] - data2[:,2])
         data1, data2 = overlaphelp(fixvehtraj, all_traj[veh])
@@ -1385,9 +1385,9 @@ def sortveh_heuristic(veh, probvehs, all_traj, meas, guessvehs):
         fixedvehs = probvehs.copy()
         fixedvehs.append(veh)
         fixedvehs = sorted(fixedvehs, key = lambda veh: tiebreaking[veh])
-        
+
         return fixedvehs, True
-    
+
     return None, False
 
 def update_inds(sorted_veh, veh2ind, startind):
@@ -1396,14 +1396,14 @@ def update_inds(sorted_veh, veh2ind, startind):
         veh = sorted_veh[ind]
         veh2ind[veh] = ind
     return veh2ind
-    
+
 def sortveh_helper_search(firstind, lastind, search, veh, sorted_veh, all_traj):
-    #firstind, lastind are indexes of sorted_veh we search in. 
+    #firstind, lastind are indexes of sorted_veh we search in.
     #if search = 'b' we are looking backwards for the vehicle in front of veh
         #otherwise search = 'f' and we look forwards for the vehicle behind veh
-        
-    #return a tuple of indexes which bracket where veh belongs in sorted_veh. will always return 
-    
+
+    #return a tuple of indexes which bracket where veh belongs in sorted_veh. will always return
+
     inds = range(firstind, lastind)
     if search == 'b':
         inds = reversed(inds)
@@ -1412,21 +1412,21 @@ def sortveh_helper_search(firstind, lastind, search, veh, sorted_veh, all_traj):
     else:
         prevvehind = firstind - 1
         vehind = lastind
-    
+
     # vehinds = prevvehind
-    for guessind in inds: 
+    for guessind in inds:
         guessveh = sorted_veh[guessind]
         #find a position we can compare
         posoverlap = overlaphelp(all_traj[veh], all_traj[guessveh],True, True, False, True)
-        if len(posoverlap) == 0: 
+        if len(posoverlap) == 0:
             #go to nextguess
             continue
-        else: 
+        else:
             usepos = (posoverlap[0][0]+posoverlap[0][1])/2
             timeveh = time_at_pos(all_traj[veh], usepos)
             timeguess = time_at_pos(all_traj[guessveh],usepos)
-            
-            if search == 'b': 
+
+            if search == 'b':
                 if timeveh > timeguess:
                     vehind = guessind
                     break
@@ -1438,25 +1438,25 @@ def sortveh_helper_search(firstind, lastind, search, veh, sorted_veh, all_traj):
                     break
                 else:
                     prevvehind = guessind
-    if search == 'b': 
+    if search == 'b':
         return (vehind, prevvehind)
     else:
         return (prevvehind, vehind)
-    
+
 
 def time_at_pos(traj, pos, reverse = False):
     #given trajectory traj, returns time that the trajectory crosses pos
-    #if reverse, we search traj in reversed order. 
+    #if reverse, we search traj in reversed order.
     #implementation is basically a for loop
-    
+
     inds = range(len(traj))
     if not reverse:
         prev = traj[0,2]
-        if prev > pos: 
+        if prev > pos:
             return None
-        for i in inds: 
+        for i in inds:
             cur = traj[i,2]
-            if cur > pos and pos > prev: 
+            if cur > pos and pos > prev:
                 if traj[i,1] -1 == traj[i-1,1]:
                     return traj[i,1]
                 else:
@@ -1467,11 +1467,11 @@ def time_at_pos(traj, pos, reverse = False):
     if reverse: #copy pasted
         inds = reversed(inds)
         cur = traj[-1,2]
-        if cur < pos: 
+        if cur < pos:
             return None
-        for i in inds: 
+        for i in inds:
             prev = traj[i,2]
-            if cur > pos and pos > prev: 
+            if cur > pos and pos > prev:
                 if traj[i,1] -1 == traj[i-1,1]:
                     return traj[i,1]
                 else:
@@ -1479,20 +1479,20 @@ def time_at_pos(traj, pos, reverse = False):
             cur = prev
         else:
             return None
-        
+
 # def sortveh(lane, meas, vehset = None):
 #     #get list of vehicles to sort
-#     if vehset == None: 
+#     if vehset == None:
 #         vehset = []
-#         for vehid in meas.keys(): 
+#         for vehid in meas.keys():
 #             if lane in meas[vehid][:,7]:
 #                 vehset.add(vehid)
-#     if type(vehset) == list: 
+#     if type(vehset) == list:
 #         vehset = set(vehset)
 #     #data for each vehicle and starting vehicles
 #     vehinfo = {}
 #     starting_vehs = []
-#     for veh in vehset: 
+#     for veh in vehset:
 #         lanedata = meas[veh]
 #         lanedata = lanedata[lanedata[:,7]==lane]
 #         leaders = set(np.unique(lanedata[:,4]))
@@ -1502,114 +1502,114 @@ def time_at_pos(traj, pos, reverse = False):
 #         vehinfo[veh] = (lanedata, leaders, followers)
 #         if len(leaders) == 0:
 #             starting_vehs.append(veh)
-    
+
 #     sorted_vehs = {}
 #     max_value = -1
-#     for starting_veh in starting_vehs: 
+#     for starting_veh in starting_vehs:
 #         sorted_vehs[starting_veh] = max_value +1
 #         #get batch to add
-        
+
 #     #a new sorting algorithm that maybe works
 #     #step 1 - get all vehicles which don't have leaders in vehlist
-    
-#     #code to iteratively get batches of vehicles to add 
-    
-#     #check for circular dependency in the batch to be added 
-    
+
+#     #code to iteratively get batches of vehicles to add
+
+#     #check for circular dependency in the batch to be added
+
 #     #if no circular, assign values according to leader/follower relationships, and sort
-    
+
 #     #if circular, somehow use sortveh3
-#     return 
+#     return
 
 # def make_veh_batch(seeding_vehs, vehinfo, vehset):
 #     #seeding_vehs - iterable of vehicle IDs
 #     #vehinfo - dict with keys as vehicle IDs, values as observations, leaders, followers
-#     #vehset - these vehicles are not added to the batch. must be hashable with keys as vehicle IDs. 
-    
+#     #vehset - these vehicles are not added to the batch. must be hashable with keys as vehicle IDs.
+
 #     #returns - a set of vehicle IDs
-#     #makes a batch of vehicles by adding all followers of seeding_vehs, and any leaders they need. We don't add vehicles if they are in vehset though. 
+#     #makes a batch of vehicles by adding all followers of seeding_vehs, and any leaders they need. We don't add vehicles if they are in vehset though.
 #     pass
 
 def sortveh3(vehlist,lane,meas,platooninfo):
     #########DEPRECATED############
     #use sortveh instead
     print('use sortveh instead')
-    #initialization 
+    #initialization
     vehlist = sorted(list(vehlist), key = lambda veh: platooninfo[veh][0]) #initial guess of order
-    out = [vehlist[0]] #initialize output 
-    
+    out = [vehlist[0]] #initialize output
+
     end = False #keep iterating while end is False
-    curveh = out[0] #the first vehicle. 
-    
+    curveh = out[0] #the first vehicle.
+
     #get vehfollist, list of following vehicles which we will add.
     temp = meas[curveh]
     temp = temp[temp[:,7]==lane]
     vehfollist = set(np.unique(temp[:,5]))
     if 0 in vehfollist:
         vehfollist.remove(0)
-    
-    
-    #the way this works is that we keep adding things to vehfollist and they are sorted as they are added to the output. 
-    #So we keep adding followers and followers of followers. This won't necessarily add all vehicles though, because we can also have leaders of followers, 
-    #and also because we don't know the order in the beginning we don't necessarily begin with the first vehicle, so there may be leaders of the initial curveh. 
-    
-    count = 0 
-    while not end: 
-        count += 1 
+
+
+    #the way this works is that we keep adding things to vehfollist and they are sorted as they are added to the output.
+    #So we keep adding followers and followers of followers. This won't necessarily add all vehicles though, because we can also have leaders of followers,
+    #and also because we don't know the order in the beginning we don't necessarily begin with the first vehicle, so there may be leaders of the initial curveh.
+
+    count = 0
+    while not end:
+        count += 1
         #
         if len(out)==len(vehlist): # if everything is added to out it means that everything is done
             end = True
-            
+
         elif len(vehfollist) == 0: #if there are no followers to add but there are still vehicles we need to order then we need to do something about the rest of
-            #the vehicles 
-            #leftover has all vehicles which haven't been added/sorted yet. 
+            #the vehicles
+            #leftover has all vehicles which haven't been added/sorted yet.
             leftover = vehlist.copy()
-            for i in out: 
+            for i in out:
                 leftover.remove(i)
-                
-            leftover = sortveh3(leftover,lane,meas,platooninfo) #order the leftover 
-            leftover.reverse() #iterate over it in reverse 
-            
-            for i in leftover: #if we have leftover, we will go through and add each vehicle one at a time. 
-            
-                #first check if we can trivially add the vehicle to either the beginning or end. 
-                platoont_nstar = platooninfo[out[0]][0] #first time in the platoon 
-                platoonT_n = platooninfo[out[-1]][3] #last time in the platoon 
-                if platooninfo[i][3] < platoont_nstar: 
+
+            leftover = sortveh3(leftover,lane,meas,platooninfo) #order the leftover
+            leftover.reverse() #iterate over it in reverse
+
+            for i in leftover: #if we have leftover, we will go through and add each vehicle one at a time.
+
+                #first check if we can trivially add the vehicle to either the beginning or end.
+                platoont_nstar = platooninfo[out[0]][0] #first time in the platoon
+                platoonT_n = platooninfo[out[-1]][3] #last time in the platoon
+                if platooninfo[i][3] < platoont_nstar:
                     out.insert(0,i)
                     continue
                 if platooninfo[i][0] > platoonT_n:
                     out.append(i)
-                    continue 
-                #now we will go through each vehicle in the platoon and measure distance from the vehicle to the leftover. 
+                    continue
+                #now we will go through each vehicle in the platoon and measure distance from the vehicle to the leftover.
                 leftovermeas = meas[i]
                 leftovermeas = leftovermeas[leftovermeas[:,7]==lane]
-                
-                count2 = 0 #keep track of which vehicle we are currently on 
-                for j in out: #now we need to iterate over each vehicle in the platoon to get the distance for the leftover. 
+
+                count2 = 0 #keep track of which vehicle we are currently on
+                for j in out: #now we need to iterate over each vehicle in the platoon to get the distance for the leftover.
                     curmeas = meas[j]
                     curmeas = curmeas[curmeas[:,7]==lane]
-#                    curmeas = curmeas[curmeas[:,1]==times] #correct times #bug here 
+#                    curmeas = curmeas[curmeas[:,1]==times] #correct times #bug here
                     curleftovermeas, curmeas = overlaphelp(leftovermeas,curmeas)
                     if len(curmeas) >0: #assuming we have any sort of overlap we can compute the distance
-                        curdist = np.mean(curleftovermeas[:,2]-curmeas[:,2]) #get dist for the current vehicle j 
-                        if curdist > 0: 
+                        curdist = np.mean(curleftovermeas[:,2]-curmeas[:,2]) #get dist for the current vehicle j
+                        if curdist > 0:
                             newout = out.copy()
                             newout.insert(count2, i)
                             break
                     count2 += 1
-                else: #if we can't put it in front of any of the vehicles then we can safely add it to the end, or we can put it after the last good vehicle we got 
+                else: #if we can't put it in front of any of the vehicles then we can safely add it to the end, or we can put it after the last good vehicle we got
                     newout = out
-                    newout.append(i)          
+                    newout.append(i)
                 out = newout
-        else: 
+        else:
             if count > 1: #currently sortveh  disthelper should only be used once, in the beginning of the call
-                print('bug') 
+                print('bug')
             out = sortveh_disthelper(out, curveh, vehfollist, vehlist, lane, meas, platooninfo)
             vehfollist = []
             pass
-            
-            
+
+
     return out
 
 def overlaphelp(meas1, meas2, meas1_isdata = True, meas2_isdata = True, return_data = True, get_pos = False):
@@ -1621,29 +1621,29 @@ def overlaphelp(meas1, meas2, meas1_isdata = True, meas2_isdata = True, return_d
         #if False, we return a list of tuples where each tuple gives the overlap between the data
         #if get_pos = True, return_data must be False
     #get_pos - whether the function finds overlaps in positions (if True), or overlap in times
-    
+
     #this function can compute the overlap between two datas, either overlap in times (times where both data have observations)
     #or overlap in pos (positions where both data have sequential observations)
-    
+
     #common format for this function is a list of tuples, where each tuple is representing the boundaries for a region
     #this is meant to be used when you have two data like meas1[meas1[:,7]==2], meas2[meas2[:,7]==2] and want to compute their overlaps. Used for sorting
     #can be used to compute their overlaps in positions or times, and can be used to compute the overlap between several vehicles by using the options
-    
-    
-    #get indices of the sequential data 
-    if get_pos: 
+
+
+    #get indices of the sequential data
+    if get_pos:
         if not return_data:
             return_data = False
-    
-    if meas1_isdata: 
+
+    if meas1_isdata:
         ind1 = helper.sequential(meas1)
-        if get_pos: 
+        if get_pos:
             times1 = helper.indtopos(ind1, meas1)
-        else: 
+        else:
             times1 = helper.indtotimes(ind1,meas1)
     else:
         times1 = meas1
-    
+
     if meas2_isdata:
         ind2 = helper.sequential(meas2)
         if get_pos:
@@ -1652,12 +1652,12 @@ def overlaphelp(meas1, meas2, meas1_isdata = True, meas2_isdata = True, return_d
             times2 = helper.indtotimes(ind2, meas2)
     else:
         times2 = meas2
-    
-    # if return_pos: 
-    #     if not return_times: 
+
+    # if return_pos:
+    #     if not return_times:
     #         print('setting return_times to True')
     #         return_times = True #must be in this format for return_pos
-    #         #possible to give an option to 
+    #         #possible to give an option to
     #     if input_pos: #True True True
     #         times1 = meas1
     #         times2 = meas2
@@ -1667,7 +1667,7 @@ def overlaphelp(meas1, meas2, meas1_isdata = True, meas2_isdata = True, return_d
     #         times1 = helper.indtopos(ind1, meas1)
     #         times2 = helper.indtopos(ind2, meas2)
     # else: #____ False False
-    #     #change the indices into times 
+    #     #change the indices into times
     #     ind1 = helper.sequential(meas1)
     #     ind2 = helper.sequential(meas2)
     #     times1 = helper.indtotimes(ind1,meas1) #call these times but really they are the times for slices, i.e. second time has 1 extra
@@ -1676,18 +1676,18 @@ def overlaphelp(meas1, meas2, meas1_isdata = True, meas2_isdata = True, return_d
     outtimes = []
     outind1 = []
     outind2 = []
-    #track of where we are 
-    count1 = 0 
+    #track of where we are
+    count1 = 0
     prevcount2 = 0
     while count1 < len(times1): #iterate over the first meas
         cur1 = times1[count1]
         count2 = prevcount2
-        while count2 < len(times2): #iterate over the second meas 
+        while count2 < len(times2): #iterate over the second meas
             cur2 = times2[count2]
-            if cur2[0] < cur1[0] and cur2[1] < cur1[0]: #trivial case, check next 2 block 
+            if cur2[0] < cur1[0] and cur2[1] < cur1[0]: #trivial case, check next 2 block
                 pass
-            elif cur2[0] > cur1[1] and cur2[1] > cur1[1]: #other trivial case, done checking 2 blocks and check next 1 block 
-                break 
+            elif cur2[0] > cur1[1] and cur2[1] > cur1[1]: #other trivial case, done checking 2 blocks and check next 1 block
+                break
             elif cur2[0] <= cur1[0] and cur2[1] >= cur1[0] and cur2[1] <= cur1[1]:
                 curtimes = (cur1[0], cur2[1]) #actual times of observations in slices format
                 #convert times into output type
@@ -1709,7 +1709,7 @@ def overlaphelp(meas1, meas2, meas1_isdata = True, meas2_isdata = True, return_d
             count2 += 1
         count1 += 1
         prevcount2 = count2
-            
+
     #output
     if return_data:
         out1, out2 = [], []
@@ -1717,21 +1717,21 @@ def overlaphelp(meas1, meas2, meas1_isdata = True, meas2_isdata = True, return_d
             out1.append(meas1[int(i[0]):int(i[1])])
         for i in outind2:
             out2.append(meas2[int(i[0]):int(i[1])])
-        if len(out1) == 0: #handle case of empty array 
+        if len(out1) == 0: #handle case of empty array
             dim2 = np.shape(meas1)[1]
             out1 = np.zeros((0,dim2))
             out2 = out1
             return out1, out2
         dims = np.shape(out1)
-        try:
+        # try:
             # out1 = np.reshape(out1, (dims[0]*dims[1], dims[2]))
-            out1 = np.concatenate(out1, axis = 0)
-        except: 
-            print('hello')
+        out1 = np.concatenate(out1, axis = 0)
+        # except:
+        #     print('hello')
         # out2 = np.reshape(out2, (dims[0]*dims[1], dims[2]))
         out2 = np.concatenate(out2, axis =0)
         return out1, out2
-    else: 
+    else:
         return outtimes
     # dim = np.shape(meas1)[1]
     # out1 = np.zeros((0,dim))
@@ -1740,7 +1740,7 @@ def overlaphelp(meas1, meas2, meas1_isdata = True, meas2_isdata = True, return_d
     # out2 = np.zeros((0,dim))
     # for i in outind2:
     #     out2 = np.append(out2,meas2[int(i[0]):int(i[1])],axis=0)
-    
+
 def overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_data):
     if not return_data:
         # curtimes[1] = curtimes[1] - 1
@@ -1750,83 +1750,83 @@ def overlaphelp_help(curtimes, outind1, outind2, outtimes, cur1, cur2, return_da
         outind1.append(temp1)
         temp1 = (curtimes[0]-cur2[0]+cur2[2],curtimes[1]-cur2[0]+cur2[2])
         outind2.append(temp1)
-    
+
 
 def sortveh_disthelper(out, curveh, vehfollist,vehlist, lane, meas, platooninfo):
     #note that this can still potentially fail in some special cases:
-    #   say you have two followers, one is directly behind you, and then the other followers behind the person behind you. The first follower is only there for a short time, 
-    # and then they change lanes. Then the person behind them gets very close to you. This algorithm will put the 2nd follower first, when they should be second, because we are 
-    #computing the average distances to the followers. 
-    
-    #circular dependencies will always have the offending vehicle added in the beginning of the loop. 
-    
-    #this can fail to give a correct order in some weird cases, where we can't compare all followers, and we also can't compare all followers to a single leader. 
-    
-    #so some edge cases potentially wrong but overall I think this should be pretty robust. 
-    
+    #   say you have two followers, one is directly behind you, and then the other followers behind the person behind you. The first follower is only there for a short time,
+    # and then they change lanes. Then the person behind them gets very close to you. This algorithm will put the 2nd follower first, when they should be second, because we are
+    #computing the average distances to the followers.
+
+    #circular dependencies will always have the offending vehicle added in the beginning of the loop.
+
+    #this can fail to give a correct order in some weird cases, where we can't compare all followers, and we also can't compare all followers to a single leader.
+
+    #so some edge cases potentially wrong but overall I think this should be pretty robust.
+
     #in this rewritten version of the original function, we don't assign distance scores, instead we get all the followers, sort them and add them, and then repeat. So you can never have a follower
-    #which is ahead of you. Any circular dependencies will result in 
-    
-    #curveh - vehicles are sorted relative to this vehicle 
-    
-    #given an initial vehicle and list of vehicles to add, gets the distance of each trajectory from the initial vehicle, and then 
-    #sorts all vehicles based on this distance. 
-    distlist = {} #initialized as 0 because the curveh is 0 distance from itself. 
+    #which is ahead of you. Any circular dependencies will result in
+
+    #curveh - vehicles are sorted relative to this vehicle
+
+    #given an initial vehicle and list of vehicles to add, gets the distance of each trajectory from the initial vehicle, and then
+    #sorts all vehicles based on this distance.
+    distlist = {} #initialized as 0 because the curveh is 0 distance from itself.
     curveht_nstar = platooninfo[curveh][0]
     out = [curveh]
-    
+
     newfolveh = set()
     curmeas = meas[curveh]
     curmeas = curmeas[curmeas[:,7]==lane]
-    for i in vehfollist: 
-        #first need to get times when vehicle is following the curveh. 
+    for i in vehfollist:
+        #first need to get times when vehicle is following the curveh.
         temp = meas[i]
         temp = temp[temp[:,7]==lane]
 #        print(curveh)
 #        print(i)
         lead,fol = overlaphelp(curmeas,temp)
-        
+
         curdist = np.mean(lead[:,2] - fol[:,2])
         distlist[i] = curdist #
-        
+
         curfolveh = np.unique(temp[:,5])
-#        curfolveh = platooninfo[i][-1][1] #here 
-        for j in curfolveh: 
+#        curfolveh = platooninfo[i][-1][1] #here
+        for j in curfolveh:
             if j == 0:
-                continue 
-            if j in vehlist: 
+                continue
+            if j in vehlist:
                 if j not in vehfollist and j not in out:
                     newfolveh.add(j)
-    
+
     out2 = list(distlist.keys())
     out2 = sorted(out2, key = lambda veh: distlist[veh])
     curlen = len(newfolveh)
     while curlen>0:
-        #check if all new followers can be sorted according to a single follower 
-        for i in newfolveh: 
+        #check if all new followers can be sorted according to a single follower
+        for i in newfolveh:
             curmeas = meas[i]
             curmeas = curmeas[curmeas[:,7]==lane]
             distlist = {i:0}
-            for j in newfolveh: 
+            for j in newfolveh:
                 if j==i:
                     continue
                 temp = meas[j]
                 temp = temp[temp[:,7]==lane]
-                
+
                 lead,fol = overlaphelp(curmeas,temp)
-                if len(lead) == 0: #failed for vehicle j, so try for other vehicles 
+                if len(lead) == 0: #failed for vehicle j, so try for other vehicles
                     break
-                else: 
+                else:
                     curdist = np.mean(lead[:,2]-fol[:,2])
-                    distlist[j] = curdist 
-            else: 
-                #no break in j loop means we succeeded for vehicle i 
+                    distlist[j] = curdist
+            else:
+                #no break in j loop means we succeeded for vehicle i
                 out2 = distlist.keys()
-                out2 = sorted(out2,key = lambda veh: distlist[veh]) #sort the new vehicles 
-                
-#                out.extend(out2) #add all the new vehicles. now we need to get all the new vehicles 
-                #to prevent any orders being off by 1, we always check if the order makes sense wehn we add a new vehicle 
-                for k in out2: 
+                out2 = sorted(out2,key = lambda veh: distlist[veh]) #sort the new vehicles
+
+#                out.extend(out2) #add all the new vehicles. now we need to get all the new vehicles
+                #to prevent any orders being off by 1, we always check if the order makes sense wehn we add a new vehicle
+                for k in out2:
                     lastveh = out[-1]
                     lastmeas = meas[lastveh]
                     lastmeas = lastmeas[lastmeas[:,7]==lane]
@@ -1836,128 +1836,128 @@ def sortveh_disthelper(out, curveh, vehfollist,vehlist, lane, meas, platooninfo)
                     last, cur = overlaphelp(lastmeas,temp)
                     # except:
                     #     print('hello')
-                    if len(last) == 0: #nbothing to check 
+                    if len(last) == 0: #nbothing to check
                         out.append(k)
-                    elif np.mean(last[:,2]-cur[:,2]) > 0: #if this is positive it means the order is right 
+                    elif np.mean(last[:,2]-cur[:,2]) > 0: #if this is positive it means the order is right
                         out.append(k)
-                    else: 
-                        out.insert(-1,k) #it's before the last one in this case. 
-                
+                    else:
+                        out.insert(-1,k) #it's before the last one in this case.
+
                 oldnewfolveh = newfolveh.copy() #copy of old we will iterate over this and make the new
                 newfolveh = set()
-                for k in oldnewfolveh: 
+                for k in oldnewfolveh:
                     temp = meas[k]
                     temp = temp[temp[:,7]==lane]
                     curfolveh = np.unique(temp[:,5])
-        #            curfolveh = platooninfo[i][-1][1] #and here 
-                    for l in curfolveh: 
+        #            curfolveh = platooninfo[i][-1][1] #and here
+                    for l in curfolveh:
                         if l == 0:
-                            continue 
-                        if l in vehlist: #has to be a vehicle we are sorting 
+                            continue
+                        if l in vehlist: #has to be a vehicle we are sorting
                             if l not in out: #can't be a vehicle already sorted
                                 newfolveh.add(l)
                 curlen = len(newfolveh)
-                break #this is beraking the first loop over i 
-        else: #this else is with the first loop over i 
-        #this means we weren't able to sort the new vehicles with respect to each other, so we'll try to sort them with respect to one of the leaders already added. 
-            #first we have to figure out what leaders we can potentially use 
-            for i in range(len(out)): #we will go backwards over everything in out 
-                
-                curveh = out[int(-(i+1))] #go backwards 
+                break #this is beraking the first loop over i
+        else: #this else is with the first loop over i
+        #this means we weren't able to sort the new vehicles with respect to each other, so we'll try to sort them with respect to one of the leaders already added.
+            #first we have to figure out what leaders we can potentially use
+            for i in range(len(out)): #we will go backwards over everything in out
+
+                curveh = out[int(-(i+1))] #go backwards
                 curmeas = meas[curveh]
                 curmeas = curmeas[curmeas[:,7]==lane]
                 lasttime = curmeas[-1,1]
                 distlist = {}
-                
+
                 for j in newfolveh:
                     temp = meas[j]
                     temp = temp[temp[:,7]==lane]
-                    if temp[0,1] > lasttime:  #simple check if failed to potentially save a lot of time 
+                    if temp[0,1] > lasttime:  #simple check if failed to potentially save a lot of time
                         break
-                    
+
                     lead,fol = overlaphelp(curmeas,temp)
-                    if len(lead) == 0:  #failed 
+                    if len(lead) == 0:  #failed
                         break
-                    else: 
+                    else:
                         curdist = np.mean(lead[:,2] - fol[:,2])
                         distlist[j] = curdist
                 else: #succeeded
                     out2 = distlist.keys()
-                    out2 = sorted(out2,key = lambda veh: distlist[veh]) #sort the new vehicles 
-                    
-#                    out.extend(out2) #add all the new vehicles. now we need to get all the new vehicles 
-                    for k in out2: 
+                    out2 = sorted(out2,key = lambda veh: distlist[veh]) #sort the new vehicles
+
+#                    out.extend(out2) #add all the new vehicles. now we need to get all the new vehicles
+                    for k in out2:
                         lastveh = out[-1]
                         lastmeas = meas[lastveh]
                         lastmeas = lastmeas[lastmeas[:,7]==lane]
                         temp = meas[k]
                         temp = temp[temp[:,7]==lane]
                         last, cur = overlaphelp(lastmeas,temp)
-                        if len(last) == 0: #nbothing to check 
+                        if len(last) == 0: #nbothing to check
                             out.append(k)
-                        elif np.mean(last[:,2]-cur[:,2]) > 0: #if this is positive it means the order is right 
+                        elif np.mean(last[:,2]-cur[:,2]) > 0: #if this is positive it means the order is right
                             out.append(k)
-                        else: 
-                            out.insert(-1,k) #it's before the last one in this case. 
-                    
+                        else:
+                            out.insert(-1,k) #it's before the last one in this case.
+
                     oldnewfolveh = newfolveh.copy() #copy of old we will iterate over this and make the new
                     newfolveh = set()
-                    for k in oldnewfolveh: 
+                    for k in oldnewfolveh:
                         temp = meas[k]
                         temp = temp[temp[:,7]==lane]
                         curfolveh = np.unique(temp[:,5])
-            #            curfolveh = platooninfo[i][-1][1] #and here 
-                        for l in curfolveh: 
+            #            curfolveh = platooninfo[i][-1][1] #and here
+                        for l in curfolveh:
                             if l == 0:
-                                continue 
-                            if l in vehlist: #has to be a vehicle we are sorting 
+                                continue
+                            if l in vehlist: #has to be a vehicle we are sorting
                                 if l not in out: #can't be a vehicle already sorted
                                     newfolveh.add(l)
                     curlen = len(newfolveh)
-                    break #this is beraking the first loop over i 
-                    
-            else: #this is attached to the first loop over i, it means we have no idea how to sort the vehicles in newfolveh. 
-                #in this case what we'll do is throw a warning, and not do anything with the vehicles, so they will get put into leftover. 
-                print('we werent able to sort some vehicles, they will be handled as leftovers') #this should only happen rarely for a dataset with congestion in it. 
+                    break #this is beraking the first loop over i
+
+            else: #this is attached to the first loop over i, it means we have no idea how to sort the vehicles in newfolveh.
+                #in this case what we'll do is throw a warning, and not do anything with the vehicles, so they will get put into leftover.
+                print('we werent able to sort some vehicles, they will be handled as leftovers') #this should only happen rarely for a dataset with congestion in it.
                 oldnewfolveh = newfolveh.copy() #copy of old we will iterate over this and make the new
                 newfolveh = set()
-                for k in oldnewfolveh: 
+                for k in oldnewfolveh:
                     temp = meas[k]
                     temp = temp[temp[:,7]==lane]
                     curfolveh = np.unique(temp[:,5])
-        #            curfolveh = platooninfo[i][-1][1] #and here 
-                    for l in curfolveh: 
+        #            curfolveh = platooninfo[i][-1][1] #and here
+                    for l in curfolveh:
                         if l == 0:
-                            continue 
-                        if l in vehlist: #has to be a vehicle we are sorting 
+                            continue
+                        if l in vehlist: #has to be a vehicle we are sorting
                             if l not in out: #can't be a vehicle already sorted
                                 newfolveh.add(l)
                 curlen = len(newfolveh)
-                
 
-    
+
+
     return out
 
 
 def approx_hess(p,*args,gradfn = None, curgrad = None, **kwargs):
-    #input the current point p, function to calculate the gradient gradfn with call signature 
+    #input the current point p, function to calculate the gradient gradfn with call signature
     #grad = gradfn(p,*args,*kwargs)
-    #and we will compute the hessian using a forward difference approximation. 
-    #this will use n+1 gradient evaluations to calculate the hessian. 
-    #you can pass in the current grad if you have it, this will save 1 gradient evaluation. 
+    #and we will compute the hessian using a forward difference approximation.
+    #this will use n+1 gradient evaluations to calculate the hessian.
+    #you can pass in the current grad if you have it, this will save 1 gradient evaluation.
     n = len(p)
     hess = np.zeros((n,n))
     if curgrad is None:
         grad = gradfn(p,*args,*kwargs) #calculate gradient for the unperturbed parameters
-    else: 
+    else:
         grad = curgrad
-#    grad = np.asarray(grad) #just pass in a np array not a list...if you want to pass in list then you need to convert to np array here. 
+#    grad = np.asarray(grad) #just pass in a np array not a list...if you want to pass in list then you need to convert to np array here.
     eps = 1e-8 #numerical differentiation stepsize
     for i in range(n):
         pe = p.copy()
         pe[i] += eps #perturbed parameters for parameter n
         gradn = gradfn(pe,*args,**kwargs) #gradient for perturbed parameters
-#        gradn = np.asarray(gradn) #just pass in a np array not a list...if you want to pass in list then you need to convert to np array here. 
+#        gradn = np.asarray(gradn) #just pass in a np array not a list...if you want to pass in list then you need to convert to np array here.
         hess[:,i] = gradn-grad #first column of the hessian without the 1/eps
 
     hess = hess*(1/eps)
@@ -1966,109 +1966,109 @@ def approx_hess(p,*args,gradfn = None, curgrad = None, **kwargs):
 
 
 def SPSA_grad(p,objfn, *args,q = 1, ck = 1e-8, **kwargs):
-    #defines the SPSA gradient approximation. This can be used in place of a gradient function in any optimization algorithm; it is suggested to be used in a gradient descent algorithm with 
+    #defines the SPSA gradient approximation. This can be used in place of a gradient function in any optimization algorithm; it is suggested to be used in a gradient descent algorithm with
     #a fixed step length (see spall 1992)
-    #each gradient approximation uses 2 objective evaluations. There are q gradient approximations total, and it returns the average gradient. 
-    #therefore the functino uses 2q total objective evaluations; finite differences uses n+1 (n) evaluations, where n is the number of parameters. #(adjoint would use 2 (1) ), where 
-    #you can possibly save 1 evaluation if you pass in the current objective evaluation (which is not done in this code). 
+    #each gradient approximation uses 2 objective evaluations. There are q gradient approximations total, and it returns the average gradient.
+    #therefore the functino uses 2q total objective evaluations; finite differences uses n+1 (n) evaluations, where n is the number of parameters. #(adjoint would use 2 (1) ), where
+    #you can possibly save 1 evaluation if you pass in the current objective evaluation (which is not done in this code).
     #variable names follow the convention gave in spall 1992; except we call the c_k eps instead
     n  = len(p)
     grad = np.zeros((q,n)) #q rows of gradient with n columns
     eps = ck #numerical stepsize
     p = np.asarray(p) #need parameters to be an np array here
     for i in range(q): #
-        delta = 2*ss.bernoulli.rvs(.5,size=n)-1 #symmetric bernoulli variables 
+        delta = 2*ss.bernoulli.rvs(.5,size=n)-1 #symmetric bernoulli variables
         pp = p + eps*delta #reads as p plus
         pm = p - eps*delta # p minus
         yp = objfn(pp,*args,**kwargs)
         ym = objfn(pm,*args,**kwargs)
         grad[i,:] = (yp-ym)/(2*eps*delta) #definition of the SPSA to the gradient
-    
-    grad = np.mean(grad,0) #average across the gradients 
-    
+
+    grad = np.mean(grad,0) #average across the gradients
+
     return grad
 
 
 
 def pgrad_descent(fnc, fnc_der, fnc_hess, p, bounds, linesearch, args, t = 0,  eps = 1e-5, epsf = 1e-5, maxit = 1e3, der_only = False, BBlow = 1e-9, BBhi = 1,srch_type = 0,proj_type = 0,**kwargs):
     #minimize a scalar function with bounds using gradient descent
-    #fnc - objective 
+    #fnc - objective
     #fnc_der - derivative or objective and derivative
     #fnc_hess - hessian (unused)
     #p - initial guess
-    #linesearch - linesearch function 
-    #bounds - box bounds for p 
+    #linesearch - linesearch function
+    #bounds - box bounds for p
     #args - arguments that are passed to fnc, fnc_der, fnc_hess
-    
-    #t = 0 - if 1 , we will use a non-monotone line search strategy, using the linesearch function to determine sufficient decrease 
-    #otherwise, if t = 0 we will just use the linesearch function. 
-    
+
+    #t = 0 - if 1 , we will use a non-monotone line search strategy, using the linesearch function to determine sufficient decrease
+    #otherwise, if t = 0 we will just use the linesearch function.
+
     #eps = 1e-5 - termination if relative improvement is less than eps
     #epsf =1e-5 - termination if gradient norm is less than epsf
     #maxit = 1e3 - termination if iterations are more than maxit
     #der_only indicates fnc_der only gives derivative
     #kwargs - any special arguments for linesearch need to be in kwargs
-    
+
     #srch_type = 0 - scale search direction either by norm of gradient (0), using barzilai borwein scaling (1), or no scaling (any other value)
-    #what scaling works best depends on the problem. for example, BB scaling works very well for the rosenbrock function. 
+    #what scaling works best depends on the problem. for example, BB scaling works very well for the rosenbrock function.
     #for the car-following calibration, BB scaling seems to work poorly (I think because you often take small steps? )
-    #in other problems, the scaling by norm of the gradient helps; for car following calibration it doesnt seem to help. 
-    
+    #in other problems, the scaling by norm of the gradient helps; for car following calibration it doesnt seem to help.
+
     #proj_type = 0 - either project before the linesearch (0), or project in each step of the line search (1)
-    #note that the fixedstep linesearch should use proj_type = 1; nonmonotone uses projtype = 0. backtrack and weakwolfe can use either. 
-    #which projection type works better depends on the problem. 
-    
+    #note that the fixedstep linesearch should use proj_type = 1; nonmonotone uses projtype = 0. backtrack and weakwolfe can use either.
+    #which projection type works better depends on the problem.
+
     #in general, you would expect that srch_type = 1, proj_type = 1 would work the best (BB scaling with projection at every linesearch step).
-    if der_only: 
-        def fnc_objder(p, *args): 
+    if der_only:
+        def fnc_objder(p, *args):
             obj = fnc(p, *args)
             grad = fnc_der(p,*args)
-            
+
             return obj, grad
-    else: 
+    else:
         fnc_objder = fnc_der
-    
+
     obj, grad = fnc_objder(p, *args) #objective and gradient
     n_grad = np.linalg.norm(grad) #norm of gradient
     diff = 1 #checks reduction in objective (termination)
     iters = 1 #number of iterations (termination)
     totobjeval = 1 #keeps track of total objective and gradient evaluations
     totgradeval = 1
-    
-    if t != 0: 
-        watchdogls = linesearch 
+
+    if t != 0:
+        watchdogls = linesearch
         linesearch = watchdog
-#        ########compute the search direction in this case.....################ #actually don't do this 
+#        ########compute the search direction in this case.....################ #actually don't do this
 #        temp = grad
-#        if srch_type ==0: 
+#        if srch_type ==0:
 #            temp = temp/n_grad
-#        if proj_type ==0: #each project first, then you won't have to project during line search 
+#        if proj_type ==0: #each project first, then you won't have to project during line search
 #            d = projection(p-temp,bounds)-p #search direction for the projected gradient
-#        else: 
+#        else:
 #            d = -temp #search directino without projection
 #        #########################################################################
-        past = [[p, obj, grad],t+1] #initialize the past iterates for monotone 
-    else: 
+        past = [[p, obj, grad],t+1] #initialize the past iterates for monotone
+    else:
         watchdogls = None
-        past = [None] #past will remain None unless we are doing the nonmonotone line search 
+        past = [None] #past will remain None unless we are doing the nonmonotone line search
 
-    s = [1] #initialize BB scaling 
+    s = [1] #initialize BB scaling
     y = [1]
-    
+
     while diff > eps and n_grad > epsf and iters < maxit:
 #        print(obj)
-        #do the scaling type; either scale by norm of gradient, using BB scaling, or no scaling 
+        #do the scaling type; either scale by norm of gradient, using BB scaling, or no scaling
         temp = grad
 #        if srch_type ==0 or iters ==1:  #scale by norm of gradient
-        if srch_type ==0: 
+        if srch_type ==0:
             temp = temp/n_grad
-        elif srch_type ==1:  #BB scaling 
-            BBscaling = np.matmul(s,y)/np.matmul(y,y) #one possible scaling 
-#            BBscaling = np.matmul(s,s)/np.matmul(s,y) #this is the other possible scaling you can use 
-#            if np.isnan(BBscaling): #don't need this 
+        elif srch_type ==1:  #BB scaling
+            BBscaling = np.matmul(s,y)/np.matmul(y,y) #one possible scaling
+#            BBscaling = np.matmul(s,s)/np.matmul(s,y) #this is the other possible scaling you can use
+#            if np.isnan(BBscaling): #don't need this
 #                BBscaling = 1/n_grad
 #            print(BBscaling)
-            if BBscaling < 0: 
+            if BBscaling < 0:
                 BBscaling = BBhi
             elif BBscaling < BBlow:
                 BBscaling = BBlow
@@ -2076,17 +2076,17 @@ def pgrad_descent(fnc, fnc_der, fnc_hess, p, bounds, linesearch, args, t = 0,  e
                 BBscaling = BBhi
             temp = BBscaling*temp
         #otherwise, there will be no scaling and the search direction will simply be -grad
-        
-        if proj_type ==0: #each project first, then you won't have to project during line search 
+
+        if proj_type ==0: #each project first, then you won't have to project during line search
             d = projection(p-temp,bounds)-p #search direction for the projected gradient
-        else: 
+        else:
             d = -temp #search directino without projection
-            
-        if past[-1] == 0: #in this case we need to remember the search direction of the iterate; if past[-1] == 0 it means we might have to return to that point in the non monotone search. 
-            past[0].append(d) #append search direction corresponding to the iterate 
-            if past[0][2][0] == None: #depending on what watchdogls is, we  may need to update the current gradient as well. 
+
+        if past[-1] == 0: #in this case we need to remember the search direction of the iterate; if past[-1] == 0 it means we might have to return to that point in the non monotone search.
+            past[0].append(d) #append search direction corresponding to the iterate
+            if past[0][2][0] == None: #depending on what watchdogls is, we  may need to update the current gradient as well.
                 past[0][2] = grad
-            
+
 #        dirder = np.matmul(grad,d) #directional derivative
         pn, objn, gradn, hessn, objeval, gradeval = linesearch(p,d,obj,fnc,fnc_objder,grad, args, iters, bounds, past, watchdogls, proj_type = proj_type, t = t, **kwargs)
 
@@ -2094,31 +2094,31 @@ def pgrad_descent(fnc, fnc_der, fnc_hess, p, bounds, linesearch, args, t = 0,  e
             objn, gradn = fnc_objder(pn,*args)
             totobjeval += 1
             totgradeval +=1
-        
+
         if srch_type ==1:
-            s = pn-p #definition of s and y for barzilai borwein scaling 
+            s = pn-p #definition of s and y for barzilai borwein scaling
             y = gradn-grad
-            
-        #update iterations and current values 
+
+        #update iterations and current values
         iters += 1
         totobjeval += objeval
         totgradeval += gradeval
-        
+
         diff = abs(obj-objn)/obj #relative reduction in objective
         p = pn
         obj = objn
-        grad = gradn 
+        grad = gradn
         n_grad = np.linalg.norm(grad)
     #report reason for termination
     if n_grad <= epsf:
         exitmessage = 'Norm of gradient reduced to '+str(n_grad)
-    elif diff <= eps: 
+    elif diff <= eps:
         exitmessage = 'Relative reduction in objective is '+str(diff)
-    elif iters == maxit: 
+    elif iters == maxit:
         exitmessage = 'Reached '+str(maxit)+' iterations'
-    
+
     if past[-1] != None: #in the case we did a non monotone search we have some special termination conditions (these take place inside watchdog function) and need an extra step to report the solution
-        if past[0][1] < obj: 
+        if past[0][1] < obj:
             obj = past[0][1]
             p = past[0][0]
     out = []
@@ -2131,113 +2131,113 @@ def pgrad_descent(fnc, fnc_der, fnc_hess, p, bounds, linesearch, args, t = 0,  e
     outdict['objeval'] = totobjeval
     outdict['iter'] = iters
     out.append(outdict)
-    
+
     return out
 
-def pgrad_descent2(fnc, fnc_der, fnc_hess, p, bounds, linesearch, args, t = 0, eps = 1e-5, epsf = 1e-5, 
+def pgrad_descent2(fnc, fnc_der, fnc_hess, p, bounds, linesearch, args, t = 0, eps = 1e-5, epsf = 1e-5,
                    maxit = 1e3, der_only = False, BBlow = 1e-9, BBhi = 1, srch_type = 0,proj_type = 0,**kwargs):
-    #this can be used for nmbacktrack. Otherwise you can use watchdog which is a different nonmonotone strategy that is called with pgrad_descent. This combined with nmbactrack typically works the best. 
+    #this can be used for nmbacktrack. Otherwise you can use watchdog which is a different nonmonotone strategy that is called with pgrad_descent. This combined with nmbactrack typically works the best.
     #minimize a scalar function with bounds using gradient descent
-    #fnc - objective 
+    #fnc - objective
     #fnc_der - derivative or objective and derivative
     #fnc_hess - hessian (unused)
     #p - initial guess
-    #linesearch - linesearch function 
-    #bounds - box bounds for p 
+    #linesearch - linesearch function
+    #bounds - box bounds for p
     #args - arguments that are passed to fnc, fnc_der, fnc_hess
-    
-    #t = 0 - if 1 , we will use a non-monotone line search strategy, using the linesearch function to determine sufficient decrease 
-    #otherwise, if t = 0 we will just use the linesearch function. 
-    
+
+    #t = 0 - if 1 , we will use a non-monotone line search strategy, using the linesearch function to determine sufficient decrease
+    #otherwise, if t = 0 we will just use the linesearch function.
+
     #eps = 1e-5 - termination if relative improvement is less than eps
     #epsf =1e-5 - termination if gradient norm is less than epsf
     #maxit = 1e3 - termination if iterations are more than maxit
     #der_only indicates fnc_der only gives derivative
-    #BBlow, BBhi - lower and upper bounds for the stepsize given by BB scaling. 
+    #BBlow, BBhi - lower and upper bounds for the stepsize given by BB scaling.
     #kwargs - any special arguments for linesearch need to be in kwargs (adjust the parameters of the linesearch)
-    
+
     #srch_type = 0 - scale search direction either by norm of gradient (0), using barzilai borwein scaling (1), or no scaling (any other value)
-    #in general, BB scaling will work best, but you may need to adjust the safeguarding parameters; calibration seems to need BBlow very small, at least for the current loss function. 
-    #note there are two different types of BB scaling, <s,y>/<y,y> or <s,s>/<s,y>, I think the first works better in this case. 
-    
+    #in general, BB scaling will work best, but you may need to adjust the safeguarding parameters; calibration seems to need BBlow very small, at least for the current loss function.
+    #note there are two different types of BB scaling, <s,y>/<y,y> or <s,s>/<s,y>, I think the first works better in this case.
+
     #proj_type = 0 - either project before the linesearch (0), or project in each step of the line search (1)
-    #note that the fixedstep linesearch should use proj_type = 1; nonmonotone uses projtype = 0. backtrack and weakwolfe can use either. 
-    #which projection type works better depends on the problem. 
-    
+    #note that the fixedstep linesearch should use proj_type = 1; nonmonotone uses projtype = 0. backtrack and weakwolfe can use either.
+    #which projection type works better depends on the problem.
+
     #in general, you would expect that srch_type = 1, proj_type = 1 would work the best (BB scaling with projection at every linesearch step).
-    
+
     ############overview of different algorithms##############
-    
-    #linesearches - 
+
+    #linesearches -
     #fixed step : choose a constant step length that decreases with some power of the iterations
     #backtrack2 : choose a step length based on backtracking armijo linesearch with safeguarded interpolation. requires only objective evaluations
     #weakwolfe2: can choose a step length that satisfies either strong or weak wolfe conditions, uses interpolation and safeguarding. Requires both gradient and objective evaluations
     #two different nonmonotone searches; each of which can be based around either of the above two line searches (explained more below)
-    
-    #algorithms - 
-    #pgrad_descent: can input keyword parameter t = n to use nonmonotone linesearch watchdog, which will take up to n relaxed steps before using some linesearch to enforce sufficient decrease 
-    #pgrad_descent2: can call both nmbacktrack, and nmweakwolfe. These are nonmonotone linesearches for the corresponding program, which relax the sufficient decrease condition 
-    #by only enforcing the decrease w.r.t the maximum of the past t = n iterations. 
-    #in general, I have found pgrad_descent2 with nmbacktrack to work the best for the calibration problem. 
-    #using watchdog (pgrad_descent with t \neq 0) seems to be worse than nmbacktrack, but better than nmweakwofe. So you can do watchdog for wolfe linesearch, otherwise use nmbacktrack. 
-    
-    #for any of the gradient descent algorithms, you definitly want to use srch_type = 1 to use BB scaling. You may have to adjust the safeguarding parameters to achieve good results. 
-    #proj_type = 0 is the default. Sometimes you may find proj_type = 1 to work better, but in general proj_type = 0 (project the search direction only once) is much better. 
+
+    #algorithms -
+    #pgrad_descent: can input keyword parameter t = n to use nonmonotone linesearch watchdog, which will take up to n relaxed steps before using some linesearch to enforce sufficient decrease
+    #pgrad_descent2: can call both nmbacktrack, and nmweakwolfe. These are nonmonotone linesearches for the corresponding program, which relax the sufficient decrease condition
+    #by only enforcing the decrease w.r.t the maximum of the past t = n iterations.
+    #in general, I have found pgrad_descent2 with nmbacktrack to work the best for the calibration problem.
+    #using watchdog (pgrad_descent with t \neq 0) seems to be worse than nmbacktrack, but better than nmweakwofe. So you can do watchdog for wolfe linesearch, otherwise use nmbacktrack.
+
+    #for any of the gradient descent algorithms, you definitly want to use srch_type = 1 to use BB scaling. You may have to adjust the safeguarding parameters to achieve good results.
+    #proj_type = 0 is the default. Sometimes you may find proj_type = 1 to work better, but in general proj_type = 0 (project the search direction only once) is much better.
     ################################################################
-    
-    if der_only: 
-        def fnc_objder(p, *args): 
+
+    if der_only:
+        def fnc_objder(p, *args):
             obj = fnc(p, *args)
             grad = fnc_der(p,*args)
-            
+
             return obj, grad
-    else: 
+    else:
         fnc_objder = fnc_der
-    
+
     obj, grad = fnc_objder(p, *args) #objective and gradient
     n_grad = np.linalg.norm(grad) #norm of gradient
     diff = 1 #checks reduction in objective (termination)
     iters = 1 #number of iterations (termination)
     totobjeval = 1 #keeps track of total objective and gradient evaluations
     totgradeval = 1
-    
+
     #####################deprecated section from pgrad_descent#############
-#    if t != 0: 
-#        watchdogls = linesearch 
+#    if t != 0:
+#        watchdogls = linesearch
 #        linesearch = watchdog
-##        ########compute the search direction in this case.....################ #actually don't do this 
+##        ########compute the search direction in this case.....################ #actually don't do this
 ##        temp = grad
-##        if srch_type ==0: 
+##        if srch_type ==0:
 ##            temp = temp/n_grad
-##        if proj_type ==0: #each project first, then you won't have to project during line search 
+##        if proj_type ==0: #each project first, then you won't have to project during line search
 ##            d = projection(p-temp,bounds)-p #search direction for the projected gradient
-##        else: 
+##        else:
 ##            d = -temp #search directino without projection
 ##        #########################################################################
-#        past = [[p, obj, grad],0] #initialize the past iterates for monotone 
-#    else: 
+#        past = [[p, obj, grad],0] #initialize the past iterates for monotone
+#    else:
 #        watchdogls = None
-#        past = [None] #past will remain None unless we are doing the nonmonotone line search 
+#        past = [None] #past will remain None unless we are doing the nonmonotone line search
     #####################################
-    
-    past = [obj] #this is how we initialize the past. In this code, we will have special functions to handle the non-monotone, 
-    pastp = [p] #whereas before we were using watchdog which relied on some existing line search. 
-    
 
-    s = [1] #initialize BB scaling 
+    past = [obj] #this is how we initialize the past. In this code, we will have special functions to handle the non-monotone,
+    pastp = [p] #whereas before we were using watchdog which relied on some existing line search.
+
+
+    s = [1] #initialize BB scaling
     y = [1]
-    
+
     while diff > eps and n_grad > epsf and iters < maxit:
 #        print(n_grad)
-        #do the scaling type; either scale by norm of gradient, using BB scaling, or no scaling 
+        #do the scaling type; either scale by norm of gradient, using BB scaling, or no scaling
         temp = grad
 #        if srch_type ==0 or iters ==1:  #scale by norm of gradient
-        if srch_type ==0: 
+        if srch_type ==0:
             temp = temp/n_grad
-        elif srch_type ==1:  #BB scaling 
-            BBscaling = np.matmul(s,y)/np.matmul(y,y) #one possible scaling 
-#            BBscaling = np.matmul(s,s)/np.matmul(s,y) #this is the other possible scaling you can use 
-            if BBscaling < 0: 
+        elif srch_type ==1:  #BB scaling
+            BBscaling = np.matmul(s,y)/np.matmul(y,y) #one possible scaling
+#            BBscaling = np.matmul(s,s)/np.matmul(s,y) #this is the other possible scaling you can use
+            if BBscaling < 0:
                 BBscaling = BBhi
             elif BBscaling < BBlow:
                 BBscaling = BBlow
@@ -2245,18 +2245,18 @@ def pgrad_descent2(fnc, fnc_der, fnc_hess, p, bounds, linesearch, args, t = 0, e
                 BBscaling = BBhi
             temp = BBscaling*temp
         #otherwise, there will be no scaling and the search direction will simply be -grad
-        
-        if proj_type ==0: #each project first, then you won't have to project during line search 
+
+        if proj_type ==0: #each project first, then you won't have to project during line search
             d = projection(p-temp,bounds)-p #search direction for the projected gradient
-        else: 
+        else:
             d = -temp #search directino without projection
-            
+
         ########deprecated
-#        if past[-1] == 0: #in this case we need to remember the search direction of the iterate; if past[-1] == 0 it means we might have to return to that point in the non monotone search. 
-#            past[0].append(d) #append search direction corresponding to the iterate 
-#            if past[0][2][0] == None: #depending on what watchdogls is, we  may need to update the current gradient as well. 
+#        if past[-1] == 0: #in this case we need to remember the search direction of the iterate; if past[-1] == 0 it means we might have to return to that point in the non monotone search.
+#            past[0].append(d) #append search direction corresponding to the iterate
+#            if past[0][2][0] == None: #depending on what watchdogls is, we  may need to update the current gradient as well.
 #                past[0][2] = grad
-        #########deprecated 
+        #########deprecated
 #        dirder = np.matmul(grad,d) #directional derivative #deprecated
         pn, objn, gradn, hessn, objeval, gradeval = linesearch(p,d,obj,fnc,fnc_objder,grad, args, iters, bounds, past, pastp, t, proj_type = proj_type, **kwargs)
 
@@ -2264,29 +2264,29 @@ def pgrad_descent2(fnc, fnc_der, fnc_hess, p, bounds, linesearch, args, t = 0, e
             objn, gradn = fnc_objder(pn,*args)
             totobjeval += 1
             totgradeval +=1
-        
+
         if srch_type ==1:
-            s = pn-p #definition of s and y for barzilai borwein scaling 
+            s = pn-p #definition of s and y for barzilai borwein scaling
             y = gradn-grad
-            
-        #update iterations and current values 
+
+        #update iterations and current values
         iters += 1
         totobjeval += objeval
         totgradeval += gradeval
-        
+
         diff = abs(obj-objn)/obj #relative reduction in objective
         p = pn
         obj = objn
-        grad = gradn 
+        grad = gradn
         n_grad = np.linalg.norm(grad)
     #report reason for termination
     if n_grad <= epsf:
         exitmessage = 'Norm of gradient reduced to '+str(n_grad)
-    elif diff <= eps: 
+    elif diff <= eps:
         exitmessage = 'Relative reduction in objective is '+str(diff)
-    elif iters == maxit: 
+    elif iters == maxit:
         exitmessage = 'Reached '+str(maxit)+' iterations'
-    
+
     if obj > min(past):
         ind = np.argmin(past)
         obj = past[ind]
@@ -2301,56 +2301,56 @@ def pgrad_descent2(fnc, fnc_der, fnc_hess, p, bounds, linesearch, args, t = 0, e
     outdict['objeval'] = totobjeval
     outdict['iter'] = iters
     out.append(outdict)
-    
+
     return out
 
 def SPSA(fnc, unused1, unused2, p, bounds, unused3, args, q = 1, maxit = 1e3, maxs = 50, **kwargs):
     #minimize a scalar function with bounds using SPSA
-    #fnc - objective 
+    #fnc - objective
     #p - initial guess
-    #bounds - box bounds for p 
-    #args - arguments that are passed to fnc 
+    #bounds - box bounds for p
+    #args - arguments that are passed to fnc
     #maxit = 1e3 - termination if iterations are more than maxit
     #q = 1 - number of times to do the SPSA gradient (q = 1 is a single realization of the stochastic perturbation \delta_k)
     #kwargs - can pass in kwargs to control constants for step length
 
-    
+
 #    obj = fnc(p, *args) #objective and gradient
     grad = SPSA_grad(p,fnc,*args)
     iters = 1 #number of iterations (termination)
     totobjeval = 2*q #keeps track of total objective and gradient evaluations
     totgradeval = 0
-    diff = 0 
+    diff = 0
     stuck = 0
-    
+
     while iters < maxit and stuck <maxs:
 #        print(obj)
-        d = -grad #search direction 
+        d = -grad #search direction
 #        dirder = np.matmul(grad,d) #directional derivative
         pn, objn, gradn, hessn, objeval, gradeval = fixedstep(p,d,None,None,None,None,None,iters,bounds,**kwargs)
-        
+
         if gradn[0] == None: #if need to get new gradient
             gradn = SPSA_grad(pn,fnc,*args)
             totobjeval += 2*q
-            
-        #update iterations and current values 
+
+        #update iterations and current values
         diff = np.linalg.norm(pn-p)
         if diff ==0:
             stuck += 1
         else:
             stuck = 0
-        iters += 1        
+        iters += 1
         p = pn
-        grad = gradn 
-        
+        grad = gradn
+
     #report reason for termination
-    if iters == maxit: 
+    if iters == maxit:
         exitmessage = 'Reached '+str(maxit)+' iterations'
-    if stuck ==maxs: 
+    if stuck ==maxs:
         exitmessage = 'Unable to make progress in '+str(maxs)+' iterations'
-    
+
     obj = fnc(p,*args)
-    
+
     out = []
     outdict = {}
     out.append(p)
@@ -2361,17 +2361,17 @@ def SPSA(fnc, unused1, unused2, p, bounds, unused3, args, q = 1, maxit = 1e3, ma
     outdict['objeval'] = totobjeval+1
     outdict['iter'] = iters
     out.append(outdict)
-    
+
     return out
 
-def SQP(fnc, fnc_der, fnc_hess1, p, bounds, linesearch, args, t = 0, hessfn = False, eps = 1e-5, epsf = 1e-5, 
+def SQP(fnc, fnc_der, fnc_hess1, p, bounds, linesearch, args, t = 0, hessfn = False, eps = 1e-5, epsf = 1e-5,
          maxit = 1e3, der_only = False, BBlow = 1e-9, BBhi = 1, proj_type = 0, hesslow = 1e-4, hesshi = 100, **kwargs):
-    #fnc - objective 
+    #fnc - objective
     #fnc_der - derivative or objective and derivative
-    #fnc_hess - input a function only returning the gradient with keyword hessfn=False, or you can input a function that will compute the hessian directly. 
+    #fnc_hess - input a function only returning the gradient with keyword hessfn=False, or you can input a function that will compute the hessian directly.
     #p - initial guess
-    #linesearch - linesearch function 
-    #bounds - box bounds for p 
+    #linesearch - linesearch function
+    #bounds - box bounds for p
     #*args - arguments that are passed to fnc, fnc_der, fnc_hess
     #if hessfn is true fnc_hess1 gives explicit hessian. Otherwise the hessian will be approximated, and fnc_hess1 contains a function that will return gradient
     #eps = 1e-5 - termination if relative improvement is less than eps
@@ -2379,61 +2379,61 @@ def SQP(fnc, fnc_der, fnc_hess1, p, bounds, linesearch, args, t = 0, hessfn = Fa
     #maxit = 1e3 - termination if iterations are more than maxit
     #der_only indicates fnc_der only gives derivative
     #kwargs - any special arguments for linesearch need to be in kwargs
-    
-    if der_only: 
-        def fnc_objder(p, *args): 
+
+    if der_only:
+        def fnc_objder(p, *args):
             obj = fnc(p, *args)
             grad = fnc_der(p,*args)
-            
+
             return obj, grad
-    else: 
+    else:
         fnc_objder = fnc_der
-    
-    if hessfn: 
+
+    if hessfn:
         fnc_hess = fnc_hess1
-    else: 
+    else:
         def fnc_hess(p, args, curgrad, gradfn = fnc_hess1):
             hess = approx_hess(p,*args,gradfn = fnc_hess1,curgrad = curgrad)
             return hess
-            
+
     obj, grad = fnc_objder(p, *args) #objective and gradient
-#    hess = fnc_hess(p,*args, grad) #do it at top of loop 
+#    hess = fnc_hess(p,*args, grad) #do it at top of loop
     n_grad = np.linalg.norm(grad) #norm of gradient
     diff = 1 #checks reduction in objective (termination)
     iters = 1 #number of iterations (termination)
     totobjeval = 1 #keeps track of total objective and gradient evaluations
     totgradeval = 1
 #    tothesseval = 1
-    
-    past = [obj] #this is how we initialize the past. In this code, we will have special functions to handle the non-monotone, 
-    pastp = [p] #whereas before we were using watchdog which relied on some existing line search. 
-    
-    if t != 0: 
-        watchdogls = linesearch 
+
+    past = [obj] #this is how we initialize the past. In this code, we will have special functions to handle the non-monotone,
+    pastp = [p] #whereas before we were using watchdog which relied on some existing line search.
+
+    if t != 0:
+        watchdogls = linesearch
         linesearch = watchdog
-#        ########compute the search direction in this case.....################ #actually don't do this 
+#        ########compute the search direction in this case.....################ #actually don't do this
 #        temp = grad
-#        if srch_type ==0: 
+#        if srch_type ==0:
 #            temp = temp/n_grad
-#        if proj_type ==0: #each project first, then you won't have to project during line search 
+#        if proj_type ==0: #each project first, then you won't have to project during line search
 #            d = projection(p-temp,bounds)-p #search direction for the projected gradient
-#        else: 
+#        else:
 #            d = -temp #search directino without projection
 #        #########################################################################
-        past = [[p, obj, grad],t+1] #initialize the past iterates for monotone 
-    else: 
+        past = [[p, obj, grad],t+1] #initialize the past iterates for monotone
+    else:
         watchdogls = None
-        past = [None] #past will remain None unless we are doing the nonmonotone line search 
-    
+        past = [None] #past will remain None unless we are doing the nonmonotone line search
 
-    s = [1] #initialize BB scaling 
+
+    s = [1] #initialize BB scaling
     y = [1]
     cur = 1e-2 #very small regularization prevents singular matrix
     while diff > eps and n_grad > epsf and iters < maxit:
-        
+
 #        cur = cur*2
 #        print(obj)
-        #do the scaling type; either scale by norm of gradient, using BB scaling, or no scaling 
+        #do the scaling type; either scale by norm of gradient, using BB scaling, or no scaling
         hess = fnc_hess(p, args, grad) #get new hessian
         hess = hess + cur*np.identity(len(p)) #regularization
         safeguard = False
@@ -2443,35 +2443,35 @@ def SQP(fnc, fnc_der, fnc_hess1, p, bounds, linesearch, args, t = 0, hessfn = Fa
         if dnorm >= hesshi*n_grad: #safeguards on hessian being poorly conditioned
             d = -grad
             safeguard = True
-        
-        elif np.matmul(-grad,d) <= hesslow*n_grad*dnorm: #safeguard on hessian not giving a descent direction 
+
+        elif np.matmul(-grad,d) <= hesslow*n_grad*dnorm: #safeguard on hessian not giving a descent direction
             d = -grad
             safeguard = True
 
 #        print(safeguard)
 #        if srch_type ==0 or iters ==1:  #scale by norm of gradient
-        if safeguard:  #BB scaling 
+        if safeguard:  #BB scaling
 #            cur= cur*1.5
 #            print('hi')
-            BBscaling = np.matmul(s,y)/np.matmul(y,y) #one possible scaling 
-#            BBscaling = np.matmul(s,s)/np.matmul(s,y) #this is the other possible scaling you can use 
-            if BBscaling < 0: 
+            BBscaling = np.matmul(s,y)/np.matmul(y,y) #one possible scaling
+#            BBscaling = np.matmul(s,s)/np.matmul(s,y) #this is the other possible scaling you can use
+            if BBscaling < 0:
                 BBscaling = BBhi
             elif BBscaling < BBlow:
                 BBscaling = BBlow
             elif BBscaling > BBhi:
                 BBscaling = BBhi
             d = BBscaling*d
-#        else: 
+#        else:
 #            cur = cur/1.5
         #otherwise, there will be no scaling and the search direction will simply be -grad
-        
-        if proj_type ==0: #each project first, then you won't have to project during line search 
+
+        if proj_type ==0: #each project first, then you won't have to project during line search
             d = projection(p+d,bounds)-p #search direction for the projected gradient
-        
-        if past[-1] == 0: #in this case we need to remember the search direction of the iterate; if past[-1] == 0 it means we might have to return to that point in the non monotone search. 
-            past[0].append(d) #append search direction corresponding to the iterate 
-            if past[0][2][0] == None: #depending on what watchdogls is, we  may need to update the current gradient as well. 
+
+        if past[-1] == 0: #in this case we need to remember the search direction of the iterate; if past[-1] == 0 it means we might have to return to that point in the non monotone search.
+            past[0].append(d) #append search direction corresponding to the iterate
+            if past[0][2][0] == None: #depending on what watchdogls is, we  may need to update the current gradient as well.
                 past[0][2] = grad
 
         pn, objn, gradn, hessn, objeval, gradeval = linesearch(p,d,obj,fnc,fnc_objder,grad, args, iters, bounds, past, watchdogls, proj_type = proj_type, t = t, **kwargs)
@@ -2480,37 +2480,37 @@ def SQP(fnc, fnc_der, fnc_hess1, p, bounds, linesearch, args, t = 0, hessfn = Fa
             objn, gradn = fnc_objder(pn,*args)
             totobjeval += 1
             totgradeval +=1
-            
-        
-        
-        
-        s = pn-p #definition of s and y for barzilai borwein scaling #for safe guarding when needed 
+
+
+
+
+        s = pn-p #definition of s and y for barzilai borwein scaling #for safe guarding when needed
         y = gradn-grad
-            
-        #update iterations and current values 
-        iters += 1 
+
+        #update iterations and current values
+        iters += 1
         totobjeval += objeval
         totgradeval += gradeval
 #        tothesseval += 1
-        
+
         diff = abs(obj-objn)/obj #relative reduction in objective
         p = pn
         obj = objn
-        grad = gradn 
+        grad = gradn
         n_grad = np.linalg.norm(grad)
-        
+
     if past[-1] != None: #in the case we did a non monotone search we have some special termination conditions (these take place inside watchdog function) and need an extra step to report the solution
-        if past[0][1] < obj: 
+        if past[0][1] < obj:
             obj = past[0][1]
             p = past[0][0]
     #report reason for termination
     if n_grad <= epsf:
         exitmessage = 'Norm of gradient reduced to '+str(n_grad)
-    elif diff <= eps: 
+    elif diff <= eps:
         exitmessage = 'Relative reduction in objective is '+str(diff)
-    elif iters == maxit: 
+    elif iters == maxit:
         exitmessage = 'Reached '+str(maxit)+' iterations'
-        
+
     out = []
     outdict = {}
     out.append(p)
@@ -2520,19 +2520,19 @@ def SQP(fnc, fnc_der, fnc_hess1, p, bounds, linesearch, args, t = 0, hessfn = Fa
     outdict['gradeval'] = totgradeval
     outdict['objeval'] = totobjeval
     outdict['iter'] = iters
-    outdict['hesseval'] = iters - 1 #hessian evaluations is iters - 1 
+    outdict['hesseval'] = iters - 1 #hessian evaluations is iters - 1
     out.append(outdict)
-    
+
     return out
 
-def SQP2(fnc, fnc_der, fnc_hess1, p, bounds, linesearch, args, t = 0, hessfn = False, eps = 1e-5, epsf = 1e-5, 
+def SQP2(fnc, fnc_der, fnc_hess1, p, bounds, linesearch, args, t = 0, hessfn = False, eps = 1e-5, epsf = 1e-5,
          maxit = 1e3, der_only = False, BBlow = 1e-9, BBhi = 1, proj_type = 0, hesslow = 1e-4, hesshi = 100, **kwargs):
-    #fnc - objective 
+    #fnc - objective
     #fnc_der - derivative or objective and derivative
-    #fnc_hess - input a function only returning the gradient with keyword hessfn=False, or you can input a function that will compute the hessian directly. 
+    #fnc_hess - input a function only returning the gradient with keyword hessfn=False, or you can input a function that will compute the hessian directly.
     #p - initial guess
-    #linesearch - linesearch function 
-    #bounds - box bounds for p 
+    #linesearch - linesearch function
+    #bounds - box bounds for p
     #*args - arguments that are passed to fnc, fnc_der, fnc_hess
     #if hessfn is true fnc_hess1 gives explicit hessian. Otherwise the hessian will be approximated, and fnc_hess1 contains a function that will return gradient
     #eps = 1e-5 - termination if relative improvement is less than eps
@@ -2540,44 +2540,44 @@ def SQP2(fnc, fnc_der, fnc_hess1, p, bounds, linesearch, args, t = 0, hessfn = F
     #maxit = 1e3 - termination if iterations are more than maxit
     #der_only indicates fnc_der only gives derivative
     #kwargs - any special arguments for linesearch need to be in kwargs
-    
-    if der_only: 
-        def fnc_objder(p, *args): 
+
+    if der_only:
+        def fnc_objder(p, *args):
             obj = fnc(p, *args)
             grad = fnc_der(p,*args)
-            
+
             return obj, grad
-    else: 
+    else:
         fnc_objder = fnc_der
-    
-    if hessfn: 
+
+    if hessfn:
         fnc_hess = fnc_hess1
-    else: 
+    else:
         def fnc_hess(p, args, curgrad, gradfn = fnc_hess1):
             hess = approx_hess(p,*args,gradfn = fnc_hess1,curgrad = curgrad)
             return hess
-            
+
     obj, grad = fnc_objder(p, *args) #objective and gradient
-#    hess = fnc_hess(p,*args, grad) #do it at top of loop 
+#    hess = fnc_hess(p,*args, grad) #do it at top of loop
     n_grad = np.linalg.norm(grad) #norm of gradient
     diff = 1 #checks reduction in objective (termination)
     iters = 1 #number of iterations (termination)
     totobjeval = 1 #keeps track of total objective and gradient evaluations
     totgradeval = 1
 #    tothesseval = 1
-    
-    past = [obj] #this is how we initialize the past. In this code, we will have special functions to handle the non-monotone, 
-    pastp = [p] #whereas before we were using watchdog which relied on some existing line search. 
-    
 
-    s = [1] #initialize BB scaling 
+    past = [obj] #this is how we initialize the past. In this code, we will have special functions to handle the non-monotone,
+    pastp = [p] #whereas before we were using watchdog which relied on some existing line search.
+
+
+    s = [1] #initialize BB scaling
     y = [1]
     cur = 1e-4 #very small regularization prevents singular matrix
     while diff > eps and n_grad > epsf and iters < maxit:
-        
+
 #        cur = cur*2
 #        print(obj)
-        #do the scaling type; either scale by norm of gradient, using BB scaling, or no scaling 
+        #do the scaling type; either scale by norm of gradient, using BB scaling, or no scaling
         hess = fnc_hess(p, args, grad) #get new hessian
         hess = hess + cur*np.identity(len(p)) #regularization
         safeguard = False
@@ -2588,30 +2588,30 @@ def SQP2(fnc, fnc_der, fnc_hess1, p, bounds, linesearch, args, t = 0, hessfn = F
         if dnorm >= hesshi*n_grad: #safeguards on hessian being poorly conditioned
             d = -grad
             safeguard = True
-        
-        elif np.matmul(-grad,d) <= hesslow*n_grad*dnorm: #safeguard on hessian not giving a descent direction 
+
+        elif np.matmul(-grad,d) <= hesslow*n_grad*dnorm: #safeguard on hessian not giving a descent direction
             d = -grad
             safeguard = True
 
 #        print(safeguard)
 #        if srch_type ==0 or iters ==1:  #scale by norm of gradient
-        if safeguard:  #BB scaling 
+        if safeguard:  #BB scaling
 #            cur= cur*1.5
 #            print('hi')
-            BBscaling = np.matmul(s,y)/np.matmul(y,y) #one possible scaling 
-#            BBscaling = np.matmul(s,s)/np.matmul(s,y) #this is the other possible scaling you can use 
-            if BBscaling < 0: 
+            BBscaling = np.matmul(s,y)/np.matmul(y,y) #one possible scaling
+#            BBscaling = np.matmul(s,s)/np.matmul(s,y) #this is the other possible scaling you can use
+            if BBscaling < 0:
                 BBscaling = BBhi
             elif BBscaling < BBlow:
                 BBscaling = BBlow
             elif BBscaling > BBhi:
                 BBscaling = BBhi
             d = BBscaling*d
-#        else: 
+#        else:
 #            cur = cur/1.5
         #otherwise, there will be no scaling and the search direction will simply be -grad
-        
-        if proj_type ==0: #each project first, then you won't have to project during line search 
+
+        if proj_type ==0: #each project first, then you won't have to project during line search
             d = projection(p+d,bounds)-p #search direction for the projected gradient
 
 
@@ -2621,32 +2621,32 @@ def SQP2(fnc, fnc_der, fnc_hess1, p, bounds, linesearch, args, t = 0, hessfn = F
             objn, gradn = fnc_objder(pn,*args)
             totobjeval += 1
             totgradeval +=1
-            
-        
-        
-        
-        s = pn-p #definition of s and y for barzilai borwein scaling #for safe guarding when needed 
+
+
+
+
+        s = pn-p #definition of s and y for barzilai borwein scaling #for safe guarding when needed
         y = gradn-grad
-            
-        #update iterations and current values 
-        iters += 1 
+
+        #update iterations and current values
+        iters += 1
         totobjeval += objeval
         totgradeval += gradeval
 #        tothesseval += 1
-        
+
         diff = abs(obj-objn)/obj #relative reduction in objective
         p = pn
         obj = objn
-        grad = gradn 
+        grad = gradn
         n_grad = np.linalg.norm(grad)
     #report reason for termination
     if n_grad <= epsf:
         exitmessage = 'Norm of gradient reduced to '+str(n_grad)
-    elif diff <= eps: 
+    elif diff <= eps:
         exitmessage = 'Relative reduction in objective is '+str(diff)
-    elif iters == maxit: 
+    elif iters == maxit:
         exitmessage = 'Reached '+str(maxit)+' iterations'
-    
+
     if obj > min(past):
         ind = np.argmin(past)
         obj = past[ind]
@@ -2662,7 +2662,7 @@ def SQP2(fnc, fnc_der, fnc_hess1, p, bounds, linesearch, args, t = 0, hessfn = F
     outdict['iter'] = iters
     outdict['hesseval'] = iters - 1
     out.append(outdict)
-    
+
     return out
 
 def projection(p, bounds):
@@ -2674,89 +2674,89 @@ def projection(p, bounds):
             p[i] = bounds[i][1]
     return p
 
-    
+
 def backtrack(p,d,obj,fnc,fnc_objder, grad, args, iters, bounds, *fargs, c1=1e-4, gamma = .5, proj_type = 0, maxLSiter = 40, **kwargs):
-    #deprecated; new backtrack2 uses interpolation with safeguarding and achieves better results. 
-    #initialization 
-    #attempts to satisfy a sufficient decrease condition by considering progressively shorter step lengths. 
+    #deprecated; new backtrack2 uses interpolation with safeguarding and achieves better results.
+    #initialization
+    #attempts to satisfy a sufficient decrease condition by considering progressively shorter step lengths.
     #c1 controls how much of a decrease constitutes a "sufficient" decrease. typical value is c1 = 1e-4
-    #gamma controls how much to shorten the step length by. typicaly value is gamma = .5 
-    #for calibration problem specifically I have found that using a smaller value like gamma = .2 seems to work better. 
+    #gamma controls how much to shorten the step length by. typicaly value is gamma = .5
+    #for calibration problem specifically I have found that using a smaller value like gamma = .2 seems to work better.
     if proj_type ==0: #projection happens in optimization algorithm
         pn = p + d
         da = d
-    else: #need to project every iteration in line search 
-        pn = projection(p+d,bounds) 
-        da = pn-p 
-    
+    else: #need to project every iteration in line search
+        pn = projection(p+d,bounds)
+        da = pn-p
+
     dirder = np.matmul(grad,da) #directional derivative
     cdirder = c1*dirder
     objn = fnc(pn,*args)
     objeval = 1
-    gradeval = 0 
+    gradeval = 0
     #backtracking procedure
     while objn > obj + cdirder: #if sufficient decrease condition is not met
         d = gamma*d
-        #get new step if proj_type == 0 
+        #get new step if proj_type == 0
         if proj_type ==0:
             cdirder = gamma*cdirder
             pn = p+d
-        else: 
+        else:
             pn = projection(p+d,bounds) #project onto feasible set
             da = pn - p #new search direction
             dirder = np.matmul(grad,da) #directional derivative
             cdirder = c1*dirder #for sufficient decrease condition
-            
-        
+
+
         objn = fnc(pn,*args)
         objeval += 1
-        
-        #need a way to terminate the linesearch if needed. 
-        if objeval > maxLSiter: 
+
+        #need a way to terminate the linesearch if needed.
+        if objeval > maxLSiter:
             print('linesearch failed to find a step of sufficient decrease')
-            if objn >= obj: #if current objective is worse than original 
-                pn = p #return original 
+            if objn >= obj: #if current objective is worse than original
+                pn = p #return original
                 objn = obj
             break
-    
+
     gradn = [None]
-    hessn = [None]  
-    
+    hessn = [None]
+
     return pn, objn, gradn, hessn, objeval, gradeval
 
 def backtrack2(p,d,obj,fnc,fnc_objder, grad, args, iters, bounds, *fargs, c1=1e-4, alo = .1, ahi = .9, gamma = .5, proj_type = 0, maxLSiter = 40, **kwargs):
     #this is the current backtracking algorithm, it uses interpolation to define steps.
-    #really the only feature still missing is the ability to terminate the search when we are at the desired accuracy. This isn't really an issue for 
-    #the calibration problem since we don't need machine epsilon precision, so we'll always terminate in the main algorithm and not ever in the line search. 
-    #alo and ahi are safeguarding parameters. default .1 and .9. gamma = .5 is the step size used when the interpolation gives a result outside of the safeguards. 
-    #can handle either projection in the algorithm, or projection inside this algorithm at each linesearch step. 
-    
-    #initialization 
-    #attempts to satisfy a sufficient decrease condition by considering progressively shorter step lengths. 
+    #really the only feature still missing is the ability to terminate the search when we are at the desired accuracy. This isn't really an issue for
+    #the calibration problem since we don't need machine epsilon precision, so we'll always terminate in the main algorithm and not ever in the line search.
+    #alo and ahi are safeguarding parameters. default .1 and .9. gamma = .5 is the step size used when the interpolation gives a result outside of the safeguards.
+    #can handle either projection in the algorithm, or projection inside this algorithm at each linesearch step.
+
+    #initialization
+    #attempts to satisfy a sufficient decrease condition by considering progressively shorter step lengths.
     #c1 controls how much of a decrease constitutes a "sufficient" decrease. typical value is c1 = 1e-4
-    #gamma controls how much to shorten the step length by. typicaly value is gamma = .5 
-    #for calibration problem specifically I have found that using a smaller value like gamma = .2 seems to work better. 
+    #gamma controls how much to shorten the step length by. typicaly value is gamma = .5
+    #for calibration problem specifically I have found that using a smaller value like gamma = .2 seems to work better.
     if proj_type ==0: #projection happens in optimization algorithm
         pn = p + d
         da = d
-    else: #need to project every iteration in line search 
-        pn = projection(p+d,bounds) 
-        da = pn-p 
-    
+    else: #need to project every iteration in line search
+        pn = projection(p+d,bounds)
+        da = pn-p
+
     dirder = np.matmul(grad,da) #directional derivative
 #    cdirder = c1*dirder
     objn = fnc(pn,*args)
     objeval = 1
-    gradeval = 0 
+    gradeval = 0
     a = 1
     #backtracking procedure
     while objn > obj + c1*dirder: #if sufficient decrease condition is not met
         #gamma is the current modifier to the step length
         #a is the total modifier
-        #dirder is the current directional derivative times the step length. 
-        #objb is the previous objective value, objn is the current objective value 
+        #dirder is the current directional derivative times the step length.
+        #objb is the previous objective value, objn is the current objective value
         gamman = -dirder*a/(2*(objn-obj-dirder)) #quadratic interpolation
-        #safeguards 
+        #safeguards
 #        if gamman < alo: #this is one way to safeguard
 #            gamman = alo
 #        elif gamman > ahi:
@@ -2764,45 +2764,45 @@ def backtrack2(p,d,obj,fnc,fnc_objder, grad, args, iters, bounds, *fargs, c1=1e-
         if gamman < alo or gamman > ahi:  #this is how the paper recommends to safeguard
             gamman = gamma
         a = gamman*a #modify current step length
-        d = gamman*d #modify current direction 
-        #get new step if proj_type == 0 
+        d = gamman*d #modify current direction
+        #get new step if proj_type == 0
         if proj_type ==0:
             dirder = gamman*dirder
             pn = p+d
-        else: 
+        else:
             pn = projection(p+d,bounds) #project onto feasible set
             da = pn - p #new search direction
             dirder = np.matmul(grad,da) #directional derivative
-        
+
         objn = fnc(pn,*args)
         objeval += 1
-        
-        #need a way to terminate the linesearch if needed. 
-        if objeval > maxLSiter: 
+
+        #need a way to terminate the linesearch if needed.
+        if objeval > maxLSiter:
             print('linesearch failed to find a step of sufficient decrease')
-            if objn >= obj: #if current objective is worse than original 
-                pn = p #return original 
+            if objn >= obj: #if current objective is worse than original
+                pn = p #return original
                 objn = obj
             break
-        
-        
-    
+
+
+
     gradn = [None]
-    hessn = [None]  
-    
+    hessn = [None]
+
     return pn, objn, gradn, hessn, objeval, gradeval
 
 def nmbacktrack(p,d,obj,fnc,fnc_objder, grad, args, iters, bounds, past, pastp, t, *fargs, c1=1e-4, alo = .1, ahi = .9, gamma = .5, proj_type = 0, maxLSiter = 40, **kwargs):
-    #non monotone backtracking with interpolation and safeguards; this is to be used with the pgrad_descent2 
-    #attempts to satisfy a sufficient decrease condition by considering progressively shorter step lengths. 
+    #non monotone backtracking with interpolation and safeguards; this is to be used with the pgrad_descent2
+    #attempts to satisfy a sufficient decrease condition by considering progressively shorter step lengths.
     #c1 controls how much of a decrease constitutes a "sufficient" decrease. typical value is c1 = 1e-4
-    #gamma controls how much to shorten the step length by. typicaly value is gamma = .5 
-    #for calibration problem specifically I have found that using a smaller value like gamma = .2 seems to work better. 
-    
+    #gamma controls how much to shorten the step length by. typicaly value is gamma = .5
+    #for calibration problem specifically I have found that using a smaller value like gamma = .2 seems to work better.
+
     ##inputs
-    #p - parameters for initial guess 
+    #p - parameters for initial guess
     #d - search direction (may not be same as gradient due to projection)
-    #obj - objective function value 
+    #obj - objective function value
     #fnc - function to evalate objective
     #fnc_objder - function to evaluate both objective and gradient
     #grad - gradient of objective w.r.t. current parameters
@@ -2813,167 +2813,167 @@ def nmbacktrack(p,d,obj,fnc,fnc_objder, grad, args, iters, bounds, past, pastp, 
     #pastp - past values of the parameters
     #t - maximum number of iterations we can go without a sufficient decrease - if this is zero then this is just regular backtracking
     #*fargs  - any extra arguments that may be passed in (this is for other routines since they might have different inputs; in this code it is not used)
-    #c1 - parameter controls sufficient decrease, if c1 is smaller, required decrease is also smaller. typically 1e-4 is used 
+    #c1 - parameter controls sufficient decrease, if c1 is smaller, required decrease is also smaller. typically 1e-4 is used
     #alo - minimum safeguard for interpolated step size, can usually leave as .1
-    #ahi - maximum safeguard for interpolated step size, can usually leave as .9 
+    #ahi - maximum safeguard for interpolated step size, can usually leave as .9
     #gamma - this is the modification to the step size in case the interpolation fails (typically left as .5)
     #proj_type = 0 - if proj type is zero we project every iteration in optimization algorithm (project search direction), otherwise everytime we get a new step size we will project (proj_type = 1)
-    #maxLSiter = 40 - maximum number of iterations of linesearch algorithm before we return the best found value, typically this should find the step in ~2-3 iterations and if you get past 10 or 20 
+    #maxLSiter = 40 - maximum number of iterations of linesearch algorithm before we return the best found value, typically this should find the step in ~2-3 iterations and if you get past 10 or 20
     #it might mean the search direction has a problem
-    
+
     #outputs
     #pn - new parameter values
     #objn - new objective value
     #gradn - new gradient value (false if not computed)
     #hessn - new hessian value (false if not computed)
-    #objeval - number of objective evaluations 
+    #objeval - number of objective evaluations
     #gradeval - number of gradient evaluations
-    
-    #initialization 
+
+    #initialization
     if proj_type ==0: #projection happens in optimization algorithm
         pn = p + d
         da = d
-    else: #need to project every iteration in line search 
-        pn = projection(p+d,bounds) 
-        da = pn-p 
-    
+    else: #need to project every iteration in line search
+        pn = projection(p+d,bounds)
+        da = pn-p
+
     dirder = np.matmul(grad,da) #directional derivative
 #    cdirder = c1*dirder
     objn = fnc(pn,*args)
     objeval = 1
-    gradeval = 0 
+    gradeval = 0
     a = 1
     if iters < t:
         maxobj = obj
-    else: 
+    else:
         maxobj = max(past)
     #backtracking procedure
     while objn > maxobj + c1*dirder: #if sufficient decrease condition is not met
         #gamma is the current modifier to the step length
         #a is the total modifier
-        #dirder is the current directional derivative times the step length. 
-        #objb is the previous objective value, objn is the current objective value 
+        #dirder is the current directional derivative times the step length.
+        #objb is the previous objective value, objn is the current objective value
         gamman = -dirder*a/(2*(objn-obj-dirder)) #quadratic interpolation
-        #safeguards 
+        #safeguards
 #        if gamman < alo: #this is one way to safeguard
 #            gamman = alo
 #        elif gamman > ahi:
 #            gamman = ahi
         if gamman < alo or gamman > ahi:  #this is how the paper recommends to safeguard
-#        if True: #deubgging purposes 
+#        if True: #deubgging purposes
             gamman = gamma
         a = gamman*a #modify current step length
-        d = gamman*d #modify current direction 
-        #get new step if proj_type == 0 
+        d = gamman*d #modify current direction
+        #get new step if proj_type == 0
         if proj_type ==0:
             dirder = gamman*dirder
             pn = p+d
-        else: 
+        else:
             pn = projection(p+d,bounds) #project onto feasible set
             da = pn - p #new search direction
             dirder = np.matmul(grad,da) #directional derivative
-        
+
         objn = fnc(pn,*args)
         objeval += 1
-        
-        #need a way to terminate the linesearch if needed. 
-        if objeval > maxLSiter: 
+
+        #need a way to terminate the linesearch if needed.
+        if objeval > maxLSiter:
             print('linesearch failed to find a step of sufficient decrease')
-            if objn >= obj: #if current objective is worse than original 
-                pn = p #return original 
+            if objn >= obj: #if current objective is worse than original
+                pn = p #return original
                 objn = obj
             break
-        
-        
+
+
     if iters < t:
         past.append(objn) #add the value to the past
         pastp.append(pn)
-    else: 
+    else:
         past.pop(0) #remove the first value
-        past.append(objn) #add the new value at the end 
+        past.append(objn) #add the new value at the end
         pastp.pop(0)
         pastp.append(pn)
     gradn = [None]
-    hessn = [None]  
-    
+    hessn = [None]
+
     return pn, objn, gradn, hessn, objeval, gradeval
 
 def fixedstep(p,d,obj,fnc,fnc_objder,grad,args,iters, bounds, *fargs,c1 = 5e-4,c2 = 1, **kwargs):
-    #fixed step length for line search. 
-    #c1 is the initial step on the first iteration. 
+    #fixed step length for line search.
+    #c1 is the initial step on the first iteration.
     #the k^th step is c1 * k**c2
-    #default values of c1 = 5e-4, c2 = 1. 
+    #default values of c1 = 5e-4, c2 = 1.
     step = c1*(iters**-c2) #fixed step size
     pn = p +step*d #definition of new solution
     pn = projection(pn,bounds) #project onto the feasible region
     fff = [None]
-    
+
     return pn, fff,fff,fff, 0, 0
-    
+
 def weakwolfe(p,d,obj,fnc,fnc_objder, grad, args, iters, bounds, *fargs, c1=1e-4, c2 = .5, eps1 = 1e-1, eps2 = 1e-6, proj_type = 0, maxLSiter = 40, **kwargs):
-    #currently deprecated; use weakwolfe2 it has slightly better performance. 
-    #fulfills either strong or weak wolfe line search. 
+    #currently deprecated; use weakwolfe2 it has slightly better performance.
+    #fulfills either strong or weak wolfe line search.
     ######################
-    #you just need to change one line in this program and one line in zoom and you can change this between strong wolfe 
+    #you just need to change one line in this program and one line in zoom and you can change this between strong wolfe
     #and weak wolfe. I think strong wolfe tends to be slightly better
     ########################
-    
+
     #for trajectory calibration though it seems backtracking LS works better than using the wolfe conditions, since here the gradient is relatively expensive compared to obj. (even using adjoint)
-    
+
     #c1 - for sufficient decrease condition; lower = easier to accept
-    #c2 - for curvature condition ; #higher = easier to accept. 
+    #c2 - for curvature condition ; #higher = easier to accept.
     #require 0 < c1 < c2 < 1; typically values are 1e-4, .5
-    
+
     #eps1 - initial guess for the steplength ai; should choose something small, like 1e-2
     #eps2 - termination length for zoom function (accuracy for final step length); should choose something small
-    
+
     #proj_type = 0 - either we project before the linesearch (0), or we project every iteration in linesearch (1)
-    #maxLSiter = 40 - number of iterations we will attempt 
-    
+    #maxLSiter = 40 - number of iterations we will attempt
+
     #aib and amax specify the range of step lengths we will consider; defined between [0,1]
-    aib = 0 
+    aib = 0
     amax = 1
     ai = eps1 #initial guess for step length
-    objb = obj #initialize previous objective value 
-    
-    
-    #linedir(a) will return the trial point and search direction for step length a depending on the chosen projection strategy 
-    #accepts step length a, 
+    objb = obj #initialize previous objective value
+
+
+    #linedir(a) will return the trial point and search direction for step length a depending on the chosen projection strategy
+    #accepts step length a,
     #returns new point pn, which is in direction da/a, and has directional derivative dirdera/a
-    if proj_type ==0: 
+    if proj_type ==0:
         dirder = np.matmul(grad,d)
         def linedir(a, p=p,d = d, bounds=bounds, dirder = dirder):
-            pn = p + a*d 
+            pn = p + a*d
             da = a*d
             dirdera = a*dirder
             return pn, da, dirdera
-    else: 
+    else:
         def linedir(a, p=p, d=d,  bounds=bounds, grad = grad):
             pn = projection(p+a*d,bounds)
             da = pn-p
             dirdera = np.matmul(grad,da)
             return pn, da, dirdera
-    
-    objdereval = 0 #count number of objective and gradient evaluations; they are always the same for this strategy. 
+
+    objdereval = 0 #count number of objective and gradient evaluations; they are always the same for this strategy.
     for i in range(maxLSiter): #up to maxLSiter to find the bounds on a
-        pn, da, dirdera = linedir(ai) #new point for the line search 
-        objn, gradn = fnc_objder(pn,*args) #objective and gradient for the new point 
+        pn, da, dirdera = linedir(ai) #new point for the line search
+        objn, gradn = fnc_objder(pn,*args) #objective and gradient for the new point
         objdereval += 1
-        
-        if objn > obj+c1*dirdera or (objn >= objb and objdereval > 1): #if sufficient decrease is not met then ai must be an upper bound on a good step length 
-            out = zoom(aib,ai, eps2, linedir, fnc_objder,args, p,grad, obj, objb, objdereval, c1, c2) #put bounds into zoom to find good step length 
+
+        if objn > obj+c1*dirdera or (objn >= objb and objdereval > 1): #if sufficient decrease is not met then ai must be an upper bound on a good step length
+            out = zoom(aib,ai, eps2, linedir, fnc_objder,args, p,grad, obj, objb, objdereval, c1, c2) #put bounds into zoom to find good step length
             return out
-            
+
         ddirder = np.matmul(gradn,da)/ai #directional derivative at new point
-#        if ddirder >= c2*dirdera/ai: #if weak wolfe conditions are met 
-        if abs(ddirder) <= -c2*dirdera/ai: #if strong wolfe conditions are met 
+#        if ddirder >= c2*dirdera/ai: #if weak wolfe conditions are met
+        if abs(ddirder) <= -c2*dirdera/ai: #if strong wolfe conditions are met
 
             return pn, objn, gradn, [None], objdereval, objdereval #we are done
-            
-        if ddirder >= 0:  #I don't really understand this one to be honest. 
-            out = zoom(ai,aib, eps2, linedir, fnc_objder,args, p,grad, obj, objn, objdereval, c1 , c2) #put bounds into zoom to find good step length 
+
+        if ddirder >= 0:  #I don't really understand this one to be honest.
+            out = zoom(ai,aib, eps2, linedir, fnc_objder,args, p,grad, obj, objn, objdereval, c1 , c2) #put bounds into zoom to find good step length
             return out
-        
+
         if i == maxLSiter-1:
             print('failed to find suitable range for stepsize')
             if objn >= obj:
@@ -2981,162 +2981,162 @@ def weakwolfe(p,d,obj,fnc,fnc_objder, grad, args, iters, bounds, *fargs, c1=1e-4
                 objn = obj
                 gradn = grad
             break
-        
-        #interpolate to get next point 
+
+        #interpolate to get next point
         if objdereval ==1: #quadratic interpolation first time
             aif = -dirdera*ai/(2*(objn-obj-dirdera)) #next ai to check
-        else: 
+        else:
             d1 = ddirderb+ddirder-3*((objb-objn)/(aib-ai))
             d2 = np.sign(ai-aib)*(d1**2-ddirderb*ddirder)**.5
             aif = ai-(ai-aib)*((ddirder+d2-d1)/(ddirder-ddirderb+2*d2))
-            
-        if aif < ai or aif < 0 or np.isnan(aif): #if interpolation gives something screwy 
+
+        if aif < ai or aif < 0 or np.isnan(aif): #if interpolation gives something screwy
             aif = 2*ai #increase by fixed amount
-        aif = min(aif,amax) #next step length must be within range 
-        
-#        #other strategy 
+        aif = min(aif,amax) #next step length must be within range
+
+#        #other strategy
 #        aif = 2* ai
-#        if aif > amax: 
+#        if aif > amax:
 #            out = zoom(0,amax, eps2, linedir, fnc_objder,args, p,grad, obj, obj, objdereval, c1 , c2)
-#            return out 
-            
+#            return out
+
         #progress iteration
-        aib = ai 
-        ai = aif 
+        aib = ai
+        ai = aif
         ddirderb = ddirder
         objb = objn
-        
-        
-    return pn, objn, gradn, [None], objdereval, objdereval #shouldn't reach here ideally; should terminate due to an if statement 
 
-def zoom(alo, ahi, eps2, linedir, fnc_objder, args, p,grad,obj, objlo, objdereval, c1, c2 ): 
+
+    return pn, objn, gradn, [None], objdereval, objdereval #shouldn't reach here ideally; should terminate due to an if statement
+
+def zoom(alo, ahi, eps2, linedir, fnc_objder, args, p,grad,obj, objlo, objdereval, c1, c2 ):
     #most recent zoom function is zoom3
-    if abs(ahi-alo) <= eps2: #special case where bounds are already tight enough 
-        aj = (alo+ahi)/2 #bisection 
+    if abs(ahi-alo) <= eps2: #special case where bounds are already tight enough
+        aj = (alo+ahi)/2 #bisection
         pn, da, dirdera = linedir(aj) #get new point, new direction, new directional derivative
-        objn, gradn = fnc_objder(pn,*args) #evaluate new point 
-        objdereval +=1 
+        objn, gradn = fnc_objder(pn,*args) #evaluate new point
+        objdereval +=1
         return pn, objn, gradn, [None], objdereval, objdereval
-    
-    #try modifying so if something satisfies sufficient decrease we will remember it 
+
+    #try modifying so if something satisfies sufficient decrease we will remember it
     count = 0
-    best = (p, obj, grad) #initialize best solution to return if can't satisfy curvature condition 
-    while abs(ahi-alo) > eps2: #iterate until convergence to good step length 
+    best = (p, obj, grad) #initialize best solution to return if can't satisfy curvature condition
+    while abs(ahi-alo) > eps2: #iterate until convergence to good step length
         if count ==0:
             aj = (alo+ahi)/2
         count += 1
         pn, da, dirdera = linedir(aj)
         objn, gradn = fnc_objder(pn,*args)
-        objdereval +=1 
-        
-        ddirder = np.matmul(gradn,da)/aj
-        if objn > obj + c1*dirdera or objn >= objlo: #if sufficient decrease not met lower the upper bound 
-            ahi = aj
-        else: 
-#            if ddirder >= c2*dirdera/aj: #if weak wolfe conditions are met return the solution 
-            if abs(ddirder) <= -c2*dirdera/aj: #if stronge wolfe conditions are met 
+        objdereval +=1
 
-                return pn, objn, gradn, [None], objdereval, objdereval 
-            if objn < best[1]: #keep track of best solution which only satisfies sufficient decrease #can get rid of this 
+        ddirder = np.matmul(gradn,da)/aj
+        if objn > obj + c1*dirdera or objn >= objlo: #if sufficient decrease not met lower the upper bound
+            ahi = aj
+        else:
+#            if ddirder >= c2*dirdera/aj: #if weak wolfe conditions are met return the solution
+            if abs(ddirder) <= -c2*dirdera/aj: #if stronge wolfe conditions are met
+
+                return pn, objn, gradn, [None], objdereval, objdereval
+            if objn < best[1]: #keep track of best solution which only satisfies sufficient decrease #can get rid of this
                 best = (pn, objn, gradn)
-            if ddirder*(ahi-alo) >= 0: #otherwise do this 
+            if ddirder*(ahi-alo) >= 0: #otherwise do this
                 ahi = alo
-            alo = aj #pretty sure this is supposed to be here. 
-        
+            alo = aj #pretty sure this is supposed to be here.
+
         if count ==1: #quadratic interpolation first time
             aif = -dirdera*aj/(2*(objn-obj-dirdera)) #next ai to check
-        else: 
+        else:
             d1 = ddirderb+ddirder-3*((objb-objn)/(aib-aj))
             d2 = np.sign(aj-aib)*(d1**2-ddirderb*ddirder)**.5
             aif = aj-(aj-aib)*((ddirder+d2-d1)/(ddirder-ddirderb+2*d2))
-            
+
         if aif < alo or aif > ahi or np.isnan(aif): #if interpolation gives something screwy (this happens occasionally so need safeguard)
             aif = (alo+ahi)/2 # use bisection
         aib = aj
         aj = aif
         ddirderb = ddirder
         objb = objn
-        
-            
+
+
     print('failed to find a stepsize satisfying weak wolfe conditions')
     if objn < best[1]: #if current step is better than the best #y
-        best = (pn, objn, gradn) 
-    
+        best = (pn, objn, gradn)
+
     return best[0], best[1], best[2], [None], objdereval, objdereval
 
 def weakwolfe2(p,d,obj,fnc,fnc_objder, grad, args, iters, bounds, *fargs, c1=1e-4, c2 = .5, eps1 = 1e-1, eps2 = 1e-6, proj_type = 0, maxLSiter = 20, **kwargs):
     #fulfills either strong or weak wolfe line search. it's currently used as strong wolfe
-    #compared to the original wolfe search, this one uses a (safeguarded) quadratic interpolation to give the first trial step for the zoom function; previously this was done using bisection. 
+    #compared to the original wolfe search, this one uses a (safeguarded) quadratic interpolation to give the first trial step for the zoom function; previously this was done using bisection.
     ######################
-    #you just need to change one line in this program and one line in zoom and you can change this between strong wolfe 
+    #you just need to change one line in this program and one line in zoom and you can change this between strong wolfe
     #and weak wolfe. I think strong wolfe tends to be slightly better
     ########################
-    
+
     #for trajectory calibration though it seems backtracking LS works better than using the wolfe conditions, since here the gradient is relatively expensive compared to obj. (even using adjoint)
-    #in general we're going to be constrained by the budget, so even though wolfe can give us better steps, we'd rather do more iterations with slightly worse steps at each iteration. 
+    #in general we're going to be constrained by the budget, so even though wolfe can give us better steps, we'd rather do more iterations with slightly worse steps at each iteration.
     #note that the wolfe linesearches require the gradient to be evaluated at every trial step length, whereas backtrack/armijo only requires the objective to be evaluated
-    
+
     #c1 - for sufficient decrease condition; lower = easier to accept
-    #c2 - for curvature condition ; #higher = easier to accept. 
-    #require 0 < c1 < c2 < 1; typically values are 1e-4, .5 or 1e-4, .9. stronger curvature condition c2 = better steps, but more evaluations 
-    
+    #c2 - for curvature condition ; #higher = easier to accept.
+    #require 0 < c1 < c2 < 1; typically values are 1e-4, .5 or 1e-4, .9. stronger curvature condition c2 = better steps, but more evaluations
+
     #eps1 - initial guess for the steplength ai; should choose something small, like 1e-2
     #eps2 - termination length for zoom function (accuracy for final step length); should choose something small
-    
+
     #proj_type = 0 - either we project before the linesearch (0), or we project every iteration in linesearch (1)
-    #maxLSiter = 40 - number of iterations we will attempt 
-    
+    #maxLSiter = 40 - number of iterations we will attempt
+
     #aib and amax specify the range of step lengths we will consider; defined between [0,1]
-    aib = 0 
+    aib = 0
     amax = 1
     ai = eps1 #initial guess for step length
-    objb = obj #initialize previous objective value 
-#    dirderb = 0 #initialize directional derivative w.r.t. aib 
-    
-    #linedir(a) will return the trial point and search direction for step length a depending on the chosen projection strategy 
-    #accepts step length a, 
+    objb = obj #initialize previous objective value
+#    dirderb = 0 #initialize directional derivative w.r.t. aib
+
+    #linedir(a) will return the trial point and search direction for step length a depending on the chosen projection strategy
+    #accepts step length a,
     #returns new point pn, which is in direction da/a, and has directional derivative dirdera/a
-    if proj_type ==0: 
+    if proj_type ==0:
         dirder = np.matmul(grad,d)
         def linedir(a, p=p,d = d, bounds=bounds, dirder = dirder):
-            pn = p + a*d 
+            pn = p + a*d
             da = a*d
             dirdera = a*dirder
             return pn, da, dirdera
-    else: 
+    else:
         def linedir(a, p=p, d=d,  bounds=bounds, grad = grad):
             pn = projection(p+a*d,bounds)
             da = pn-p
             dirdera = np.matmul(grad,da)
             return pn, da, dirdera
-    
-    objdereval = 0 #count number of objective and gradient evaluations; they are always the same for this strategy. 
 
-        
+    objdereval = 0 #count number of objective and gradient evaluations; they are always the same for this strategy.
+
+
     for i in range(maxLSiter): #up to maxLSiter to find the bounds on a
-        pn, da, dirdera = linedir(ai) #new point for the line search 
-        objn, gradn = fnc_objder(pn,*args) #objective and gradient for the new point 
+        pn, da, dirdera = linedir(ai) #new point for the line search
+        objn, gradn = fnc_objder(pn,*args) #objective and gradient for the new point
         objdereval += 1
-        
-        if objn > obj+c1*dirdera or (objn >= objb and objdereval > 1): #if sufficient decrease is not met then ai must be an upper bound on a good step length 
+
+        if objn > obj+c1*dirdera or (objn >= objb and objdereval > 1): #if sufficient decrease is not met then ai must be an upper bound on a good step length
 
             atrial = -dirdera*ai/(2*(objn-obj-dirdera))
-            out = zoom3(aib,ai, eps2, linedir, fnc_objder,args, p,grad, obj, objb, objdereval, c1, c2,atrial) #put bounds into zoom to find good step length 
-            
+            out = zoom3(aib,ai, eps2, linedir, fnc_objder,args, p,grad, obj, objb, objdereval, c1, c2,atrial) #put bounds into zoom to find good step length
+
             return out
-            
+
         ddirder = np.matmul(gradn,da)/ai #directional derivative at new point
-#        if ddirder >= c2*dirdera/ai: #if weak wolfe conditions are met 
-        if abs(ddirder) <= -c2*dirdera/ai: #if strong wolfe conditions are met 
+#        if ddirder >= c2*dirdera/ai: #if weak wolfe conditions are met
+        if abs(ddirder) <= -c2*dirdera/ai: #if strong wolfe conditions are met
 
             return pn, objn, gradn, [None], objdereval, objdereval #we are done
-            
-        if ddirder >= 0:  #if the directional derivative is positive it means we went too far; therefore we found an upperbound  
+
+        if ddirder >= 0:  #if the directional derivative is positive it means we went too far; therefore we found an upperbound
 
             atrial = -dirdera*ai/(2*(objn-obj-dirdera))
-            out = zoom3(ai,aib, eps2, linedir, fnc_objder,args, p,grad, obj, objn, objdereval, c1 , c2, atrial) #put bounds into zoom to find good step length 
+            out = zoom3(ai,aib, eps2, linedir, fnc_objder,args, p,grad, obj, objn, objdereval, c1 , c2, atrial) #put bounds into zoom to find good step length
             return out
-        
+
         if i == maxLSiter-1:
             print('failed to find suitable range for stepsize')
             if objn >= obj:
@@ -3144,182 +3144,182 @@ def weakwolfe2(p,d,obj,fnc,fnc_objder, grad, args, iters, bounds, *fargs, c1=1e-
                 objn = obj
                 gradn = grad
             break
-        
-        #interpolate to get next point 
+
+        #interpolate to get next point
         if objdereval ==1: #quadratic interpolation first time
             aif = -dirdera*ai/(2*(objn-obj-dirdera)) #next ai to check
-        else: 
+        else:
             d1 = ddirderb+ddirder-3*((objb-objn)/(aib-ai))
             d2 = np.sign(ai-aib)*(d1**2-ddirderb*ddirder)**.5
             aif = ai-(ai-aib)*((ddirder+d2-d1)/(ddirder-ddirderb+2*d2))
-            
-        if aif < ai or aif < 0 or np.isnan(aif): #if interpolation gives something screwy 
+
+        if aif < ai or aif < 0 or np.isnan(aif): #if interpolation gives something screwy
             aif = 2*ai #increase by fixed amount
-        aif = min(aif,amax) #next step length must be within range 
-        
-#        #other strategy 
+        aif = min(aif,amax) #next step length must be within range
+
+#        #other strategy
 #        aif = 2* ai
-#        if aif > amax: 
+#        if aif > amax:
 #            out = zoom(0,amax, eps2, linedir, fnc_objder,args, p,grad, obj, obj, objdereval, c1 , c2)
-#            return out 
-            
+#            return out
+
         #progress iteration
-        aib = ai 
-        ai = aif 
+        aib = ai
+        ai = aif
         ddirderb = ddirder
         objb = objn
-#        dirderb = dirdera #we potentially need this for the new trial step for zoom 
-        
-        
-    return pn, objn, gradn, [None], objdereval, objdereval #shouldn't reach here ideally; should terminate due to an if statement 
+#        dirderb = dirdera #we potentially need this for the new trial step for zoom
 
-def zoom3(alo, ahi, eps2, linedir, fnc_objder, args, p,grad,obj, objlo, objdereval, c1, c2, atrial ): 
-    #most recent zoom function corresponding to weakwolfe2. 
-    if abs(ahi-alo) <= eps2: #special case where bounds are already tight enough 
-        aj = (alo+ahi)/2 #bisection 
+
+    return pn, objn, gradn, [None], objdereval, objdereval #shouldn't reach here ideally; should terminate due to an if statement
+
+def zoom3(alo, ahi, eps2, linedir, fnc_objder, args, p,grad,obj, objlo, objdereval, c1, c2, atrial ):
+    #most recent zoom function corresponding to weakwolfe2.
+    if abs(ahi-alo) <= eps2: #special case where bounds are already tight enough
+        aj = (alo+ahi)/2 #bisection
         pn, da, dirdera = linedir(aj) #get new point, new direction, new directional derivative
-        objn, gradn = fnc_objder(pn,*args) #evaluate new point 
-        objdereval +=1 
+        objn, gradn = fnc_objder(pn,*args) #evaluate new point
+        objdereval +=1
         return pn, objn, gradn, [None], objdereval, objdereval
-    
-    #try modifying so if something satisfies sufficient decrease we will remember it 
+
+    #try modifying so if something satisfies sufficient decrease we will remember it
     count = 0
-    best = (p, obj, grad) #initialize best solution to return if can't satisfy curvature condition 
-    
+    best = (p, obj, grad) #initialize best solution to return if can't satisfy curvature condition
+
     if atrial <= alo or atrial >= ahi or np.isnan(atrial):
 #        print('safeguard')
         aj = (alo+ahi)/2
-    else: 
+    else:
 #        print('not safeguard')
         aj = atrial
-    
-    while abs(ahi-alo) > eps2: #iterate until convergence to good step length 
+
+    while abs(ahi-alo) > eps2: #iterate until convergence to good step length
         pn, da, dirdera = linedir(aj)
         objn, gradn = fnc_objder(pn,*args)
-        objdereval +=1 
+        objdereval +=1
         count += 1
-        
-        ddirder = np.matmul(gradn,da)/aj
-        if objn > obj + c1*dirdera or objn >= objlo: #if sufficient decrease not met lower the upper bound 
-            ahi = aj
-        else: 
-#            if ddirder >= c2*dirdera/aj: #if weak wolfe conditions are met return the solution 
-            if abs(ddirder) <= -c2*dirdera/aj: #if stronge wolfe conditions are met 
 
-                return pn, objn, gradn, [None], objdereval, objdereval 
-            if objn < best[1]: #keep track of best solution which only satisfies sufficient decrease #can get rid of this 
+        ddirder = np.matmul(gradn,da)/aj
+        if objn > obj + c1*dirdera or objn >= objlo: #if sufficient decrease not met lower the upper bound
+            ahi = aj
+        else:
+#            if ddirder >= c2*dirdera/aj: #if weak wolfe conditions are met return the solution
+            if abs(ddirder) <= -c2*dirdera/aj: #if stronge wolfe conditions are met
+
+                return pn, objn, gradn, [None], objdereval, objdereval
+            if objn < best[1]: #keep track of best solution which only satisfies sufficient decrease #can get rid of this
                 best = (pn, objn, gradn)
-            if ddirder*(ahi-alo) >= 0: #otherwise do this 
+            if ddirder*(ahi-alo) >= 0: #otherwise do this
                 ahi = alo
-            alo = aj #pretty sure this is supposed to be here. 
-        
+            alo = aj #pretty sure this is supposed to be here.
+
         if count ==1: #quadratic interpolation first time
             aif = -dirdera*aj/(2*(objn-obj-dirdera)) #next ai to check
-        else: 
+        else:
             d1 = ddirderb+ddirder-3*((objb-objn)/(aib-aj))
             d2 = np.sign(aj-aib)*(d1**2-ddirderb*ddirder)**.5
             aif = aj-(aj-aib)*((ddirder+d2-d1)/(ddirder-ddirderb+2*d2))
-            
+
         if aif < alo or aif > ahi or np.isnan(aif): #if interpolation gives something screwy (this happens occasionally so need safeguard)
             aif = (alo+ahi)/2 # use bisection
         aib = aj
         aj = aif
         ddirderb = ddirder
         objb = objn
-        
-            
+
+
     print('failed to find a stepsize satisfying weak wolfe conditions')
     if objn < best[1]: #if current step is better than the best #y
-        best = (pn, objn, gradn) 
-    
+        best = (pn, objn, gradn)
+
     return best[0], best[1], best[2], [None], objdereval, objdereval
 
 def nmweakwolfe(p,d,obj,fnc,fnc_objder, grad, args, iters, bounds, past, pastp, t, *fargs, c1=1e-4, c2 = .5, eps1 = 1e-1, eps2 = 1e-6, proj_type = 0, maxLSiter = 40, **kwargs):
     #fulfills either strong or weak wolfe line search. it's currently used as strong wolfe
-    #compared to the original wolfe search, this one uses a (safeguarded) quadratic interpolation to give the first trial step for the zoom function; previously this was done using bisection. 
+    #compared to the original wolfe search, this one uses a (safeguarded) quadratic interpolation to give the first trial step for the zoom function; previously this was done using bisection.
     ######################
-    #you just need to change one line in this program and one line in zoom and you can change this between strong wolfe 
+    #you just need to change one line in this program and one line in zoom and you can change this between strong wolfe
     #and weak wolfe. I think strong wolfe tends to be slightly better
     ########################
-    
+
     #for trajectory calibration though it seems backtracking LS works better than using the wolfe conditions, since here the gradient is relatively expensive compared to obj. (even using adjoint)
-    #in general we're going to be constrained by the budget, so even though wolfe can give us better steps, we'd rather do more iterations with slightly worse steps at each iteration. 
+    #in general we're going to be constrained by the budget, so even though wolfe can give us better steps, we'd rather do more iterations with slightly worse steps at each iteration.
     #note that the wolfe linesearches require the gradient to be evaluated at every trial step length, whereas backtrack/armijo only requires the objective to be evaluated
-    
+
     #c1 - for sufficient decrease condition; lower = easier to accept
-    #c2 - for curvature condition ; #higher = easier to accept. 
-    #require 0 < c1 < c2 < 1; typically values are 1e-4, .5 or 1e-4, .9. stronger curvature condition c2 = better steps, but more evaluations 
-    
+    #c2 - for curvature condition ; #higher = easier to accept.
+    #require 0 < c1 < c2 < 1; typically values are 1e-4, .5 or 1e-4, .9. stronger curvature condition c2 = better steps, but more evaluations
+
     #eps1 - initial guess for the steplength ai; should choose something small, like 1e-2
     #eps2 - termination length for zoom function (accuracy for final step length); should choose something small
-    
+
     #proj_type = 0 - either we project before the linesearch (0), or we project every iteration in linesearch (1)
-    #maxLSiter = 40 - number of iterations we will attempt 
-    
+    #maxLSiter = 40 - number of iterations we will attempt
+
     #aib and amax specify the range of step lengths we will consider; defined between [0,1]
-    aib = 0 
+    aib = 0
     amax = 1
     ai = eps1 #initial guess for step length
-    objb = obj #initialize previous objective value 
-#    dirderb = 0 #initialize directional derivative w.r.t. aib 
-    
-    #linedir(a) will return the trial point and search direction for step length a depending on the chosen projection strategy 
-    #accepts step length a, 
+    objb = obj #initialize previous objective value
+#    dirderb = 0 #initialize directional derivative w.r.t. aib
+
+    #linedir(a) will return the trial point and search direction for step length a depending on the chosen projection strategy
+    #accepts step length a,
     #returns new point pn, which is in direction da/a, and has directional derivative dirdera/a
-    if proj_type ==0: 
+    if proj_type ==0:
         dirder = np.matmul(grad,d)
         def linedir(a, p=p,d = d, bounds=bounds, dirder = dirder):
-            pn = p + a*d 
+            pn = p + a*d
             da = a*d
             dirdera = a*dirder
             return pn, da, dirdera
-    else: 
+    else:
         def linedir(a, p=p, d=d,  bounds=bounds, grad = grad):
             pn = projection(p+a*d,bounds)
             da = pn-p
             dirdera = np.matmul(grad,da)
             return pn, da, dirdera
-    
-    objdereval = 0 #count number of objective and gradient evaluations; they are always the same for this strategy. 
-    
+
+    objdereval = 0 #count number of objective and gradient evaluations; they are always the same for this strategy.
+
     if iters < t:
         maxobj = obj
-    else: 
+    else:
         maxobj = max(past)
 
-        
+
     for i in range(maxLSiter): #up to maxLSiter to find the bounds on a
-        pn, da, dirdera = linedir(ai) #new point for the line search 
-        objn, gradn = fnc_objder(pn,*args) #objective and gradient for the new point 
+        pn, da, dirdera = linedir(ai) #new point for the line search
+        objn, gradn = fnc_objder(pn,*args) #objective and gradient for the new point
         objdereval += 1
-        
-        if objn > maxobj+c1*dirdera or (objn >= objb and objdereval > 1): #if sufficient decrease is not met then ai must be an upper bound on a good step length 
+
+        if objn > maxobj+c1*dirdera or (objn >= objb and objdereval > 1): #if sufficient decrease is not met then ai must be an upper bound on a good step length
 
             atrial = -dirdera*ai/(2*(objn-obj-dirdera))
-            out = zoom4(aib,ai, eps2, linedir, fnc_objder,args, p,grad, obj, objb, objdereval, c1, c2,atrial, iters, past, pastp, t, maxobj) #put bounds into zoom to find good step length 
-            
+            out = zoom4(aib,ai, eps2, linedir, fnc_objder,args, p,grad, obj, objb, objdereval, c1, c2,atrial, iters, past, pastp, t, maxobj) #put bounds into zoom to find good step length
+
             return out
-            
+
         ddirder = np.matmul(gradn,da)/ai #directional derivative at new point
-#        if ddirder >= c2*dirdera/ai: #if weak wolfe conditions are met 
-        if abs(ddirder) <= -c2*dirdera/ai: #if strong wolfe conditions are met 
+#        if ddirder >= c2*dirdera/ai: #if weak wolfe conditions are met
+        if abs(ddirder) <= -c2*dirdera/ai: #if strong wolfe conditions are met
             if iters < t:
                 past.append(objn) #add the value to the past
                 pastp.append(pn)
-            else: 
+            else:
                 past.pop(0) #remove the first value
-                past.append(objn) #add the new value at the end 
+                past.append(objn) #add the new value at the end
                 pastp.pop(0)
                 pastp.append(pn)
 
             return pn, objn, gradn, [None], objdereval, objdereval #we are done
-            
-        if ddirder >= 0:  #if the directional derivative is positive it means we went too far; therefore we found an upperbound  
+
+        if ddirder >= 0:  #if the directional derivative is positive it means we went too far; therefore we found an upperbound
 
             atrial = -dirdera*ai/(2*(objn-obj-dirdera))
-            out = zoom4(ai,aib, eps2, linedir, fnc_objder,args, p,grad, obj, objn, objdereval, c1 , c2, atrial, iters, past, pastp, t, maxobj) #put bounds into zoom to find good step length 
+            out = zoom4(ai,aib, eps2, linedir, fnc_objder,args, p,grad, obj, objn, objdereval, c1 , c2, atrial, iters, past, pastp, t, maxobj) #put bounds into zoom to find good step length
             return out
-        
+
         if i == maxLSiter-1:
             print('failed to find suitable range for stepsize')
             if objn >= obj:
@@ -3327,173 +3327,173 @@ def nmweakwolfe(p,d,obj,fnc,fnc_objder, grad, args, iters, bounds, past, pastp, 
                 objn = obj
                 gradn = grad
             break
-        
-        #interpolate to get next point 
+
+        #interpolate to get next point
         if objdereval ==1: #quadratic interpolation first time
             aif = -dirdera*ai/(2*(objn-obj-dirdera)) #next ai to check
-        else: 
+        else:
             d1 = ddirderb+ddirder-3*((objb-objn)/(aib-ai))
             d2 = np.sign(ai-aib)*(d1**2-ddirderb*ddirder)**.5
             aif = ai-(ai-aib)*((ddirder+d2-d1)/(ddirder-ddirderb+2*d2))
-            
-        if aif < ai or aif < 0 or np.isnan(aif): #if interpolation gives something screwy 
+
+        if aif < ai or aif < 0 or np.isnan(aif): #if interpolation gives something screwy
             aif = 2*ai #increase by fixed amount
-        aif = min(aif,amax) #next step length must be within range 
-        
-#        #other strategy 
+        aif = min(aif,amax) #next step length must be within range
+
+#        #other strategy
 #        aif = 2* ai
-#        if aif > amax: 
+#        if aif > amax:
 #            out = zoom(0,amax, eps2, linedir, fnc_objder,args, p,grad, obj, obj, objdereval, c1 , c2)
-#            return out 
-            
+#            return out
+
         #progress iteration
-        aib = ai 
-        ai = aif 
+        aib = ai
+        ai = aif
         ddirderb = ddirder
         objb = objn
-#        dirderb = dirdera #we potentially need this for the new trial step for zoom 
-        
-    if iters < t: #you should never get here but in case you do. 
+#        dirderb = dirdera #we potentially need this for the new trial step for zoom
+
+    if iters < t: #you should never get here but in case you do.
         past.append(objn) #add the value to the past
         pastp.append(pn)
-    else: 
+    else:
         past.pop(0) #remove the first value
-        past.append(objn) #add the new value at the end 
+        past.append(objn) #add the new value at the end
         pastp.pop(0)
         pastp.append(pn)
-    return pn, objn, gradn, [None], objdereval, objdereval #shouldn't reach here ideally; should terminate due to an if statement 
+    return pn, objn, gradn, [None], objdereval, objdereval #shouldn't reach here ideally; should terminate due to an if statement
 
-def zoom4(alo, ahi, eps2, linedir, fnc_objder, args, p,grad,obj, objlo, objdereval, c1, c2, atrial,iters, past, pastp, t, maxobj ): 
-    #zoom that works with the nmweakwolfe 
-    if abs(ahi-alo) <= eps2: #special case where bounds are already tight enough 
-        aj = (alo+ahi)/2 #bisection 
+def zoom4(alo, ahi, eps2, linedir, fnc_objder, args, p,grad,obj, objlo, objdereval, c1, c2, atrial,iters, past, pastp, t, maxobj ):
+    #zoom that works with the nmweakwolfe
+    if abs(ahi-alo) <= eps2: #special case where bounds are already tight enough
+        aj = (alo+ahi)/2 #bisection
         pn, da, dirdera = linedir(aj) #get new point, new direction, new directional derivative
-        objn, gradn = fnc_objder(pn,*args) #evaluate new point 
-        objdereval +=1 
+        objn, gradn = fnc_objder(pn,*args) #evaluate new point
+        objdereval +=1
         return pn, objn, gradn, [None], objdereval, objdereval
-    
-    #try modifying so if something satisfies sufficient decrease we will remember it 
+
+    #try modifying so if something satisfies sufficient decrease we will remember it
     count = 0
-    best = (p, obj, grad) #initialize best solution to return if can't satisfy curvature condition 
-    
+    best = (p, obj, grad) #initialize best solution to return if can't satisfy curvature condition
+
     if atrial <= alo or atrial >= ahi or np.isnan(atrial):
 #        print('safeguard')
         aj = (alo+ahi)/2
-    else: 
+    else:
 #        print('not safeguard')
         aj = atrial
-    
-    while abs(ahi-alo) > eps2: #iterate until convergence to good step length 
+
+    while abs(ahi-alo) > eps2: #iterate until convergence to good step length
         pn, da, dirdera = linedir(aj)
         objn, gradn = fnc_objder(pn,*args)
-        objdereval +=1 
+        objdereval +=1
         count += 1
-        
+
         ddirder = np.matmul(gradn,da)/aj
-        if objn > maxobj + c1*dirdera or objn >= objlo: #if sufficient decrease not met lower the upper bound 
+        if objn > maxobj + c1*dirdera or objn >= objlo: #if sufficient decrease not met lower the upper bound
             ahi = aj
-        else: 
-#            if ddirder >= c2*dirdera/aj: #if weak wolfe conditions are met return the solution 
-            if abs(ddirder) <= -c2*dirdera/aj: #if stronge wolfe conditions are met 
-                if iters < t: #you should never get here but in case you do. 
+        else:
+#            if ddirder >= c2*dirdera/aj: #if weak wolfe conditions are met return the solution
+            if abs(ddirder) <= -c2*dirdera/aj: #if stronge wolfe conditions are met
+                if iters < t: #you should never get here but in case you do.
                     past.append(objn) #add the value to the past
                     pastp.append(pn)
-                else: 
+                else:
                     past.pop(0) #remove the first value
-                    past.append(objn) #add the new value at the end 
+                    past.append(objn) #add the new value at the end
                     pastp.pop(0)
                     pastp.append(pn)
 
-                return pn, objn, gradn, [None], objdereval, objdereval 
-            if objn < best[1]: #keep track of best solution which only satisfies sufficient decrease #can get rid of this 
+                return pn, objn, gradn, [None], objdereval, objdereval
+            if objn < best[1]: #keep track of best solution which only satisfies sufficient decrease #can get rid of this
                 best = (pn, objn, gradn)
-            if ddirder*(ahi-alo) >= 0: #otherwise do this 
+            if ddirder*(ahi-alo) >= 0: #otherwise do this
                 ahi = alo
-            alo = aj #pretty sure this is supposed to be here. 
-        
+            alo = aj #pretty sure this is supposed to be here.
+
         if count ==1: #quadratic interpolation first time
             aif = -dirdera*aj/(2*(objn-obj-dirdera)) #next ai to check
-        else: 
+        else:
             d1 = ddirderb+ddirder-3*((objb-objn)/(aib-aj))
             d2 = np.sign(aj-aib)*(d1**2-ddirderb*ddirder)**.5
             aif = aj-(aj-aib)*((ddirder+d2-d1)/(ddirder-ddirderb+2*d2))
-            
+
         if aif < alo or aif > ahi or np.isnan(aif): #if interpolation gives something screwy (this happens occasionally so need safeguard)
             aif = (alo+ahi)/2 # use bisection
         aib = aj
         aj = aif
         ddirderb = ddirder
         objb = objn
-        
-            
+
+
     print('failed to find a stepsize satisfying weak wolfe conditions')
     if objn < best[1]: #if current step is better than the best #y
-        best = (pn, objn, gradn) 
-        
-    if iters < t: #you should never get here but in case you do. 
+        best = (pn, objn, gradn)
+
+    if iters < t: #you should never get here but in case you do.
         past.append(objn) #add the value to the past
         pastp.append(pn)
-    else: 
+    else:
         past.pop(0) #remove the first value
-        past.append(objn) #add the new value at the end 
+        past.append(objn) #add the new value at the end
         pastp.pop(0)
         pastp.append(pn)
-    
+
     return best[0], best[1], best[2], [None], objdereval, objdereval
 
-def zoom2(alo, ahi, eps2, linedir, fnc_objder, args, p,grad,obj, objlo, objdereval, c1, c2 ): 
-    #deprecated zoom. New zoom function uses interpolation to get next step length; also it will remember past iterates and will attempt to satisfy sufficient decrease only 
-    #in the case where it is not possible to satisfy the curvature condition. 
-    if abs(ahi-alo) <= eps2: #special case where bounds are already tight enough 
-        aj = (alo+ahi)/2 #bisection 
+def zoom2(alo, ahi, eps2, linedir, fnc_objder, args, p,grad,obj, objlo, objdereval, c1, c2 ):
+    #deprecated zoom. New zoom function uses interpolation to get next step length; also it will remember past iterates and will attempt to satisfy sufficient decrease only
+    #in the case where it is not possible to satisfy the curvature condition.
+    if abs(ahi-alo) <= eps2: #special case where bounds are already tight enough
+        aj = (alo+ahi)/2 #bisection
         pn, da, dirdera = linedir(aj) #get new point, new direction, new directional derivative
-        objn, gradn = fnc_objder(pn,*args) #evaluate new point 
-        objdereval +=1 
+        objn, gradn = fnc_objder(pn,*args) #evaluate new point
+        objdereval +=1
         return pn, objn, gradn, [None], objdereval, objdereval
-    
-    #try modifying so if something satisfies sufficient decrease we will remember it 
-        
-    while abs(ahi-alo) > eps2: #iterate until convergence to good step length 
+
+    #try modifying so if something satisfies sufficient decrease we will remember it
+
+    while abs(ahi-alo) > eps2: #iterate until convergence to good step length
         aj = (alo+ahi)/2
         pn, da, dirdera = linedir(aj)
         objn, gradn = fnc_objder(pn,*args)
-        objdereval +=1 
-        
-        
-        if objn > obj + c1*dirdera or objn >= objlo: #if sufficient decrease not met lower the upper bound 
+        objdereval +=1
+
+
+        if objn > obj + c1*dirdera or objn >= objlo: #if sufficient decrease not met lower the upper bound
             ahi = aj
-        else: 
+        else:
             ddirder = np.matmul(gradn,da)/aj
-#            if ddirder >= c2*dirdera/aj: #if weak wolfe conditions are met return the solution 
-            if abs(ddirder) <= -c2*dirdera/aj: #if stronge wolfe conditions are met 
+#            if ddirder >= c2*dirdera/aj: #if weak wolfe conditions are met return the solution
+            if abs(ddirder) <= -c2*dirdera/aj: #if stronge wolfe conditions are met
 
                 return pn, objn, gradn, [None], objdereval, objdereval
-            if ddirder*(ahi-alo) >= 0: #otherwise do this 
+            if ddirder*(ahi-alo) >= 0: #otherwise do this
                 ahi = alo
-            alo = aj #in textbook the indentations are wrong but I'm pretty sure this is supposed to be here. 
-            
+            alo = aj #in textbook the indentations are wrong but I'm pretty sure this is supposed to be here.
+
     print('failed to find a stepsize satisfying weak wolfe conditions')
     if objn >= obj:
         pn = p
         objn = obj
         gradn = grad
-    
+
     return pn, objn, gradn, [None], objdereval, objdereval
 
 def watchdog(p,d,obj,fnc,fnc_objder, grad, args, iters, bounds, past, watchdogls, *fargs, t = 3, c0 = 1,  c1 = 1e-4, **kwargs):
-    #this can be called with pgrad_descent, but not pgrad_descent2. It sometimes works better than nmbacktrack, but usually is slightly worse. 
-    
+    #this can be called with pgrad_descent, but not pgrad_descent2. It sometimes works better than nmbacktrack, but usually is slightly worse.
+
     #this assumes the search direction has already been projected; i.e. projtype = 0
-    
-    #in addition to normal calling signature, watchdog accepts: 
-    #past - information on the past iterates; we might have to return to those in this algorithm. since past is a list of lists, and we only operate on the inner lists, 
+
+    #in addition to normal calling signature, watchdog accepts:
+    #past - information on the past iterates; we might have to return to those in this algorithm. since past is a list of lists, and we only operate on the inner lists,
     #past will be updated without the need to explicitly return it. (I'm pretty sure this is correct)
-    
-    #watchdogls is used to perform linesearches when needed. this can be any linesearch (weak, strong or backtracking). When accepting the steps however, we will only check that the 
-    #sufficient decrease conditions are met. 
-    
-    #c1 = 1e-4 is the parameter for sufficient decrease 
-    
+
+    #watchdogls is used to perform linesearches when needed. this can be any linesearch (weak, strong or backtracking). When accepting the steps however, we will only check that the
+    #sufficient decrease conditions are met.
+
+    #c1 = 1e-4 is the parameter for sufficient decrease
+
     #c0 controls the default step size. It is reasonable to just take this as being 1.
 #    print(past)
     if past[1] ==t+1: #special case corresponding to last else of the below main block
@@ -3501,53 +3501,53 @@ def watchdog(p,d,obj,fnc,fnc_objder, grad, args, iters, bounds, past, watchdogls
         past[0] = [pn3, objn3, gradn3]
         past[-1] = 0
         return pn3, objn3, gradn3, hessn3, objeval, gradeval
-        
-        
-    elif past[-1] < t: #past[-1] is number of steps taken not satisfying sufficient decrease. t is total number of those steps we are allowed to take. 
+
+
+    elif past[-1] < t: #past[-1] is number of steps taken not satisfying sufficient decrease. t is total number of those steps we are allowed to take.
 #        print('relaxed step')
-        pn = p+c0*d #new point 
+        pn = p+c0*d #new point
         objn, gradn = fnc_objder(pn,*args)
-        
+
         dirder = np.matmul(past[0][2], past[0][3])
-        
+
         if objn <= past[0][1] + c1*c0*dirder:  #if we meet the sufficient decrease
 #            print('sufficient decrease for relaxed step')
             past[0] = [pn,objn,gradn] #update the best iteration
-            past[-1] = 0 #reset the number of relaxed steps to 0 
-        else: 
+            past[-1] = 0 #reset the number of relaxed steps to 0
+        else:
             past[-1] += 1 #otherwise we took a relaxed step; so update past to reflect that
-        
+
         return pn, objn, gradn, [None], 1, 1 #return the new step
-    else: #we have taken the maximum number of relaxed steps and now need to ensure sufficient decrease. 
+    else: #we have taken the maximum number of relaxed steps and now need to ensure sufficient decrease.
         pn2, objn2, gradn2, hessn2, objeval, gradeval = watchdogls(p,d,obj,fnc,fnc_objder,grad,args,iters,bounds,  kwargs, c1 = c1) #need to do a linesearch on the current iterate
-        
+
         dirder = np.matmul(past[0][2],past[0][3]) #recall past represents the last known point that was "good" i.e. it gave a sufficient decrease
         if obj <= past[0][1] or objn2 <=  past[0][1] + c1*c0*dirder: #if the new step gives a sufficient decrease with respect to the last known good step
 #            print('sufficient decrease')
             past[0] = [pn2,objn2,gradn2] #update the best iteration
-            past[-1] = 0 #reset the number of relaxed steps to 0 
+            past[-1] = 0 #reset the number of relaxed steps to 0
             return pn2, objn2, gradn2, hessn2, objeval, gradeval #then we can return the new step we found
-        
-        elif objn2 > past[0][1]: #at this point, we have taken a number of relaxed steps, and then a sufficient step from the relaxed steps. We haven't yet managed to get sufficient decrease, 
-            #with respect to the previous step we knew gave a sufficient decrease. Therefore we must either return to the original best known point, or take another sufficient step from the point 
+
+        elif objn2 > past[0][1]: #at this point, we have taken a number of relaxed steps, and then a sufficient step from the relaxed steps. We haven't yet managed to get sufficient decrease,
+            #with respect to the previous step we knew gave a sufficient decrease. Therefore we must either return to the original best known point, or take another sufficient step from the point
             #we just found.
-            #in this case, we will return to the original, last known step past[0][0] which gave us a sufficient decrease. 
+            #in this case, we will return to the original, last known step past[0][0] which gave us a sufficient decrease.
 #            print('return to best step')
-            
+
             pn3, objn3, gradn3, hessn3, objeval3, gradeval3 = watchdogls(past[0][0],past[0][3], past[0][1], fnc, fnc_objder, past[0][2], args, iters, bounds,  kwargs, c1=c1)
             if objn3 == past[0][1]: #it's possible we can make no progress from the linesearch. If this happens then we will get stuck in a loop, so we will need to terminate
-                #we will return the same point input into watchdog. this will cause the algorithm to terminate due to the objective not decreasing. 
-                return p, obj, grad, [None], objeval+objeval3, gradeval + gradeval3 
+                #we will return the same point input into watchdog. this will cause the algorithm to terminate due to the objective not decreasing.
+                return p, obj, grad, [None], objeval+objeval3, gradeval + gradeval3
             past[0] = [pn3, objn3, gradn3] #assuming the linesearch was successful, we have a new point with sufficient decrease and can update the best iteration
-            past[-1] = 0 
+            past[-1] = 0
             return pn3, objn3, gradn3, hessn3, objeval+objeval3, gradeval+gradeval3
-            
-        else: #the last possibiliity is that we will continue to search from the point corresponding to objn2. 
+
+        else: #the last possibiliity is that we will continue to search from the point corresponding to objn2.
 #            print('continue with search')
             past[-1] = t+1 #in this case we will give the past[-1] a special argument so we will perform a special action on the next iteration of the algorithm
-            #the search direction is updated inside the algorithm. 
-            return pn2, objn2, gradn2, hessn2, objeval, gradeval 
-        
-    
-    return #this will never be reached. 
+            #the search direction is updated inside the algorithm.
+            return pn2, objn2, gradn2, hessn2, objeval, gradeval
+
+
+    return #this will never be reached.
 
