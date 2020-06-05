@@ -128,8 +128,7 @@ def update_lane_events(veh, timeind, remove_vehicles):
         remove_vehicles: set of vehicles which will be removed from simulation at current timestep
 
     Returns:
-        None
-        Modifies Vehicle attributes in place, adds to remove_vehicles in place.
+        None. (Modifies Vehicle attributes in place, adds to remove_vehicles in place.)
     """
     if not veh.lane_events:
         return
@@ -190,9 +189,7 @@ def update_lane_lr(veh, curlane, curevent):
         curevent: The event (dictionary) triggering the update
 
     Returns:
-        None
-
-        Modifies veh attributes in place.
+        None (Modifies veh attributes in place.)
     """
     if curevent['left'] == 'remove':
         veh.lfol.rlead.remove(veh)
@@ -247,9 +244,7 @@ def set_lane_events(veh):
         veh: Vehicle to be updated
 
     Returns:
-        None
-
-        Modifies veh in place.
+        None (Modifies veh in place.)
     """
     veh.lane_events = []
     for i in veh.lane.events:
@@ -274,7 +269,6 @@ def update_route(veh):
 
     Returns:
         bool: True if we made a change, to the route, False otherwise
-
     """
     if not veh.route_events:
         return False
@@ -524,9 +518,7 @@ def set_route_events(veh):
         veh: Vehicle object which we will set its current route_events for.
 
     Returns:
-        None.
-
-        Modifies veh attributes in place (route_events, cur_route, possibly applies route events).
+        None. Modifies veh attributes in place (route_events, cur_route, possibly applies route events).
     """
     # for testing purposes for infinite road only#########
     # if veh.route == []:
@@ -575,9 +567,7 @@ def update_lrfol(veh):
         veh: Vehicle to check its lfol/rfol to be updated.
 
     Returns:
-        None.
-
-        Modifies veh attributes, attributes of its lfol/rfol, in place.
+        None. Modifies veh attributes, attributes of its lfol/rfol, in place.
     """
     lfol, rfol = veh.lfol, veh.rfol
     if lfol is None:
@@ -627,9 +617,7 @@ def update_merge_anchors(curlane, lc_actions):
             values are a string either 'l' or 'r' which indicates the side of the change
 
     Returns:
-        None
-
-        Modifies merge_anchors attribute for curlane
+        None. Modifies merge_anchors attribute for curlane
     """
     for i in range(len(curlane.merge_anchors)):
         veh, pos = curlane.merge_anchors[i][:]
@@ -674,9 +662,7 @@ def new_relaxation(veh, timeind, dt):
         dt: float of time unit that passes in each timestep
 
     Returns:
-        None.
-
-        Modifies relaxation attributes for vehicle in place.
+        None. Modifies relaxation attributes for vehicle in place.
     """
     rp = veh.relax_parameters
     if veh.lead is None or rp is None:
@@ -716,7 +702,7 @@ def update_veh_lane(veh, oldlane, newlane, timeind, side=None):
             only if the corresponding lane is in the same road
 
     Returns:
-        None.
+        None. Modifies veh in place
     """
     newroadname = newlane.roadname
     if side is None:
@@ -791,9 +777,7 @@ def update_change(lc_actions, veh, timeind):
         timeind: int giving the timestep of the simulation (0 indexed)
 
     Returns:
-        None.
-
-        Modifies veh, and all vehicles which have a relationship with veh, in place.
+        None. Modifies veh, and all vehicles which have a relationship with veh, in place.
     """
     # TODO no check for vehicles moving into same gap (store the lcside fol/lead in lc_actions,
     # check if they are the same?)
@@ -844,9 +828,7 @@ def update_leadfol_after_lc(veh, lcsidelane, newlcsidelane, side, timeind):
         timeind: int giving the timestep of the simulation (0 indexed)
 
     Returns:
-        None.
-
-        Modifies veh and any vehicles which have leader/follower relationships with veh in place.
+        None. Modifies veh and any vehicles which have leader/follower relationships with veh in place.
     """
     if side == 'l':
         # define lcside/opside
@@ -998,10 +980,8 @@ class Simulation:
             dt: float for how many time units pass for each timestep. Defaults to .25.
 
         Returns:
-            None.
-
-            We keep references to all vehicles through vehicles and all_vehicles, vehicles store their own
-            memory.
+            None. Note that we keep references to all vehicles through vehicles and all_vehicles,
+            a Vehicle stores its own memory.
         """
         self.inflow_lanes = inflow_lanes
         self.merge_lanes = merge_lanes
@@ -1079,7 +1059,6 @@ def get_eql_helper(veh, x, input_type='v', eql_type='v', spdbounds=(0, 1e4), hdb
 
     Returns:
         float value of either headway or speed which together with input x defines the equilibrium solution.
-
     """
     if input_type == 'v':
         if x < spdbounds[0]:
@@ -1217,7 +1196,6 @@ def set_lc_helper(veh, chk_lc=1, get_fol=True):
         tuple of floats: (lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd). lside/rside
             are bools which are True if we need to check that side in the LC model. rest are float headways,
             giving the new headway for that vehicle. If get_fol = False, newfolhd is not present.
-
     """
     # first determine what situation we are in and which sides we need to check
     l_lc, r_lc = veh.l_lc, veh.r_lc
@@ -1552,7 +1530,6 @@ class Vehicle:
 
         Returns:
             acc (TYPE): DESCRIPTION.
-
         """
         if lead is None:
             acc = curlane.call_downstream(self, timeind, dt)
@@ -1656,7 +1633,6 @@ class Vehicle:
 
         Returns:
             TYPE: float acceleration
-
         """
         if state == 'decel':
             temp = shift_parameters[0]**2
@@ -1680,7 +1656,6 @@ class Vehicle:
 
         Returns:
             None. (Modifies lc_actions, some vehicle attributes, in place)
-
         """
         call_model, args = set_lc_helper(self, self.lc_parameters[-1]*dt)
         if call_model:
@@ -2133,7 +2108,6 @@ def shifted_speed_inflow(curlane, dt, shift=1, accel_bound=-2):
     Returns:
         If The vehicle is not to be added, we return None. Otherwise, we return the (pos, spd, hd) for the
         vehicle to be added with.
-
     """
     lead = curlane.anchor.lead
     hd = curlane.get_headway(curlane.anchor, lead)
@@ -2321,7 +2295,6 @@ class Lane:
         connect_to: what the end of Lane connects to
         anchor: AnchorVehicle for lane
         roadlen: defines distance between Lane's road and other roads.
-
     """
     # TODO need a RoadNetwork object, possibly Road object as well.
     # should create common road configurations. Should different road configurations have their own

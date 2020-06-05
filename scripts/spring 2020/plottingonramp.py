@@ -1,6 +1,6 @@
 
 """
-@author: rlk268@cornell.edu
+Plotting some trajectories from merging vehicles from NGSIM
 """
 import havsim
 from havsim.plotting import animatevhd, animatetraj, plotvhd, plotColorLines, plotflows
@@ -20,7 +20,7 @@ for i in platooninfo.keys():
 lane6vehlist = []
 for i in platooninfo.keys():
     if 6 in np.unique(meas[i][:,7]):
-        lane6vehlist.append(i)   
+        lane6vehlist.append(i)
 sortedvehlist = havsim.calibration.algs.sortveh3(lane6vehlist, 6, meas, platooninfo)
 
 #%%

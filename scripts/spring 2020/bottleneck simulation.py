@@ -1,6 +1,6 @@
 
 """
-@author: rlk268@cornell.edu
+Bottleneck simulation
 """
 from havsim.simulation.simulation import vehicle, lane, downstream_wrapper, anchor_vehicle, simulation
 from havsim.calibration.helper import boundaryspeeds, getentryflows
@@ -9,13 +9,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from havsim.simulation.models import IDM_parameters
 #%%get boundary conditions (careful with units)
-# #option 1 - 
-# #could get them directly from data 
-# entryflows, unused = getentryflows(meas, [3],.1,.25) 
+# #option 1 -
+# #could get them directly from data
+# entryflows, unused = getentryflows(meas, [3],.1,.25)
 # unused, unused, exitspeeds, unused = boundaryspeeds(meas, [], [3],.1,.1)
 
 # #option 2 - use calculateflows, which has some aggregation in it and uses a different method to compute flows
-# q,k = calculateflows(meas, [[200,600],[1000,1400]], [0, 9900], 30*10, lane = 6) 
+# q,k = calculateflows(meas, [[200,600],[1000,1400]], [0, 9900], 30*10, lane = 6)
 
 # #option 3 - can also just make boudnary conditions based on what the FD looks like
 # tempveh = vehicle(-1, None, [33, 1.2, 2, 1.1, 1.5], None)
@@ -47,7 +47,7 @@ get_inflow2 = {'speed_fun':mainroad_inflow}
 increment_inflow = {'method': 'shifted'}
 downstream1 ={'method':'free'}
 
-#make road network with boundary conditions - want to make an api for this in the future 
+#make road network with boundary conditions - want to make an api for this in the future
 road = {'name': 'main road', 'len': 900, 'laneinds':2, 0: None, 1: None}
 road['connect to'] = {'exit': (900, 'continue', (0,1), None, None)}
 onramp = {'name': 'on ramp', 'len': 200, 'laneinds':1, 0: None}
@@ -90,7 +90,7 @@ merge_lanes = [lane1, lane2]
 inflow_lanes = [lane0, lane1, lane2]
 sim = simulation(inflow_lanes, merge_lanes)
 
-#call 
+#call
 sim.simulate(3000)
 
 

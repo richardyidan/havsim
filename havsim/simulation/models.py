@@ -57,13 +57,13 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
           userelax_cur=True, userelax_new=False, use_coop=True, use_tact=True):
     """Minimizing total braking during lane change (MOBIL) lane changing decision model.
 
-    parameters - [safety criteria (maximum deceleration allowed after LC, more negative = less strict),
-                  incentive criteria (>0, larger = more strict. smaller = discretionary changes more likely),
-                  politeness (taking other vehicles into account, 0 = ignore other vehicles, ~.2 = realistic),
-                  bias on left side (can add a bias to make vehicles default to a certain side of the road),
-                  bias on right side,
-                  probability of checking LC while in discretionary state (not in original model. set to
-                  1/dt to always check discretionary. probability of checking per 1 second)]
+    parameters: 0 - safety criteria (maximum deceleration allowed after LC, more negative = less strict),
+        1 - incentive criteria (>0, larger = more strict. smaller = discretionary changes more likely),
+        2 - politeness (taking other vehicles into account, 0 = ignore other vehicles, ~.2 = realistic),
+        3 - bias on left side (can add a bias to make vehicles default to a certain side of the road),
+        4 - bias on right side,
+        5 - probability of checking LC while in discretionary state (not in original model. set to
+            1/dt to always check discretionary. probability of checking per 1 second)
     naming convention - l/r = left/right respectively, current lane if no l/r
     new indicates that it would be the configuration after potential change
 

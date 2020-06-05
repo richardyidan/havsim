@@ -170,16 +170,16 @@ def myplot(sim, auxinfo, roadinfo, platoon=[]):
     plt.ylim(0, roadinfo[0])
     plt.show()
 
-
-road = RoadInfo(len=840)
-vehicles = [Vehicle(id=i,
-                    response_time=random.random() * 0.6 + 0.6,
-                    pos=20 if i == 0 else 42 * i,
-                    speed=30,
-                    len=2,
-                    road_info=road)
-            for i in range(20)]
-for i in range(20):
-    vehicles[i].lead_vehicle = vehicles[(i + 1) % 20]
-res = simulate_circular_road(vehicles_init=vehicles, T=100, dt=0.25)
-myplot(res, [], {0: 840})
+if __name__ == '__main__':
+    road = RoadInfo(len=840)
+    vehicles = [Vehicle(id=i,
+                        response_time=random.random() * 0.6 + 0.6,
+                        pos=20 if i == 0 else 42 * i,
+                        speed=30,
+                        len=2,
+                        road_info=road)
+                for i in range(20)]
+    for i in range(20):
+        vehicles[i].lead_vehicle = vehicles[(i + 1) % 20]
+    res = simulate_circular_road(vehicles_init=vehicles, T=100, dt=0.25)
+    myplot(res, [], {0: 840})
