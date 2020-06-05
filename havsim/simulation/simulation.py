@@ -707,7 +707,7 @@ def update_veh_lane(veh, oldlane, newlane, timeind, side=None):
     newroadname = newlane.roadname
     if side is None:
         if newroadname != veh.road:
-            veh.pos += -oldlane.roadlen[newroadname]
+            veh.pos += -oldlane.roadlen[newroadname]  # add the newlane.start?
             veh.road = newroadname
     else:
         if newroadname != veh.road:
@@ -743,10 +743,13 @@ def update_veh_lane(veh, oldlane, newlane, timeind, side=None):
 # This strategy would have higher costs per timestep to keep lfol/rfol updated, but would be simpler to
 # update when there is a lane change. Thus it might be more efficient if the number of timesteps is small
 # relative to the number of lane changes.
+# Because you don't need the llead/rlead in this option, you also can avoid fully updating l/rfol every
+# timestep, although you would need to check if your l/rfol had a lane change, but that operation
+# just checks for a hash value, which is far less expensive than an actual dist calculation.
 # This option would also eliminate the edge case where the first strategy can fail because your lfol/rfol
 # can only be updated by 1 each timestep, so if you manage to overtake 2 vehicles in a single timestep
 # your lfol/rfol would be 1 vehicle behind after calling update_lrfol only once.
-# Overall I doubt there would be much practical difference between this option and the first option.
+# Overall I doubt there would be too much practical difference between this option and the first option.
 # ######
 def update_change(lc_actions, veh, timeind):
     """When a vehicle changes lanes, this function does all the necessary updates.
@@ -1677,9 +1680,11 @@ class Vehicle:
         if nextspeed < 0:
             nextspeed = 0
             temp = -self.speed
+            nextspeed = 0
         elif nextspeed > self.maxspeed:
             nextspeed = self.maxspeed
             temp = self.maxspeed - self.speed
+            nextspeed = self.maxspeed
 
         # update state
         self.pos += self.speed*dt + .5*temp*dt
@@ -2300,6 +2305,8 @@ class Lane:
     # should create common road configurations. Should different road configurations have their own
     # logics to create routes?
     # Also need a better (easier) way to allow boundary conditions to be defined, and in a more modular way
+    # E.g. of good design - create road network by specifying types of roads (e.g. road, on/off ramp, merge)
+    # add boundary conditions to road network.
 
     def __init__(self, start, end, road, laneind, connect_left=None, connect_right=None, connect_to=None,
                  downstream=None, increment_inflow=None, get_inflow=None, new_vehicle=None):
