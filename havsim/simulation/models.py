@@ -54,7 +54,7 @@ def IDM_shift_eql(p, v, shift_parameters, state):
 
 
 def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,
-          userelax_cur=True, userelax_new=False, use_coop=True, use_tact=True):
+          userelax_cur=True, userelax_new=False, use_coop=False, use_tact=False):
     """Minimizing total braking during lane change (MOBIL) lane changing decision model.
 
     parameters: 0 - safety criteria (maximum deceleration allowed after LC, more negative = less strict),
@@ -367,8 +367,8 @@ def coop_tact_model(veh, newhd, newlcsidefolhd, lcsidefolsafe, selfsafe, side, l
 
 def IDM_parameters(*args):
     """Suggested parameters for the IDM/MOBIL."""
-    cf_parameters = [27, 1.2, 2, 1.1, 1.5]  # note speed is supposed to be in m/s
-    cf_parameters[0] += np.random.rand()*6
+    cf_parameters = [33, 1.2, 2, 1.1, 1.5]  # note speed is supposed to be in m/s
+    # cf_parameters[0] += -np.random.rand()*6
     # cf_parameters[0] += np.random.rand()*25-15 #give vehicles very different speeds for testing purposes
     lc_parameters = [-1.5, .2, .2, 0, .1, .5]
 

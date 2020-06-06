@@ -79,10 +79,6 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
         # else:  # for robustness only, should not be needed
         #     veh.hd = None
 
-    # update left and right followers
-    for veh in vehicles:
-        update_lrfol(veh)
-
     # update merge_anchors
     for curlane in merge_lanes:
         update_merge_anchors(curlane, lc_actions)
@@ -96,6 +92,10 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
     # remove vehicles which leave
     for veh in remove_vehicles:
         vehicles.remove(veh)
+
+    # update left and right followers
+    for veh in vehicles:
+        update_lrfol(veh)  # this used to be done after updating all states, memory and headway
 
     # update inflow, adding vehicles if necessary
     for curlane in inflow_lanes:
@@ -169,7 +169,7 @@ def update_lane_events(veh, timeind, remove_vehicles):
                 veh.rfol.llead.remove(veh)
 
             # to remove the vehicle set its endtime and put it in the remove_vehicles
-            veh.endtime = timeind
+            veh.endtime = timeind+1
             remove_vehicles.add(veh)
     return
 
@@ -578,9 +578,11 @@ def update_lrfol(veh):
         veh.lfol.rlead.add(veh)
         lfol.rlead.remove(veh)
         # update for lfol
-        lfol.rfol.llead.remove(lfol)
-        lfol.rfol = veh
-        veh.llead.add(lfol)
+        if lfol.rfol is not None:  # lfol.rfol is None in edge case where lfol loses it rlane and
+            # overtakes veh in the same timestep
+            lfol.rfol.llead.remove(lfol)
+            lfol.rfol = veh
+            veh.llead.add(lfol)
 
     # similarly for right
     if rfol is None:
@@ -590,9 +592,10 @@ def update_lrfol(veh):
         veh.rfol.llead.add(veh)
         rfol.llead.remove(veh)
 
-        rfol.lfol.rlead.remove(rfol)
-        rfol.lfol = veh
-        veh.rlead.add(rfol)
+        if rfol.lfol is not None:
+            rfol.lfol.rlead.remove(rfol)
+            rfol.lfol = veh
+            veh.rlead.add(rfol)
 
 
 def update_merge_anchors(curlane, lc_actions):
@@ -1718,7 +1721,7 @@ class Vehicle:
         """Convert vehicle to a str representation."""
         return self.__repr__()
 
-    def __leadfol(self):
+    def _leadfol(self):
         """Summarize the leader/follower relationships of the Vehicle."""
         print('-------leader and follower-------')
         if self.lead is None:
@@ -1744,7 +1747,7 @@ class Vehicle:
             print(i)
         return
 
-    def __chk_leadfol(self, verbose=False):
+    def _chk_leadfol(self, verbose=False):
         """Returns True if the leader/follower relationships of the Vehicle are correct."""
         # If verbose = True, we print whether each relationship is passing or not. Note that this does
         # not actually verify the relationships are correct, it verifies that they are possible.
@@ -2300,6 +2303,8 @@ class Lane:
         connect_to: what the end of Lane connects to
         anchor: AnchorVehicle for lane
         roadlen: defines distance between Lane's road and other roads.
+        merge_anchors: any merge anchors for the lane (see update_merge_anchors)
+        events: lane events (see update_lane_events)
     """
     # TODO need a RoadNetwork object, possibly Road object as well.
     # should create common road configurations. Should different road configurations have their own
