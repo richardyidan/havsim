@@ -4,7 +4,7 @@ Bottleneck simulation
 """
 from havsim.simulation.simulation import Vehicle, Lane, downstream_wrapper, AnchorVehicle, Simulation
 from havsim.calibration.helper import boundaryspeeds, getentryflows
-from havsim.plotting import calculateflows
+from havsim.plotting import calculateflows, plot_format, platoonplot, plotvhd
 import numpy as np
 import matplotlib.pyplot as plt
 from havsim.simulation.models import IDM_parameters
@@ -18,7 +18,7 @@ from havsim.simulation.models import IDM_parameters
 # q,k = calculateflows(meas, [[200,600],[1000,1400]], [0, 9900], 30*10, lane = 6)
 
 #option 3 - can also just make boudnary conditions based on what the FD looks like
-# tempveh = Vehicle(-1, None, [33, 1.2, 2, 1.1, 1.5], None)
+# tempveh = Vehicle(-1, None, [33, 1.2, 2, 1.1, 1.5], None, maxspeed = 33-1e-6)
 # spds = np.arange(0,33,.01)
 # flows = np.array([tempveh.get_flow(i) for i in spds])
 # density = np.divide(flows,spds)
@@ -29,24 +29,31 @@ from havsim.simulation.models import IDM_parameters
 #define boundary conditions
 def onramp_parameters(*args):
     cf_p, lc_p  = IDM_parameters()
-    kwargs = {'route':['main road', 'exit'], 'maxspeed': cf_p[0]-1e-6}
+    kwargs = {'route':['main road', 'exit'], 'maxspeed': cf_p[0]-1e-6, 'relax_parameters':None}
     return cf_p, lc_p, kwargs
 def mainroad_parameters(*args):
     cf_p, lc_p  = IDM_parameters()
-    kwargs = {'route':['exit'], 'maxspeed': cf_p[0]-1e-6}
+    kwargs = {'route':['exit'], 'maxspeed': cf_p[0]-1e-6, 'relax_parameters':None}
     return cf_p, lc_p, kwargs
 def onramp_inflow(timeind, *args):
-    if timeind % 1000 > 800:
+    # if timeind % 1000 > 800:
+    if False:
         # return .15+np.random.rand()/25
         return .08
     else:
-        return .08 + np.random.rand()/25
+        return .06 + np.random.rand()/25
 def mainroad_inflow(*args):
-    return .58
+    return .43 + np.random.rand()*24/100
+
+def mainroad_outflow(*args):
+    return 22.4
+
+
 get_inflow1 = {'time_series':onramp_inflow}
 get_inflow2 = {'time_series':mainroad_inflow}
 increment_inflow = {'method': 'shifted'}
-downstream1 ={'method':'free'}
+# downstream1 ={'method':'free', }
+downstream1 = {'method': 'speed', 'time_series':mainroad_outflow}
 
 #make road network with boundary conditions - want to make an api for this in the future
 mainroadlen = 900
@@ -55,13 +62,14 @@ endmerge = 700
 road = {'name': 'main road', 'len': mainroadlen, 'laneinds':2, 0: None, 1: None}
 road['connect to'] = {'exit': (mainroadlen, 'continue', (0,1), None, None)}
 onramp = {'name': 'on ramp', 'len': endmerge-startmerge+100, 'laneinds':1, 0: None}
-onramp['connect to'] = {'main road': ((startmerge,endmerge), 'merge', 0, 'l', road)}
+onramp['connect to'] = {'main road': ((startmerge,endmerge), 'merge', 0, 'l_lc', road)}
 lane0 = Lane(0,mainroadlen, road, 0, downstream = downstream1, increment_inflow = increment_inflow, get_inflow = get_inflow2, new_vehicle = mainroad_parameters)
 lane1 = Lane(0,mainroadlen, road, 1, downstream = downstream1, increment_inflow = increment_inflow, get_inflow = get_inflow2, new_vehicle = mainroad_parameters)
 road[0] = lane0
 road[1] = lane1
 lane2 = Lane(startmerge-100,endmerge,onramp,0, increment_inflow = increment_inflow, get_inflow = get_inflow1, new_vehicle = onramp_parameters)
 downstream2 = {'method':'merge', 'merge_anchor_ind':0, 'target_lane': lane1, 'self_lane':lane2}
+# downstream2 = {'method': 'free merge', 'self_lane':lane2}
 lane2.call_downstream = downstream_wrapper(**downstream2).__get__(lane2, Lane)
 onramp[0] = lane2
 
@@ -92,9 +100,22 @@ lane2.events = [{'event':'update lr', 'left':'add', 'left anchor':0, 'right': No
 #make simulation
 merge_lanes = [lane1, lane2]
 inflow_lanes = [lane0, lane1, lane2]
-sim = Simulation(inflow_lanes, merge_lanes)
+simulation = Simulation(inflow_lanes, merge_lanes, dt = .25)
 
 #call
-sim.simulate(3000)
+simulation.simulate(1000)
 
+#%%
+all_vehicles = list(simulation.prev_vehicles.union(simulation.vehicles))
+laneinds = {lane0:0, lane1:1, lane2:2}
+sim, siminfo = plot_format(all_vehicles, laneinds)
 
+mylane2list = []
+for veh in sim.keys():
+    if 2 in sim[veh][:,7]:
+        mylane2list.append(veh)
+#%%
+platoonplot(sim, None, siminfo, lane = 2, opacity = 0)
+platoonplot(sim, None, siminfo, lane = 1, opacity = 0)
+platoonplot(sim, None, siminfo, lane = 0, opacity = 0)
+# platoonplot(sim, None, siminfo, lane = 2, colorcode = False)

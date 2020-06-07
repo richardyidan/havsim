@@ -54,7 +54,7 @@ def IDM_shift_eql(p, v, shift_parameters, state):
 
 
 def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,
-          userelax_cur=True, userelax_new=False, use_coop=False, use_tact=False):
+          userelax_cur=True, userelax_new=False, use_coop=True, use_tact=True):
     """Minimizing total braking during lane change (MOBIL) lane changing decision model.
 
     parameters: 0 - safety criteria (maximum deceleration allowed after LC, more negative = less strict),
@@ -97,6 +97,7 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
         cura = veh.get_cf(veh.hd, veh.speed, veh.lead, veh.lane, timeind, dt, False)
     else:
         cura = veh.acc  # more generally could use a method to return acceleration
+    cura = veh.acc_bounds(cura)
     fola, newfola = mobil_helper(veh.fol, veh, veh.lead, newfolhd, timeind, dt, userelax_cur, userelax_new)
 
     # to compute left side: need to compute lfola, newlfola, newla
@@ -107,6 +108,7 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
 
         userelax = userelax_new and veh.in_relax
         newla = veh.get_cf(newlhd, veh.speed, llead, veh.llane, timeind, dt, userelax)
+        newla = veh.acc_bounds(newla)
 
         lincentive = newla - cura + p[2]*(newlfola - lfola + newfola - fola) + p[3]
 
@@ -118,6 +120,7 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
 
         userelax = userelax_new and veh.in_relax
         newra = veh.get_cf(newrhd, veh.speed, rlead, veh.rlane, timeind, dt, userelax)
+        newra = veh.acc_bounds(newra)
 
         rincentive = newra - cura + p[2]*(newrfola - rfola + newfola - fola) + p[4]
 
@@ -188,6 +191,8 @@ def mobil_helper(fol, curlead, newlead, newhd, timeind, dt, userelax_cur, userel
 
         userelax = userelax_new and fol.in_relax
         newfola = fol.get_cf(newhd, fol.speed, newlead, fol.lane, timeind, dt, userelax)
+        fola = fol.acc_bounds(fola)
+        newfola = fol.acc_bounds(fola)
 
     return fola, newfola
 
@@ -345,7 +350,7 @@ def coop_tact_model(veh, newhd, newlcsidefolhd, lcsidefolsafe, selfsafe, side, l
 
     elif tact or (not use_coop and use_tact):
         # mark side if not already
-        if veh.lc_side is None:
+        if veh.lc_side != side:
             veh.lc_side = side
         # find vehicle which is preventing change - if both lcsidefol and lcsidelead are prventing,
         # default to looking at the lcsidelead
@@ -368,8 +373,8 @@ def coop_tact_model(veh, newhd, newlcsidefolhd, lcsidefolsafe, selfsafe, side, l
 def IDM_parameters(*args):
     """Suggested parameters for the IDM/MOBIL."""
     cf_parameters = [33, 1.2, 2, 1.1, 1.5]  # note speed is supposed to be in m/s
-    # cf_parameters[0] += -np.random.rand()*6
+    # cf_parameters[0] += 3-np.random.rand()*6
     # cf_parameters[0] += np.random.rand()*25-15 #give vehicles very different speeds for testing purposes
-    lc_parameters = [-1.5, .2, .2, 0, .1, .5]
+    lc_parameters = [-2, .4, .2, 0, .2, .5]
 
     return cf_parameters, lc_parameters
