@@ -3,11 +3,11 @@
 Plotting some trajectories from merging vehicles from NGSIM
 """
 import havsim
-from havsim.plotting import animatevhd, animatetraj, plotvhd, plotColorLines, plotflows
+from havsim.plotting import animatevhd, animatetraj, plotvhd, plotColorLines, plotflows, platoonplot
 import numpy as np
 import matplotlib.pyplot as plt
 
-meas, platooninfo = havsim.calibration.algs.makeplatoonlist(data, 1, False)
+# meas, platooninfo = havsim.calibration.algs.makeplatoonlist(data, 1, False)
 
 #%%
 mergelist = []
@@ -25,7 +25,7 @@ sortedvehlist = havsim.calibration.algs.sortveh3(lane6vehlist, 6, meas, platooni
 
 #%%
 #animatevhd(meas, None, platooninfo, sortedvehlist[113:115], interval = 30, lane = 6)
-veh = mergelist[i]
+veh = mergelist[5]
 plotvhd(meas, None, platooninfo, [mergelist[5]], draw_arrow = True, plot_color_line = True)
 
 plt.figure()
@@ -35,3 +35,6 @@ plt.plot(meas[veh][0:t_n-t_nstar,3])
 #%%
 plt.figure()
 plotflows(meas,[[800,1200]],[0,10*60*14.5],30*10,type = 'FD',lane = 6, method = 'area')
+#%%
+platoonplot(meas, None, platooninfo, lane = 7, opacity = 0)
+platoonplot(meas, None, platooninfo, lane = 6, opacity = 0)

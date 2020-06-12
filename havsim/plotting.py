@@ -389,9 +389,9 @@ def plot_format(all_vehicles, laneinds):
     platooninfo = {}
     for veh in all_vehicles:
         vehid = veh.vehid
-        starttime = veh.inittime  # start and endtime are in real time, not slices time
+        starttime = veh.starttime  # start and endtime are in real time, not slices time
         if not veh.endtime:
-            endtime = veh.inittime + len(veh.speedmem) -1
+            endtime = veh.starttime + len(veh.speedmem) -1
         else:
             endtime = veh.endtime
         curmeas = np.empty((endtime - starttime + 1, 9))

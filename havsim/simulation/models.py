@@ -7,8 +7,12 @@ import numpy as np
 def IDM(p, state):
     """Intelligent Driver Model (IDM), second order ODE.
 
+    Note that if the headway is negative, model will begin accelerating; therefore if collisions occur,
+    very bad things can potentially happen. If velocity is negative, model will begin decelerating; so if
+    negative speeds occur, very bad things will happen.
+
     Args:
-        p: parameters - [max speed, comfortable time headway, jam spacing, max comfortable acceleration,
+        p: parameters - [max speed, comfortable time headway, jam spacing, comfortable acceleration,
                          emergency acceleration]
         state: list of [headway, self velocity, leader velocity]
 
@@ -50,7 +54,15 @@ def IDM_shift_eql(p, v, shift_parameters, state):
     else:
         temp = shift_parameters[1]**2
 
-    return (temp - 1)/temp*p[3]*(1 - (v/p[0])**4)
+    return (1 - temp)/temp*p[3]*(1 - (v/p[0])**4)
+
+
+def generic_shift(unused, unused2, shift_parameters, state):
+    """Acceleration shift for any model."""
+    if state == 'decel':
+        return shift_parameters[0]
+    else:
+        return shift_parameters[1]
 
 
 def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, newfolhd, timeind, dt,
@@ -58,11 +70,12 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
     """Minimizing total braking during lane change (MOBIL) lane changing decision model.
 
     parameters: 0 - safety criteria (maximum deceleration allowed after LC, more negative = less strict),
-        1 - incentive criteria (>0, larger = more strict. smaller = discretionary changes more likely),
-        2 - politeness (taking other vehicles into account, 0 = ignore other vehicles, ~.2 = realistic),
-        3 - bias on left side (can add a bias to make vehicles default to a certain side of the road),
-        4 - bias on right side,
-        5 - probability of checking LC while in discretionary state (not in original model. set to
+        1 - safety criteria for maximum deceleration allowed, when velocity is 0
+        2 - incentive criteria (>0, larger = more strict. smaller = discretionary changes more likely),
+        3 - politeness (taking other vehicles into account, 0 = ignore other vehicles, ~.1-.2 = realistic),
+        4 - bias on left side (can add a bias to make vehicles default to a certain side of the road),
+        5 - bias on right side,
+        6 - probability of checking LC while in discretionary state (not in original model. set to
             1/dt to always check discretionary. probability of checking per 1 second)
     naming convention - l/r = left/right respectively, current lane if no l/r
     new indicates that it would be the configuration after potential change
@@ -97,7 +110,7 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
         cura = veh.get_cf(veh.hd, veh.speed, veh.lead, veh.lane, timeind, dt, False)
     else:
         cura = veh.acc  # more generally could use a method to return acceleration
-    cura = veh.acc_bounds(cura)
+    # cura = veh.acc_bounds(cura)
     fola, newfola = mobil_helper(veh.fol, veh, veh.lead, newfolhd, timeind, dt, userelax_cur, userelax_new)
 
     # to compute left side: need to compute lfola, newlfola, newla
@@ -108,9 +121,9 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
 
         userelax = userelax_new and veh.in_relax
         newla = veh.get_cf(newlhd, veh.speed, llead, veh.llane, timeind, dt, userelax)
-        newla = veh.acc_bounds(newla)
+        # newla = veh.acc_bounds(newla)
 
-        lincentive = newla - cura + p[2]*(newlfola - lfola + newfola - fola) + p[3]
+        lincentive = newla - cura + p[3]*(newlfola - lfola + newfola - fola) + p[4]
 
     # same for right side
     if rside:
@@ -120,9 +133,9 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
 
         userelax = userelax_new and veh.in_relax
         newra = veh.get_cf(newrhd, veh.speed, rlead, veh.rlane, timeind, dt, userelax)
-        newra = veh.acc_bounds(newra)
+        # newra = veh.acc_bounds(newra)
 
-        rincentive = newra - cura + p[2]*(newrfola - rfola + newfola - fola) + p[4]
+        rincentive = newra - cura + p[3]*(newrfola - rfola + newfola - fola) + p[5]
 
     # determine which side we want to potentially intiate LC for
     if rincentive > lincentive:
@@ -146,18 +159,28 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
 
     # determine if LC can be completed, and if not, determine if we want to enter cooperative or
     # tactical states
+
+    # safe = p[0]   # default value of safety
+    safe = veh.speed/veh.maxspeed
+    safe = safe*p[0] + (1-safe)*p[1]  # safety changes with relative velocity
+    # safeguards for negative headway (necessary for IDM)
+
+    if newhd is not None and newhd < 0:
+        selfsafe = safe - 5
+    if newlcsidefolhd is not None and newlcsidefolhd < 0:
+        lcsidefolsafe = safe - 5
     if lctype == 'discretionary':
-        if incentive > p[1]:
-            if selfsafe > p[0] and lcsidefolsafe > p[0]:
+        if incentive > p[2]:
+            if selfsafe > safe and lcsidefolsafe > safe:
                 lc_actions[veh] = side
             else:
-                coop_tact_model(veh, newhd, newlcsidefolhd, lcsidefolsafe, selfsafe, side, lctype,
+                coop_tact_model(veh, newhd, newlcsidefolhd, lcsidefolsafe, selfsafe, safe, side, lctype,
                                 use_coop=use_coop, use_tact=use_tact)
     else:  # mandatory state
-        if selfsafe > p[0] and lcsidefolsafe > p[0]:
+        if selfsafe > safe and lcsidefolsafe > safe:
             lc_actions[veh] = side
         else:
-            coop_tact_model(veh, newhd, newlcsidefolhd, lcsidefolsafe, selfsafe, side, lctype,
+            coop_tact_model(veh, newhd, newlcsidefolhd, lcsidefolsafe, selfsafe, safe, side, lctype,
                             use_coop=use_coop, use_tact=use_tact)
     return
 
@@ -191,13 +214,13 @@ def mobil_helper(fol, curlead, newlead, newhd, timeind, dt, userelax_cur, userel
 
         userelax = userelax_new and fol.in_relax
         newfola = fol.get_cf(newhd, fol.speed, newlead, fol.lane, timeind, dt, userelax)
-        fola = fol.acc_bounds(fola)
-        newfola = fol.acc_bounds(fola)
+        # fola = fol.acc_bounds(fola)
+        # newfola = fol.acc_bounds(newfola)
 
     return fola, newfola
 
 
-def coop_tact_model(veh, newhd, newlcsidefolhd, lcsidefolsafe, selfsafe, side, lctype, use_coop=True,
+def coop_tact_model(veh, newhd, newlcsidefolhd, lcsidefolsafe, selfsafe, safe, side, lctype, use_coop=True,
                     use_tact=True):
     """Cooperative and tactical model for a lane changing decision model.
 
@@ -296,7 +319,7 @@ def coop_tact_model(veh, newhd, newlcsidefolhd, lcsidefolsafe, selfsafe, side, l
 
         else:  # see if we can get vehicle to cooperate
             tact = True
-            if newlcsidefolhd < 0:
+            if lcsidefol.cf_parameters is not None and newlcsidefolhd < 0:
                 coop_veh = lcsidefol.fol
             else:
                 coop_veh = lcsidefol
@@ -305,7 +328,7 @@ def coop_tact_model(veh, newhd, newlcsidefolhd, lcsidefolsafe, selfsafe, side, l
                 temp = coop_veh.coop_parameters
                 if lctype == 'mandatory':
                     start, end = veh.lc_urgency[:]
-                    temp += (veh.pos - start)/(end - start)
+                    temp += (veh.pos - start)/(end - start+1e-6)
 
                 if temp >= 1 or np.random.rand() < temp:
                     veh.coop_veh = coop_veh
@@ -339,7 +362,7 @@ def coop_tact_model(veh, newhd, newlcsidefolhd, lcsidefolsafe, selfsafe, side, l
                 temp = lcsidefol.coop_parameters
                 if lctype == 'mandatory':
                     start, end = veh.lc_urgency[:]
-                    temp += (veh.pos - start)/(end - start)
+                    temp += (veh.pos - start)/(end - start + 1e-6)
 
                 if temp >= 1 or np.random.rand() < temp:  # cooperation agreed/forced -> add cooperation
                     veh.coop_veh = lcsidefol
@@ -348,7 +371,7 @@ def coop_tact_model(veh, newhd, newlcsidefolhd, lcsidefolsafe, selfsafe, side, l
                     lcsidefol.acc += lcsidefol.shift_eql(lcsidefol.cf_parameters, lcsidefol.speed,
                                                          lcsidefol.shift_parameters, 'decel')
 
-    elif tact or (not use_coop and use_tact):
+    if tact or (not use_coop and use_tact):
         # mark side if not already
         if veh.lc_side != side:
             veh.lc_side = side
@@ -372,9 +395,9 @@ def coop_tact_model(veh, newhd, newlcsidefolhd, lcsidefolsafe, selfsafe, side, l
 
 def IDM_parameters(*args):
     """Suggested parameters for the IDM/MOBIL."""
-    cf_parameters = [33, 1.2, 2, 1.1, 1.5]  # note speed is supposed to be in m/s
+    cf_parameters = [30, 1.5, 2, 1.1, 1.5]  # note speed is supposed to be in m/s
     # cf_parameters[0] += 3-np.random.rand()*6
     # cf_parameters[0] += np.random.rand()*25-15 #give vehicles very different speeds for testing purposes
-    lc_parameters = [-2, .4, .2, 0, .2, .5]
+    lc_parameters = [-7, -20, .4, .1, 0, .2, .5]
 
     return cf_parameters, lc_parameters
