@@ -95,13 +95,14 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
 
     # update left and right followers
     for veh in vehicles:
-        update_lrfol(veh)  # this used to be done after updating all states, memory and headway
+        update_lrfol(veh)
 
     for veh in vehicles:  # debugging
         if not veh._chk_leadfol(verbose = False):
-            print('-------- Report for '+str(veh.vehid)+' at time '+str(timeind)+'--------')
+            print('-------- Report for Vehicle '+str(veh.vehid)+' at time '+str(timeind)+'--------')
             veh._leadfol()
             veh._chk_leadfol()
+            # raise ValueError('incorrect vehicle order')
 
     # update inflow, adding vehicles if necessary
     for curlane in inflow_lanes:
@@ -157,16 +158,16 @@ def update_lane_events(veh, timeind, remove_vehicles):
             veh.lane_events.pop(0)  # event is over, so we shouldn't check it in the future
 
         elif curevent['event'] == 'exit':
-            # if veh.lead is not None:  # should not be necessary
-            #     veh.lead.fol = fol
-            # # maybe need to check l/rlead for edge case
-            # for i in veh.llead:
-            #     i.rfol = fol
-            # for i in veh.rlead:
-            #     i.lfol = fol
+            fol = veh.fol
+            # need to check l/rlead for edge case when you overtake and exit in same timestep
+            for i in veh.llead:
+                i.rfol = fol
+                fol.llead.add(i)
+            for i in veh.rlead:
+                i.lfol = fol
+                fol.rlead.add(i)
 
             # update vehicle orders
-            fol = veh.fol
             fol.lead = None
             fol.leadmem.append((None, timeind+1))
             if veh.lfol is not None:
@@ -198,6 +199,7 @@ def update_lane_lr(veh, curlane, curevent):
         None (Modifies veh attributes in place.)
     """
     if curevent['left'] == 'remove':
+
         veh.lfol.rlead.remove(veh)
         veh.lfol = None
         veh.l_lc = None
@@ -569,6 +571,8 @@ def update_lrfol(veh):
     better for larger timesteps or if l/rfol don't need to always be updated. See block comment
     above update_change to discuss alternative strategies for defining leader/follower relationships.
     See update_change documentation for explanation of naming conventions.
+    update_lrfol_multiple can be used to handle edge cases so that the vehicle order is always correct,
+    but is slightly more computationally expensive and not required in normal situations.
 
     Args:
         veh: Vehicle to check its lfol/rfol to be updated.
@@ -590,7 +594,55 @@ def update_lrfol(veh):
             lfol.rfol.llead.remove(lfol)
             lfol.rfol = veh
             veh.llead.add(lfol)
-        # update_lfol_multiple(veh, lfol.fol)
+
+    # similarly for right
+    if rfol is None:
+        pass
+    elif veh.lane.get_dist(veh, rfol) > 0:
+        veh.rfol = rfol.fol
+        veh.rfol.llead.add(veh)
+        rfol.llead.remove(veh)
+
+        if rfol.lfol is not None:
+            rfol.lfol.rlead.remove(rfol)
+            rfol.lfol = veh
+            veh.rlead.add(rfol)
+
+def update_lrfol_multiple(veh):
+    """Handles edge cases where a single vehicle overtakes 2 or more vehicles in a timestep.
+
+    In update_lrfol, when there are multiple overtakes in a single timestep (i.e. an l/rfol passes 2 or more
+    l/rlead vehicles, OR a vehicle is overtaken by its lfol, lfol.fol, lfol.fol.fol, etc.) the vehicle order
+    can be wrong for the next timestep. For every overtaken vehicle, 1 additional timestep with no overtakes
+    is sufficient but not necessary to correct the vehicle order. So if an ego vehicle overtakes 2 vehicles
+    on timestep 10, timestep 11 will have an incorrect order. More detail in comments.
+    """
+    # edge case 1 - a vehicle veh overtakes 2 llead, llead and llead.lead, in a timestep. If llead.lead
+    # has its update_lrfol called first, and then llead, the vehicle order will be wrong because veh will
+    # have llead as a rfol. If llead has its update_lrfol called first, the vehicle order will be correct.
+    # for the wrong order to be correct, there will need to be 1 timestep where veh does not overtake, so that
+    # the llead.lead will see veh overtook it and the order will be corrected. If, instead, veh overtakes
+    # llead.lead.lead, then again whether the order will be correct depends on the update order (it will
+    # be correct if llead.lead updates first, otherwise it will be behind 1 vehicle like before).
+
+    # edge case 2 - a vehicle veh is overtaken by lfol and lfol.fol in the same timestep. Here veh will have
+    # lfol.fol as its lfol. The order will always be corrected in the next timestep, unless another
+    # edge case (either 1 or 2) occurs.
+    lfol, rfol = veh.lfol, veh.rfol
+    if lfol is None:
+        pass
+    elif veh.lane.get_dist(veh, lfol) > 0:
+        # update for veh
+        veh.lfol = lfol.fol
+        veh.lfol.rlead.add(veh)
+        lfol.rlead.remove(veh)
+        # update for lfol
+        if lfol.rfol is not None:  # lfol.rfol is None in edge case where lfol loses it rlane and
+            # overtakes veh in the same timestep
+            lfol.rfol.llead.remove(lfol)
+            lfol.rfol = veh
+            veh.llead.add(lfol)
+        # update_lfol_multiple(veh, lfol.fol)  # dont know if this is needed or not
 
     # similarly for right
     if rfol is None:
@@ -1837,8 +1889,11 @@ class Vehicle:
                     lfolmsg.append('lfol leader is behind self')
             lead, fol = self.lane.leadfol_find(self, self.lfol)
             if fol is not self.lfol:
-                lfolpass = False
-                lfolmsg.append('lfol is not correct vehicle')
+                if self.lfol.pos == self.pos:
+                    pass
+                else:
+                    lfolpass = False
+                    lfolmsg.append('lfol is not correct vehicle - should be '+str(fol))
         rfolpass = True
         rfolmsg = []
         if self.rfol is not None:
@@ -1860,8 +1915,11 @@ class Vehicle:
                     rfolmsg.append('rfol leader is behind self')
             lead, fol = self.lane.leadfol_find(self, self.rfol)
             if fol is not self.rfol:
-                rfolpass = False
-                rfolmsg.append('rfol is not correct vehicle')
+                if self.rfol.pos == self.pos:
+                    pass
+                else:
+                    rfolpass = False
+                    rfolmsg.append('rfol is not correct vehicle - should be '+str(fol))
         rleadpass = True
         rleadmsg = []
         for i in self.rlead:

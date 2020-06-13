@@ -109,17 +109,17 @@ inflow_lanes = [lane0, lane1, lane2]
 simulation = Simulation(inflow_lanes, merge_lanes, dt = .25)
 
 #call
-simulation.simulate(15000)
+simulation.simulate(7000)
 
 #%%
-all_vehicles = list(simulation.prev_vehicles.union(simulation.vehicles))
-laneinds = {lane0:0, lane1:1, lane2:2}
-sim, siminfo = plot_format(all_vehicles, laneinds)
+# all_vehicles = list(simulation.prev_vehicles.union(simulation.vehicles))
+# laneinds = {lane0:0, lane1:1, lane2:2}
+# sim, siminfo = plot_format(all_vehicles, laneinds)
 
-mylane2list = []
-for veh in sim.keys():
-    if 2 in sim[veh][:,7]:
-        mylane2list.append(veh)
+# mylane2list = []
+# for veh in sim.keys():
+#     if 2 in sim[veh][:,7]:
+#         mylane2list.append(veh)
 #%%
 # platoonplot(sim, None, siminfo, lane = 2, opacity = 0)
 # platoonplot(sim, None, siminfo, lane = 1, opacity = 0)
