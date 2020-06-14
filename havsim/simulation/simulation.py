@@ -94,13 +94,13 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
         vehicles.remove(veh)
 
     # update left and right followers
-    for veh in vehicles:
-        update_lrfol(veh)
+    update_all_lrfol(vehicles)
+    # update_all_lrfol_multiple(vehicles)
 
     for veh in vehicles:  # debugging
         if not veh._chk_leadfol(verbose = False):
-            print('-------- Report for Vehicle '+str(veh.vehid)+' at time '+str(timeind)+'--------')
-            veh._leadfol()
+            # print('-------- Report for Vehicle '+str(veh.vehid)+' at time '+str(timeind)+'--------')
+            # veh._leadfol()
             veh._chk_leadfol()
             # raise ValueError('incorrect vehicle order')
 
@@ -199,7 +199,9 @@ def update_lane_lr(veh, curlane, curevent):
         None (Modifies veh attributes in place.)
     """
     if curevent['left'] == 'remove':
-
+        # handle edge case where veh overtakes lfol in same timestep the left lane ends
+        update_lrfol(veh.lfol)
+        # update lead/fol order
         veh.lfol.rlead.remove(veh)
         veh.lfol = None
         veh.l_lc = None
@@ -221,6 +223,9 @@ def update_lane_lr(veh, curlane, curevent):
 
     # same thing for right
     if curevent['right'] == 'remove':
+
+        update_lrfol(veh.rfol)
+
         veh.rfol.llead.remove(veh)
         veh.rfol = None
         veh.r_lc = None
@@ -563,7 +568,7 @@ def set_route_events(veh):
 
 
 def update_lrfol(veh):
-    """After a vehicle's state has been updated, this updates its lfol/rfol.
+    """After a vehicle's state has been updated, this updates its left and right followers.
 
     We keep each vehicle's left/right followers updated by doing a single distance compute each timestep.
     The current way of dealing with l/r followers is designed for timesteps which are relatively small.
@@ -571,8 +576,10 @@ def update_lrfol(veh):
     better for larger timesteps or if l/rfol don't need to always be updated. See block comment
     above update_change to discuss alternative strategies for defining leader/follower relationships.
     See update_change documentation for explanation of naming conventions.
-    update_lrfol_multiple can be used to handle edge cases so that the vehicle order is always correct,
+    Called in simulation by update_all_lrfol.
+    update_all_lrfol_multiple can be used to handle edge cases so that the vehicle order is always correct,
     but is slightly more computationally expensive and not required in normal situations.
+    The edge cases occur when vehicles overtake multiple vehicles in a single timestep.
 
     Args:
         veh: Vehicle to check its lfol/rfol to be updated.
@@ -589,11 +596,9 @@ def update_lrfol(veh):
         veh.lfol.rlead.add(veh)
         lfol.rlead.remove(veh)
         # update for lfol
-        if lfol.rfol is not None:  # lfol.rfol is None in edge case where lfol loses it rlane and
-            # overtakes veh in the same timestep
-            lfol.rfol.llead.remove(lfol)
-            lfol.rfol = veh
-            veh.llead.add(lfol)
+        lfol.rfol.llead.remove(lfol)
+        lfol.rfol = veh
+        veh.llead.add(lfol)
 
     # similarly for right
     if rfol is None:
@@ -603,12 +608,18 @@ def update_lrfol(veh):
         veh.rfol.llead.add(veh)
         rfol.llead.remove(veh)
 
-        if rfol.lfol is not None:
-            rfol.lfol.rlead.remove(rfol)
-            rfol.lfol = veh
-            veh.rlead.add(rfol)
+        rfol.lfol.rlead.remove(rfol)
+        rfol.lfol = veh
+        veh.rlead.add(rfol)
 
-def update_lrfol_multiple(veh):
+
+def update_all_lrfol(vehicles):
+    """Updates all vehicles left and right followers, without handling multiple overtakes edge cases."""
+    for veh in vehicles:
+        update_lrfol(veh)
+
+
+def update_all_lrfol_multiple(vehicles):
     """Handles edge cases where a single vehicle overtakes 2 or more vehicles in a timestep.
 
     In update_lrfol, when there are multiple overtakes in a single timestep (i.e. an l/rfol passes 2 or more
@@ -616,6 +627,7 @@ def update_lrfol_multiple(veh):
     can be wrong for the next timestep. For every overtaken vehicle, 1 additional timestep with no overtakes
     is sufficient but not necessary to correct the vehicle order. So if an ego vehicle overtakes 2 vehicles
     on timestep 10, timestep 11 will have an incorrect order. More detail in comments.
+    This version is slightly slower than update_all_lrfol but handles the edge cases.
     """
     # edge case 1 - a vehicle veh overtakes 2 llead, llead and llead.lead, in a timestep. If llead.lead
     # has its update_lrfol called first, and then llead, the vehicle order will be wrong because veh will
@@ -628,65 +640,106 @@ def update_lrfol_multiple(veh):
     # edge case 2 - a vehicle veh is overtaken by lfol and lfol.fol in the same timestep. Here veh will have
     # lfol.fol as its lfol. The order will always be corrected in the next timestep, unless another
     # edge case (either 1 or 2) occurs.
-    lfol, rfol = veh.lfol, veh.rfol
-    if lfol is None:
-        pass
-    elif veh.lane.get_dist(veh, lfol) > 0:
-        # update for veh
-        veh.lfol = lfol.fol
-        veh.lfol.rlead.add(veh)
-        lfol.rlead.remove(veh)
-        # update for lfol
-        if lfol.rfol is not None:  # lfol.rfol is None in edge case where lfol loses it rlane and
-            # overtakes veh in the same timestep
+
+    lovertaken = {}  # key with overtaking vehicles as keys, values are a list of vehicles the key overtook
+    # lovertaken = left overtaken meaning a vehicles lfol overtook
+    rovertaken = {}  # same as lovertaken but for right side
+    # first loop we update all vehicles l/rfol and keep track of overtaking vehicles
+    for veh in vehicles:
+        lfol, rfol = veh.lfol, veh.rfol
+        if lfol is None:
+            pass
+        elif veh.lane.get_dist(veh, lfol) > 0:
+            # update for veh
+            veh.lfol = lfol.fol
+            veh.lfol.rlead.add(veh)
+            lfol.rlead.remove(veh)
+            # to handle edge case 1 we keep track of vehicles lfol overtakes
+            if lovertaken.has_keys('lfol'):
+                lovertaken[lfol].append(veh)
+            else:
+                lovertaken[lfol] = [veh]
+            # to handle edge case 2 we update recursively if lfol overtakes
+            update_lfol_recursive(veh, lfol.fol, lovertaken)
+
+        # same for right side
+        if rfol is None:
+            pass
+        elif veh.lane.get_dist(veh, rfol) > 0:
+
+            veh.rfol = rfol.fol
+            veh.rfol.llead.add(veh)
+            rfol.llead.remove(veh)
+
+            if rovertaken.has_keys('rfol'):
+                rovertaken[rfol].append(veh)
+            else:
+                rovertaken[rfol] = [veh]
+
+            update_rfol_recursive(veh, rfol.fol, rovertaken)
+
+    #now to finish the order we have to update all vehicles which overtook
+    for lfol, overtook in lovertaken.items():
+        if len(overtook) == 1:  # we know what lfol new rfol is - it can only be one thing
+            # update for lfol
+            veh = overtook[0]
             lfol.rfol.llead.remove(lfol)
             lfol.rfol = veh
             veh.llead.add(lfol)
-        # update_lfol_multiple(veh, lfol.fol)  # dont know if this is needed or not
+        else:
+            distlist = [veh.lane.get_dist(veh, lfol) for veh in overtook]
+            ind = np.argmin(distlist)
+            veh = overtook[ind]
+            lfol.rfol.llead.remove(lfol)
+            lfol.rfol = veh
+            veh.llead.add(lfol)
 
-    # similarly for right
-    if rfol is None:
-        pass
-    elif veh.lane.get_dist(veh, rfol) > 0:
-        veh.rfol = rfol.fol
-        veh.rfol.llead.add(veh)
-        rfol.llead.remove(veh)
-
-        if rfol.lfol is not None:
+    # same for right side
+    for rfol, overtook in rovertaken.items():
+        if len(overtook) == 1:  # we know what lfol new rfol is - it can only be one thing
+            # update for lfol
+            veh = overtook[0]
             rfol.lfol.rlead.remove(rfol)
             rfol.lfol = veh
             veh.rlead.add(rfol)
-        # update_rfol_multiple(veh, rfol.fol)
+
+        else:
+            distlist = [veh.lane.get_dist(veh, rfol) for veh in overtook]
+            ind = np.argmin(distlist)
+            veh = overtook[ind]
+            rfol.lfol.rlead.remove(rfol)
+            rfol.lfol = veh
+            veh.rlead.add(rfol)
 
 
-def update_lfol_multiple(veh, lfol):
-    """Recursively updates lfol, possibly multiple times."""
+def update_lfol_recursive(veh, lfol, lovertaken):
+    """Handles edge case 2 for update_all_lrfol_multiple by allowing lfol to update multiple times."""
     if veh.lane.get_dist(veh, lfol) > 0:
         # update for veh
         veh.lfol = lfol.fol
         veh.lfol.rlead.add(veh)
         lfol.rlead.remove(veh)
-        # update for lfol
-        if lfol.rfol is not None:  # lfol.rfol is None in edge case where lfol loses it rlane and
-            # overtakes veh in the same timestep
-            lfol.rfol.llead.remove(lfol)
-            lfol.rfol = veh
-            veh.llead.add(lfol)
-        update_lfol_multiple(veh, lfol.fol)
+        # handles edge case 1
+        if lovertaken.has_keys('lfol'):
+            lovertaken[lfol].append(veh)
+        else:
+            lovertaken[lfol] = [veh]
+        update_lfol_recursive(veh, lfol.fol)
 
 
-def update_rfol_multiple(veh, rfol):
-    """Recursively updated rfol, possibly multiple times"""
+def update_rfol_recursive(veh, rfol, rovertaken):
+    """Handles edge case 2 for update_all_lrfol_multiple by allowing rfol to update multiple times."""
     if veh.lane.get_dist(veh, rfol) > 0:
+
         veh.rfol = rfol.fol
         veh.rfol.llead.add(veh)
         rfol.llead.remove(veh)
 
-        if rfol.lfol is not None:
-            rfol.lfol.rlead.remove(rfol)
-            rfol.lfol = veh
-            veh.rlead.add(rfol)
-        update_rfol_multiple(veh, rfol.fol)
+        if rovertaken.has_keys('rfol'):
+            rovertaken[rfol].append(veh)
+        else:
+            rovertaken[rfol] = [veh]
+        update_rfol_recursive(veh, rfol.fol, rovertaken)
 
 
 def update_merge_anchors(curlane, lc_actions):
@@ -844,7 +897,15 @@ def update_veh_lane(veh, oldlane, newlane, timeind, side=None):
 # relative to the number of lane changes.
 # Because you don't need the llead/rlead in this option, you also can avoid fully updating l/rfol every
 # timestep, although you would need to check if your l/rfol had a lane change, but that operation
-# just checks for a hash value, which is less expensive than an actual dist calculation.
+# just checks for a hash value or compares anchor vehicles, which is less expensive than a get_dist call.
+
+# More generally, the different strategies (always updating lead/fol relationships, having l/rlead or not)
+# can be combined. If you don't need l/rlead, then there is no reason to keep it updated (or even have it).
+# likewise, if you don't need to always have the lead/fol updated every timestep, there is no reason to
+# keep it updated.
+# TODO Thus it makes sense to implement versions of update_change and update_lrfol for the case where we don't
+# have llead/rlead attributes, and we only update a vehicle l/rfol when the lane changing model is called.
+# this can be a performance optimization that can be done after adding parralelism to the code.
 # ######
 def update_change(lc_actions, veh, timeind):
     """When a vehicle changes lanes, this function does all the necessary updates.
