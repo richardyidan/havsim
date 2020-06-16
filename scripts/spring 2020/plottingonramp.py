@@ -36,5 +36,5 @@ plt.plot(meas[veh][0:t_n-t_nstar,3])
 plt.figure()
 plotflows(meas,[[800,1200]],[0,10*60*14.5],30*10,type = 'FD',lane = 6, method = 'area')
 #%%
-platoonplot(meas, None, platooninfo, lane = 7, opacity = 0)
-platoonplot(meas, None, platooninfo, lane = 6, opacity = 0)
+platoonplot(meas, None, platooninfo, lane = 3, opacity = 0)
+platoonplot(meas, None, platooninfo, lane = 4, opacity = 0)
