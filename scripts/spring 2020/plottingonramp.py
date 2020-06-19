@@ -3,7 +3,7 @@
 Plotting some trajectories from merging vehicles from NGSIM
 """
 import havsim
-from havsim.plotting import animatevhd, animatetraj, plotvhd, plotColorLines, plotflows, platoonplot
+from havsim.plotting import animatevhd, animatetraj, plotvhd, plotColorLines, plotflows, platoonplot, plotspacetime
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -38,3 +38,7 @@ plotflows(meas,[[800,1200]],[0,10*60*14.5],30*10,type = 'FD',lane = 6, method = 
 #%%
 platoonplot(meas, None, platooninfo, lane = 3, opacity = 0)
 platoonplot(meas, None, platooninfo, lane = 4, opacity = 0)
+#%%
+plotspacetime(meas, platooninfo, lane = 3)
+plotspacetime(meas, platooninfo, lane = 6)
+plotspacetime(meas, platooninfo, lane = 7)

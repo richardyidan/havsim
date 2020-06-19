@@ -75,7 +75,7 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
         veh.update(timeind, dt)
     for veh in vehicles:
         if veh.lead is not None:
-            veh.hd = veh.lane.get_headway(veh, veh.lead)
+            veh.hd = get_headway(veh, veh.lead)
         # else:  # for robustness only, should not be needed
         #     veh.hd = None
 
@@ -97,12 +97,12 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
     update_all_lrfol(vehicles)
     # update_all_lrfol_multiple(vehicles)
 
-    for veh in vehicles:  # debugging
-        if not veh._chk_leadfol(verbose = False):
-            # print('-------- Report for Vehicle '+str(veh.vehid)+' at time '+str(timeind)+'--------')
-            # veh._leadfol()
-            veh._chk_leadfol()
-            # raise ValueError('incorrect vehicle order')
+    # for veh in vehicles:  # debugging
+    #     if not veh._chk_leadfol(verbose = False):
+    #         # print('-------- Report for Vehicle '+str(veh.vehid)+' at time '+str(timeind)+'--------')
+    #         # veh._leadfol()
+    #         veh._chk_leadfol()
+    #         # raise ValueError('incorrect vehicle order')
 
     # update inflow, adding vehicles if necessary
     for curlane in inflow_lanes:
@@ -140,7 +140,8 @@ def update_lane_events(veh, timeind, remove_vehicles):
     if not veh.lane_events:
         return
     curevent = veh.lane_events[0]
-    if veh.pos > curevent['pos']:
+    if veh.pos > curevent['pos']:  # could keep curevent['pos'] in vehicle memory so we don't have to access
+    # it every timestep
         if curevent['event'] == 'new lane':
             # update lane/road/position
             newlane = veh.lane.connect_to
@@ -590,7 +591,7 @@ def update_lrfol(veh):
     lfol, rfol = veh.lfol, veh.rfol
     if lfol is None:
         pass
-    elif veh.lane.get_dist(veh, lfol) > 0:
+    elif get_dist(veh, lfol) > 0:
         # update for veh
         veh.lfol = lfol.fol
         veh.lfol.rlead.append(veh)
@@ -603,7 +604,7 @@ def update_lrfol(veh):
     # similarly for right
     if rfol is None:
         pass
-    elif veh.lane.get_dist(veh, rfol) > 0:
+    elif get_dist(veh, rfol) > 0:
         veh.rfol = rfol.fol
         veh.rfol.llead.append(veh)
         rfol.llead.remove(veh)
@@ -640,6 +641,8 @@ def update_all_lrfol_multiple(vehicles):
     # edge case 2 - a vehicle veh is overtaken by lfol and lfol.fol in the same timestep. Here veh will have
     # lfol.fol as its lfol. The order will always be corrected in the next timestep, unless another
     # edge case (either 1 or 2) occurs.
+    # note edge case 2 is rarer and can potentially not be checked for - remove the update_recursive call
+    # and we won't check for it.
 
     lovertaken = {}  # key with overtaking vehicles as keys, values are a list of vehicles the key overtook
     # lovertaken = left overtaken meaning a vehicles lfol overtook
@@ -649,13 +652,13 @@ def update_all_lrfol_multiple(vehicles):
         lfol, rfol = veh.lfol, veh.rfol
         if lfol is None:
             pass
-        elif veh.lane.get_dist(veh, lfol) > 0:
+        elif get_dist(veh, lfol) > 0:
             # update for veh
             veh.lfol = lfol.fol
             veh.lfol.rlead.append(veh)
             lfol.rlead.remove(veh)
             # to handle edge case 1 we keep track of vehicles lfol overtakes
-            if lovertaken.has_keys('lfol'):
+            if lfol in lovertaken:
                 lovertaken[lfol].append(veh)
             else:
                 lovertaken[lfol] = [veh]
@@ -665,13 +668,13 @@ def update_all_lrfol_multiple(vehicles):
         # same for right side
         if rfol is None:
             pass
-        elif veh.lane.get_dist(veh, rfol) > 0:
+        elif get_dist(veh, rfol) > 0:
 
             veh.rfol = rfol.fol
             veh.rfol.llead.append(veh)
             rfol.llead.remove(veh)
 
-            if rovertaken.has_keys('rfol'):
+            if rfol in rovertaken:
                 rovertaken[rfol].append(veh)
             else:
                 rovertaken[rfol] = [veh]
@@ -687,7 +690,7 @@ def update_all_lrfol_multiple(vehicles):
             lfol.rfol = veh
             veh.llead.append(lfol)
         else:
-            distlist = [veh.lane.get_dist(veh, lfol) for veh in overtook]
+            distlist = [get_dist(veh, lfol) for veh in overtook]
             ind = np.argmin(distlist)
             veh = overtook[ind]
             lfol.rfol.llead.remove(lfol)
@@ -704,7 +707,7 @@ def update_all_lrfol_multiple(vehicles):
             veh.rlead.append(rfol)
 
         else:
-            distlist = [veh.lane.get_dist(veh, rfol) for veh in overtook]
+            distlist = [get_dist(veh, rfol) for veh in overtook]
             ind = np.argmin(distlist)
             veh = overtook[ind]
             rfol.lfol.rlead.remove(rfol)
@@ -714,13 +717,13 @@ def update_all_lrfol_multiple(vehicles):
 
 def update_lfol_recursive(veh, lfol, lovertaken):
     """Handles edge case 2 for update_all_lrfol_multiple by allowing lfol to update multiple times."""
-    if veh.lane.get_dist(veh, lfol) > 0:
+    if get_dist(veh, lfol) > 0:
         # update for veh
         veh.lfol = lfol.fol
         veh.lfol.rlead.append(veh)
         lfol.rlead.remove(veh)
         # handles edge case 1
-        if lovertaken.has_keys('lfol'):
+        if lfol in lovertaken:
             lovertaken[lfol].append(veh)
         else:
             lovertaken[lfol] = [veh]
@@ -729,13 +732,13 @@ def update_lfol_recursive(veh, lfol, lovertaken):
 
 def update_rfol_recursive(veh, rfol, rovertaken):
     """Handles edge case 2 for update_all_lrfol_multiple by allowing rfol to update multiple times."""
-    if veh.lane.get_dist(veh, rfol) > 0:
+    if get_dist(veh, rfol) > 0:
 
         veh.rfol = rfol.fol
         veh.rfol.llead.append(veh)
         rfol.llead.remove(veh)
 
-        if rovertaken.has_keys('rfol'):
+        if rfol in rovertaken:
             rovertaken[rfol].append(veh)
         else:
             rovertaken[rfol] = [veh]
@@ -821,7 +824,7 @@ def new_relaxation(veh, timeind, dt):
         olds = veh.get_eql(veh.lead.speed)
     else:
         olds = veh.hd
-    news = veh.lane.get_headway(veh, veh.lead)
+    news = get_headway(veh, veh.lead)
 
 
     relaxamount = olds-news
@@ -1038,7 +1041,7 @@ def update_leadfol_after_lc(veh, lcsidelane, newlcsidelane, side, timeind):
     newleads = []
     oldleads = getattr(lcfol, opsidelead)
     for j in oldleads.copy():
-        curdist = lcsidelane.get_dist(veh, j)
+        curdist = get_dist(veh, j)
         if curdist > 0:
             setattr(j, lcsidefol, veh)
             newleads.append(j)
@@ -1050,7 +1053,7 @@ def update_leadfol_after_lc(veh, lcsidelane, newlcsidelane, side, timeind):
     mindist = math.inf
     minveh = None
     for j in oldleads.copy():
-        curdist = lcsidelane.get_dist(veh, j)
+        curdist = get_dist(veh, j)
         if curdist > 0:
             setattr(j, opsidefol, veh)
             newleads.append(j)
@@ -1416,7 +1419,7 @@ def set_lc_helper(veh, chk_lc=1, get_fol=True):
         elif lead is None:
             newfolhd = None
         else:
-            newfolhd = fol.lane.get_headway(fol, lead)
+            newfolhd = get_headway(fol, lead)
     else:
         return True, (lside, rside, newlfolhd, newlhd, newrfolhd, newrhd)
 
@@ -1440,13 +1443,13 @@ def get_new_hd(lcsidefol, veh, lcsidelane):
     if lcsidelead is None:
         newlcsidehd = None
     else:
-        newlcsidehd = lcsidelane.get_headway(veh, lcsidelead)
+        newlcsidehd = get_headway(veh, lcsidelead)
         # if newlcsidehd < 0:
             # newlcsidehd = 1e-6
     if lcsidefol.cf_parameters is None:
         newlcsidefolhd = None
     else:
-        newlcsidefolhd = lcsidefol.lane.get_headway(lcsidefol, veh)
+        newlcsidefolhd = get_headway(lcsidefol, veh)
         # if newlcsidefolhd < 0:
             # newlcsidefolhd = 1e-6
 
@@ -1783,31 +1786,22 @@ class Vehicle:
         return inv_flow_helper(self, x, leadlen, output_type, congested, self.eql_type,
                                (0, self.maxspeed), self.hdbounds)
 
-    def shift_eql(self, p, v, shift_parameters, state):
+    def shift_eql(self, state):
         """Model used for applying tactical/cooperative acceleration during lane changes.
 
-        The model works by solving for an acceleration which modifies the equilibrium solution by some
-        fixed amount. Any model which has an equilibrium solution which can be solved analytically,
-        it should be possible to define a model in this way. For IDM, the result that comes out lets
-        you modify the equilibrium by a multiple.
-        E.g. if the shift parameter = .5, and the equilibrium headway is usually 20 at the provided speed,
-        we return an acceleration which makes the equilibrium headway 10. If we request 'decel', the parameter
-        must be > 1 so that the acceleration is negative. Otherwise the parameter must be < 1.
-
+        It is assumed that we can give one of two commands - either 'decel' or 'accel' to make the vehicle
+        give more or less space, respectively.
 
         Args:
-            p: car following parameters
-            v: speed
-            shift_parameters: list of deceleration, acceleration parameters. eq'l at v goes to n
-                times of normal, where n is the parameter
-            state: if state = 'decel' we use shift_parameters[0] else shift_parameters[1]
+            state: either 'decel' if we want vehicle to increase its headway, otherwise 'accel'
 
         Returns:
             TYPE: float acceleration
         """
         # TODO fix this - acceleration too weak, use different formulation
-        # could use formulation based on another DE which pushes towards a new eql, uses the eql fun of
-        # the base model to calculate what the base acceleration at this new eql would be
+        # could use formulation based on another DE which pushes towards a new eql, uses cf_model
+        # to calculate what the base acceleration at this new eql would be
+        # also figure out what the call signature should look like
 
         # In Treiber/Kesting JS code they have another way of doing this where vehicles will use their
         # new deceleration if its greater than -2b
@@ -1818,7 +1812,7 @@ class Vehicle:
         #     temp = shift_parameters[1]**2
 
         # return (1 - temp)/temp*p[3]*(1 - (v/p[0])**4)
-        return hm.generic_shift(p, v, shift_parameters, state)
+        return hm.generic_shift(0, 0, self.shift_parameters, state)
 
     def set_lc(self, lc_actions, timeind, dt):
         """Evaluates a vehicle's lane changing model, recording the result in lc_actions.
@@ -1941,11 +1935,11 @@ class Vehicle:
             if self.lfol.lane.anchor is not self.llane.anchor:
                 lfolpass = False
                 lfolmsg.append('lfol is not in left lane')
-            if self.lane.get_dist(self, self.lfol) > 0:
+            if get_dist(self, self.lfol) > 0:
                 lfolpass = False
                 lfolmsg.append('lfol is in front of self')
             if self.lfol.lead is not None:
-                if self.lane.get_dist(self, self.lfol.lead) < 0:
+                if get_dist(self, self.lfol.lead) < 0:
                     lfolpass = False
                     lfolmsg.append('lfol leader is behind self')
             lead, fol = self.lane.leadfol_find(self, self.lfol)
@@ -1967,11 +1961,11 @@ class Vehicle:
             if self.rfol.lane.anchor is not self.rlane.anchor:
                 rfolpass = False
                 rfolmsg.append('rfol is not in right lane')
-            if self.lane.get_dist(self, self.rfol) > 0:
+            if get_dist(self, self.rfol) > 0:
                 rfolpass = False
                 rfolmsg.append('rfol is in front of self')
             if self.rfol.lead is not None:
-                if self.lane.get_dist(self, self.rfol.lead) < 0:
+                if get_dist(self, self.rfol.lead) < 0:
                     rfolpass = False
                     rfolmsg.append('rfol leader is behind self')
             lead, fol = self.lane.leadfol_find(self, self.rfol)
@@ -1987,7 +1981,7 @@ class Vehicle:
             if i.lfol is not self:
                 rleadpass = False
                 rleadmsg.append('rlead does not have self as lfol')
-            if self.lane.get_dist(self, i) < 0:
+            if get_dist(self, i) < 0:
                 rleadpass = False
                 rleadmsg.append('rlead is behind self')
         lleadpass = True
@@ -1996,7 +1990,7 @@ class Vehicle:
             if i.rfol is not self:
                 lleadpass = False
                 lleadmsg.append('llead does not have self as rfol')
-            if self.lane.get_dist(self,i) < 0:
+            if get_dist(self, i) < 0:
                 lleadpass = False
                 lleadmsg.append('llead is behind self')
         leadpass = True
@@ -2005,7 +1999,7 @@ class Vehicle:
             if self.lead.fol is not self:
                 leadpass = False
                 leadmsg.append('leader does not have self as follower')
-            if self.lane.get_headway(self,self.lead) < 0:
+            if get_headway(self, self.lead) < 0:
                 leadpass = False
                 leadmsg.append('leader is behind self')
 
@@ -2014,7 +2008,7 @@ class Vehicle:
         if self.fol.lead is not self:
             folpass = False
             folmsg.append('follower does not have self as leader')
-        if self.lane.get_headway(self, self.fol) > 0:
+        if get_headway(self, self.fol) > 0:
             folpass = False
             folmsg.append('follower is ahead of self')
 
@@ -2048,7 +2042,7 @@ class Vehicle:
 
 def downstream_wrapper(method='speed', time_series=None, congested=True, merge_side='l',
                        merge_anchor_ind=None, target_lane=None, self_lane=None, shift=1, minacc=-2,
-                       stopping = 'car following'):
+                       stopping='car following'):
     """Defines call_downstream method for Lane. keyword options control behavior of call_downstream.
 
     call_downstream is used instead of the cf model in order to get the acceleration in cases where there is
@@ -2139,7 +2133,7 @@ def downstream_wrapper(method='speed', time_series=None, congested=True, merge_s
         endanchor.pos = self_lane.end
 
         def free_downstream(self, veh, timeind, dt):
-            hd = veh.lane.get_headway(veh, endanchor)
+            hd = get_headway(veh, endanchor)
 
             # more aggressive breaking strategy is based on car following model
             if stopping[0] == 'c':
@@ -2173,7 +2167,7 @@ def downstream_wrapper(method='speed', time_series=None, congested=True, merge_s
         def call_downstream(self, veh, timeind, dt):
             # stop if we are nearing end of self_lane
             if endanchor is not None:
-                hd = veh.lane.get_headway(veh, endanchor)
+                hd = get_headway(veh, endanchor)
                 # more aggressive breaking strategy is based on car following model
                 if stopping[0] == 'c':
                     acc = veh.get_cf(hd, veh.speed, endanchor, veh.lane, timeind, dt, veh.in_relax)
@@ -2357,7 +2351,7 @@ def eql_inflow_congested(curlane, inflow, *args, c=.8, check_gap=True, **kwargs)
     #     return curlane.start, spd, None
 
     lead = curlane.anchor.lead
-    hd = curlane.get_headway(curlane.anchor, lead)
+    hd = get_headway(curlane.anchor, lead)
     leadlen = lead.len
     if check_gap:  # treiber,kesting condition
         (spd, se) = curlane.newveh.inv_flow(inflow, leadlen=leadlen, output_type='both')
@@ -2374,7 +2368,7 @@ def eql_inflow_congested(curlane, inflow, *args, c=.8, check_gap=True, **kwargs)
 def eql_inflow_free(curlane, inflow, *args, **kwargs):
     """Suggested by Treiber, Kesting for free conditions. Requires to invert the inflow to obtain velocity."""
     lead = curlane.anchor.lead
-    hd = curlane.get_headway(curlane.anchor, lead)
+    hd = get_headway(curlane.anchor, lead)
     # get speed corresponding to current flow
     spd = curlane.newveh.inv_flow(inflow, leadlen=lead.len, output_type='v', congested=False)
     return curlane.start, spd, hd
@@ -2383,10 +2377,10 @@ def eql_inflow_free(curlane, inflow, *args, **kwargs):
 def eql_speed(curlane, *args, c=.8, **kwargs):
     """Like eql_inflow, but get equilibrium headdway from leader's speed instead of inverting flow."""
     lead = curlane.anchor.lead
-    hd = curlane.get_headway(curlane.anchor, lead)
-    spd = lead.spd
+    hd = get_headway(curlane.anchor, lead)
+    spd = lead.speed
 
-    se = curlane.newveh.get_eql(spd, input_type = 'v')
+    se = curlane.newveh.get_eql(spd, input_type='v')
 
     if hd > c*se:
         return curlane.start, spd, hd
@@ -2412,7 +2406,7 @@ def shifted_speed_inflow(curlane, inflow, timeind, dt, shift=1, accel_bound=-.5,
         vehicle to be added with.
     """
     lead = curlane.anchor.lead
-    hd = curlane.get_headway(curlane.anchor, lead)
+    hd = get_headway(curlane.anchor, lead)
     spd = shift_speed(lead.speedmem, shift, dt)
 
     if accel_bound is not None:
@@ -2443,7 +2437,7 @@ def shift_speed(speed_series, shift, dt):
     return spd
 
 
-def newell_inflow(curlane, inflow, timeind, dt, p = [1,2], accel_bound = -2, **kwargs):
+def newell_inflow(curlane, inflow, timeind, dt, p=[1, 2], accel_bound=-2, **kwargs):
     """Extra condition for upstream boundary based on DE form of Newell model.
 
     This is like shifted_speed_inflow, but since we use the DE form of the Newell model, there is a maximum
@@ -2460,9 +2454,9 @@ def newell_inflow(curlane, inflow, timeind, dt, p = [1,2], accel_bound = -2, **k
     """
 
     lead = curlane.anchor.lead
-    hd = curlane.get_headway(curlane.anchor,lead)
+    hd = get_headway(curlane.anchor, lead)
     newveh = curlane.newveh
-    spd = max(min((hd - p[1])/p[0], newveh.maxspeed),0)
+    spd = max(min((hd - p[1])/p[0], newveh.maxspeed), 0)
 
     if accel_bound is not None:
         acc = newveh.get_cf(hd, spd, lead, curlane, None, dt, False)
@@ -2477,7 +2471,7 @@ def newell_inflow(curlane, inflow, timeind, dt, p = [1,2], accel_bound = -2, **k
 def speed_inflow(curlane, inflow, timeind, dt, speed_series=None, accel_bound=-2):
     """Like shifted_speed_inflow, but gets speed from speed_series instead of the shifted leader speed."""
     lead = curlane.anchor.lead
-    hd = curlane.get_headway(curlane.anchor, lead)
+    hd = get_headway(curlane.anchor, lead)
     spd = speed_series(timeind)
 
     if accel_bound is not None:
@@ -2491,7 +2485,7 @@ def speed_inflow(curlane, inflow, timeind, dt, speed_series=None, accel_bound=-2
 
 
 def increment_inflow_wrapper(method='ceql', speed_series=None, accel_bound=-.5, check_gap=True, shift=1, c=.8,
-                             p = [1, 2]):
+                             p=[1, 2]):
     """Defines increment_inflow method for Lane. keyword args control behavior of increment_inflow.
 
     The increment_inflow method has two parts to it. First, it is responsible for determining when to add
@@ -2611,12 +2605,30 @@ def increment_inflow_wrapper(method='ceql', speed_series=None, accel_bound=-.5, 
     return increment_inflow
 
 
+def get_headway(veh, lead):
+    """Calculates distance from Vehicle veh to the back of Vehicle lead."""
+    hd = lead.pos - veh.pos - lead.len
+    if veh.road != lead.road:
+        hd += veh.lane.roadlen[lead.road]  # lead.road is hashable because its a string
+    return hd
+
+
+def get_dist(self, veh, lead):
+    """ Calculates distance from veh to the front of lead."""
+    dist = lead.pos-veh.pos
+    if veh.road != lead.road:
+        dist += veh.lane.roadlen[lead.road]  # lead.road is hashable because its a string
+    return dist
+
+
 class Lane:
     """Basic building block for roads/road networks.
 
     Lanes are responsible for defining the topology (e.g. when lanes start/end, which lanes connect
-    to what, what it is possible to change left/right into) and are responsible for doing headway/distance
-    calculations between Vehicles. Positions are relative to the road a lane belongs to.
+    to what, what it is possible to change left/right into), which are handled by the events attribute.
+    Lanes are the only object with a reference to roads, which are used for making/defining routes.
+    They also are responsible for defining distances between vehicles, as positions are relative to the road
+    a lane belongs to. This is handled by the roadlen attribute.
     They also define boundary conditions, and are responsible for creating new vehicles and adding them
     to the network.
 
@@ -2708,14 +2720,14 @@ class Lane:
         """refer to increment_inflow_wrapper for documentation"""
 
     def get_headway(self, veh, lead):
-        """Calculates distance from veh to the back of lead. Assumes veh.road = self.road."""
+        """Deprecated. Calculates distance from veh to the back of lead. Assumes veh.road = self.road."""
         hd = lead.pos - veh.pos - lead.len
         if self.roadname != lead.road:
             hd += self.roadlen[lead.road]  # lead.road is hashable because its a string
         return hd
 
     def get_dist(self, veh, lead):
-        """Calculates distance from veh to the front of lead. Assumes veh.road = self.road."""
+        """Deprecated. Calculates distance from veh to the front of lead. Assumes veh.road = self.road."""
         dist = lead.pos-veh.pos
         if self.roadname != lead.road:
             dist += self.roadlen[lead.road]  # lead.road is hashable because its a string
@@ -2744,7 +2756,6 @@ class Lane:
         else:
             checkfol = 'rfol'
 
-        get_dist = self.get_dist
         hd = get_dist(veh, guess)
         if hd < 0:
             nextguess = guess.lead

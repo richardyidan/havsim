@@ -53,9 +53,9 @@ def mainroad_outflow(*args):
 #define boundary conditions
 get_inflow1 = {'time_series':onramp_inflow}
 get_inflow2 = {'time_series':mainroad_inflow}
-# increment_inflow = {'method': 'newell', 'accel_bound':-2}
-increment_inflow = {'method': 'ceql'}
-# increment_inflow = {'method': 'shifted', 'accel_bound':-.5, 'shift':1.5}
+# increment_inflow = {'method': 'ceql'}
+increment_inflow = {'method': 'seql'}
+# increment_inflow = {'method': 'shifted', 'accel_bound':-.3, 'shift':1.5}
 downstream1 ={'method':'free', }
 # downstream1 = {'method': 'speed', 'time_series':mainroad_outflow}
 
@@ -112,17 +112,21 @@ simulation = Simulation(inflow_lanes, merge_lanes, dt = .25)
 simulation.simulate(7000)
 
 #%%
-all_vehicles = simulation.prev_vehicles.copy()
-all_vehicles.extend(simulation.vehicles)
-laneinds = {lane0:0, lane1:1, lane2:2}
-sim, siminfo = plot_format(all_vehicles, laneinds)
+# all_vehicles = simulation.prev_vehicles.copy()
+# all_vehicles.extend(simulation.vehicles)
+# laneinds = {lane0:0, lane1:1, lane2:2}
+# sim, siminfo = plot_format(all_vehicles, laneinds)
 
-mylane2list = []
-for veh in sim.keys():
-    if 2 in sim[veh][:,7]:
-        mylane2list.append(veh)
+# mylane2list = []
+# for veh in sim.keys():
+#     if 2 in sim[veh][:,7]:
+#         mylane2list.append(veh)
+# #%%
+# platoonplot(sim, None, siminfo, lane = 2, opacity = 0)
+# platoonplot(sim, None, siminfo, lane = 1, opacity = 0)
+# platoonplot(sim, None, siminfo, lane = 0, opacity = 0)
+# # platoonplot(sim, None, siminfo, lane = 2, colorcode = False)
 #%%
-platoonplot(sim, None, siminfo, lane = 2, opacity = 0)
-platoonplot(sim, None, siminfo, lane = 1, opacity = 0)
-platoonplot(sim, None, siminfo, lane = 0, opacity = 0)
-# platoonplot(sim, None, siminfo, lane = 2, colorcode = False)
+# plotspacetime(sim, siminfo, lane = 2)
+# plotspacetime(sim, siminfo, lane = 1)
+# plotspacetime(sim, siminfo, lane = 0)

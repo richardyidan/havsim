@@ -1656,7 +1656,7 @@ def plotspacetime(meas, platooninfo, timeint = 50, xint = 70, lane=1, use_avg='m
     #aggregates data in meas and plots it in spacetime plot
 
     #get data with helper function
-    X, Y, meanspeeds, vehbins, x, times = plotspacetime_helper(meas, timeint, xint, lane, use_avg)
+    X, Y, meanspeeds, vehbins = plotspacetime_helper(meas, timeint, xint, lane, use_avg)
 
     #plotting
     cmap = cm.RdYlBu  # RdYlBu is probably the best colormap overall for this
