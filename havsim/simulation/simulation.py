@@ -55,16 +55,9 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
         update_change(lc_actions, veh, timeind)  # this is the only thing which can't be done in parralel
 
         # apply relaxation
-        new_relaxation(veh, timeind, dt)
-        newfol = veh.fol
-        if newfol.cf_parameters is None:
-            pass
-        else:
-            new_relaxation(newfol, timeind, dt)
-        if oldfol.cf_parameters is None:
-            pass
-        else:
-            new_relaxation(oldfol, timeind, dt)
+        veh.set_relax(timeind, dt)
+        veh.fol.set_relax(timeind, dt)
+        oldfol.set_relax(timeind, dt)
 
         # update a vehicle's lane events and route events for the new lane
         set_lane_events(veh)
@@ -793,7 +786,7 @@ def update_merge_anchors(curlane, lc_actions):
                 curlane.merge_anchors[i][0] = veh.fol
 
 
-def new_relaxation(veh, timeind, dt):
+def new_relaxation(veh, timeind, dt, relax_speed = False):
     """Generates relaxation for a vehicle after it experiences a lane change.
 
     This is called directly after a vehicle changes it lane, while it still has the old value for its
@@ -810,6 +803,7 @@ def new_relaxation(veh, timeind, dt):
         veh: Vehicle to add relaxation to
         timeind: int giving the timestep of the simulation (0 indexed)
         dt: float of time unit that passes in each timestep
+        relax_speed: If True, we relax leader's speed as well.
 
     Returns:
         None. Modifies relaxation attributes for vehicle in place.
@@ -820,28 +814,54 @@ def new_relaxation(veh, timeind, dt):
 
     prevlead = veh.leadmem[-2][0]
     if prevlead is None:
-        # olds = veh.get_eql(veh.speed)
-        olds = veh.get_eql(veh.lead.speed)
+        olds = veh.get_eql(veh.speed)
+        # olds = veh.get_eql(veh.lead.speed)
     else:
         olds = veh.hd
     news = get_headway(veh, veh.lead)
 
+    if relax_speed:  # relax speed + headway so we have a 2d array of relax values
+        if prevlead is None:
+            oldv = veh.speed
+        else:
+            oldv = prevlead.speed
+        newv = veh.lead.speed
 
-    relaxamount = olds-news
-    relaxlen = math.ceil(rp/dt) - 1
-    curr = relaxamount*np.linspace(1 - dt/rp, 1 - dt/rp*relaxlen, relaxlen)
+        relaxamount_s = olds-news
+        relaxamount_v = oldv-newv
+        relaxlen = math.ceil(rp/dt) - 1
+        curr = np.zeros(relaxlen,2)
+        curr[:,0] = np.linspace((1 - dt/rp)*relaxamount_s, (1 - dt/rp*relaxlen)*relaxamount_s, relaxlen)
+        curr[:,1] = np.linspace((1 - dt/rp)*relaxamount_v, (1 - dt/rp*relaxlen)*relaxamount_v, relaxlen)
 
-    if veh.in_relax:  # add to existing relax
-        curlen = len(veh.relax)
-        newend = timeind + relaxlen  # time index when relax ends
-        newrelax = np.zeros((newend - veh.relax_start+1))
-        newrelax[0:curlen] = veh.relax
-        newrelax[timeind-veh.relax_start+1:] += curr
-        veh.relax = newrelax
-    else:  # create new relax
-        veh.in_relax = True
-        veh.relax_start = timeind + 1
-        veh.relax = curr
+        if veh.in_relax:
+            curlen = len(veh.relax)
+            newend = timeind + relaxlen  # time index when relax ends
+            newrelax = np.zeros((newend - veh.relax_start+1, 2))
+            newrelax[0:curlen,:] = veh.relax
+            newrelax[timeind-veh.relax_start+1:,:] += curr
+            veh.relax = newrelax
+        else:
+            veh.in_relax = True
+            veh.relax_start = timeind + 1
+            veh.relax = curr
+
+    else:  # relax headway only = 1d array of relax values
+        relaxamount = olds-news
+        relaxlen = math.ceil(rp/dt) - 1
+        curr = np.linspace((1 - dt/rp)*relaxamount, (1 - dt/rp*relaxlen)*relaxamount, relaxlen)
+
+        if veh.in_relax:  # add to existing relax
+            curlen = len(veh.relax)
+            newend = timeind + relaxlen  # time index when relax ends
+            newrelax = np.zeros((newend - veh.relax_start+1))
+            newrelax[0:curlen] = veh.relax
+            newrelax[timeind-veh.relax_start+1:] += curr
+            veh.relax = newrelax
+        else:  # create new relax
+            veh.in_relax = True
+            veh.relax_start = timeind + 1
+            veh.relax = curr
 
 
 def update_veh_lane(veh, oldlane, newlane, timeind, side=None):
@@ -1687,7 +1707,7 @@ class Vehicle:
                                             (2*(p[3]*p[4])**(1/2)))/(state[0]))**2)
 
     def get_cf(self, hd, spd, lead, curlane, timeind, dt, userelax):
-        """Wrapper for cf_model.
+        """Responsible for the actual call to cf_model / call_downstream.
 
         Args:
             hd (TYPE): headway
@@ -1706,14 +1726,17 @@ class Vehicle:
 
         else:
             if userelax:
-                # currelax = (1 - math.e**-hd)*self.relax[timeind - self.relax_start]  # don't allow negative
-                # relaxed headway
-                # currelax = self.relax[timeind - self.relax_start]
+                # currelax = self.relax[timeind - self.relax_start]  # hd only relax - dont use leadspeed
+                currelax, currelax_v = self.relax[timeind-self.relax_start, :]  # hd + v relax
+                leadspeed = lead.speed + currelax_v
+
+                # accident free formulation of relaxation - uses constant of 15
                 if hd < 15:
-                    usehd = hd
+                    usehd = hd + (hd/15)**4*currelax
                 else:
-                    usehd = hd + self.relax[timeind - self.relax_start]
-                acc = self.cf_model(self.cf_parameters, [usehd, spd, lead.speed])
+                    usehd = hd + currelax
+
+                acc = self.cf_model(self.cf_parameters, [usehd, spd, leadspeed])
             else:
                 acc = self.cf_model(self.cf_parameters, [hd, spd, lead.speed])
 
@@ -1722,6 +1745,10 @@ class Vehicle:
     def set_cf(self, timeind, dt):
         """Sets a vehicle's acceleration by calling get_cf."""
         self.acc = self.get_cf(self.hd, self.speed, self.lead, self.lane, timeind, dt, self.in_relax)
+
+    def set_relax(self, timeind, dt):
+        """Applies relaxation - make sure get_cf is set up to correctly use relaxation."""
+        new_relaxation(self, timeind, dt, True)
 
     def free_cf(self, p, spd):
         """Defines car following model in free flow.
@@ -2249,6 +2276,10 @@ class AnchorVehicle:
         self.len = 0
 
         self.leadmem = [[lead, starttime]]
+
+    def set_relax(self, *args):
+        """Dummy method does nothing - it's so we don't have to check for anchors when applying relax."""
+        pass
 
     def __repr__(self):
         """Representation in ipython console."""
