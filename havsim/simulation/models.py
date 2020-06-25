@@ -57,6 +57,12 @@ def IDM_shift_eql(p, v, shift_parameters, state):
     Returns:
         acceleration which shifts the equilibrium
     """
+    # TODO constant acceleration formulation based on shifting eql is not good because it takes
+    # too long to reach new equilibrium. See shifteql.nb/notes on this for a new formulation
+    # or just continue using generic_shift which seems to work fine
+
+    # In Treiber/Kesting JS code they have another way of doing cooperation where vehicles will use their
+    # new deceleration if its greater than -2b
     if state == 'decel':
         temp = shift_parameters[0]**2
     else:
@@ -170,8 +176,12 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
 
     # safety criteria formulations
     # safe = p[0]   # default value of safety
-    safe = veh.speed/veh.maxspeed
-    safe = safe*p[0] + (1-safe)*p[1]  # safety changes with relative velocity
+    # safe = veh.speed/veh.maxspeed
+    # safe = safe*p[0] + (1-safe)*p[1]  # safety changes with relative velocity
+    if lctype == 'discretionary':  # different safeties for discretionary/mandatory
+        safe = p[0]
+    else:
+        safe = p[1]
 
     # safeguards for negative headway (necessary for IDM)
     if newhd is not None and newhd < 0:
@@ -403,6 +413,6 @@ def IDM_parameters(*args):
     cf_parameters = [30, 1.5, 2, 1.1, 1.5]  # note speed is supposed to be in m/s
     # cf_parameters[0] += 3-np.random.rand()*6
     # cf_parameters[0] += np.random.rand()*25-15 #give vehicles very different speeds for testing purposes
-    lc_parameters = [-7, -20, .4, .1, 0, .2, .5]
+    lc_parameters = [-4, -10, .4, .1, 0, .2, .5]
 
     return cf_parameters, lc_parameters

@@ -8,6 +8,7 @@ from havsim.plotting import calculateflows, plot_format, platoonplot, plotvhd
 import numpy as np
 import matplotlib.pyplot as plt
 from havsim.simulation.models import IDM_parameters
+import time
 #%%get boundary conditions (careful with units)
 # #option 1 -
 # #could get them directly from data
@@ -28,13 +29,13 @@ from havsim.simulation.models import IDM_parameters
 #vehicle parameters
 def onramp_newveh(self, vehid, *args):
     cf_p, lc_p  = IDM_parameters()
-    kwargs = {'route':['main road', 'exit'], 'maxspeed': cf_p[0]-1e-6, 'relax_parameters':None,
-              'shift_parameters': [-3, 2]}
+    kwargs = {'route':['main road', 'exit'], 'maxspeed': cf_p[0]-1e-6, 'relax_parameters':15,
+              'shift_parameters': [-1.5, 1]}
     self.newveh = Vehicle(vehid, self, cf_p, lc_p, **kwargs)
 
 def mainroad_newveh(self, vehid, *args):
     cf_p, lc_p  = IDM_parameters()
-    kwargs = {'route':['exit'], 'maxspeed': cf_p[0]-1e-6, 'relax_parameters':None, 'shift_parameters': [-3, 2]}
+    kwargs = {'route':['exit'], 'maxspeed': cf_p[0]-1e-6, 'relax_parameters':15, 'shift_parameters': [-1.5, 1]}
     self.newveh = Vehicle(vehid, self, cf_p, lc_p, **kwargs)
 #inflow amounts
 def onramp_inflow(timeind, *args):
@@ -47,20 +48,25 @@ def mainroad_inflow(*args):
 #outflow using speed series
 tempveh = Vehicle(-1, None, [30, 1.5, 2, 1.1, 1.5], None, maxspeed = 30-1e-6)
 outspeed = tempveh.inv_flow(.48, congested = False)
+inspeed, inhd = tempveh.inv_flow(.48, output_type = 'both', congested = True)
 def mainroad_outflow(*args):
     return outspeed
+
+def speed_inflow(*args):
+    return inspeed
 
 #define boundary conditions
 get_inflow1 = {'time_series':onramp_inflow}
 get_inflow2 = {'time_series':mainroad_inflow}
 # increment_inflow = {'method': 'ceql'}
-increment_inflow = {'method': 'seql'}
+# increment_inflow = {'method': 'seql', 'c':.8}
 # increment_inflow = {'method': 'shifted', 'accel_bound':-.3, 'shift':1.5}
+increment_inflow = {'method': 'speed', 'accel_bound':-.1, 'speed_series':speed_inflow}
 downstream1 ={'method':'free', }
 # downstream1 = {'method': 'speed', 'time_series':mainroad_outflow}
 
 #make road network with boundary conditions - want to make an api for this in the future
-mainroadlen = 900
+mainroadlen = 1100
 startmerge = 500
 endmerge = 700
 
@@ -109,24 +115,32 @@ inflow_lanes = [lane0, lane1, lane2]
 simulation = Simulation(inflow_lanes, merge_lanes, dt = .25)
 
 #call
-simulation.simulate(7000)
+timesteps = 5000
+start = time.time()
+simulation.simulate(timesteps)
+end = time.time()
+
+all_vehicles = simulation.prev_vehicles.copy()
+all_vehicles.extend(simulation.vehicles)
+
+print('simulation time is '+str(end-start)+' over '+str(sum([timesteps - veh.starttime+1 if veh.endtime is None else veh.endtime - veh.starttime+1
+                                                         for veh in all_vehicles]))+' timesteps')
 
 #%%
-# all_vehicles = simulation.prev_vehicles.copy()
-# all_vehicles.extend(simulation.vehicles)
-# laneinds = {lane0:0, lane1:1, lane2:2}
-# sim, siminfo = plot_format(all_vehicles, laneinds)
+laneinds = {lane0:0, lane1:1, lane2:2}
+sim, siminfo = plot_format(all_vehicles, laneinds)
 
-# mylane2list = []
-# for veh in sim.keys():
-#     if 2 in sim[veh][:,7]:
-#         mylane2list.append(veh)
-# #%%
-# platoonplot(sim, None, siminfo, lane = 2, opacity = 0)
-# platoonplot(sim, None, siminfo, lane = 1, opacity = 0)
+mylane2list = []
+for veh in sim.keys():
+    if 2 in sim[veh][:,7]:
+        mylane2list.append(veh)
+#%%
+platoonplot(sim, None, siminfo, lane = 2, opacity = 0)
+platoonplot(sim, None, siminfo, lane = 1, opacity = 0)
 # platoonplot(sim, None, siminfo, lane = 0, opacity = 0)
-# # platoonplot(sim, None, siminfo, lane = 2, colorcode = False)
-#%%
+platoonplot(sim, None, siminfo, lane = 2, colorcode = False)
+platoonplot(sim, None, siminfo, lane = 1, colorcode = False)
+# #%%
 # plotspacetime(sim, siminfo, lane = 2)
 # plotspacetime(sim, siminfo, lane = 1)
 # plotspacetime(sim, siminfo, lane = 0)

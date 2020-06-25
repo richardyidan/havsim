@@ -126,3 +126,5 @@ dmypy.json
 scripts/2018 AY papers/calculate adjoint system.nb
 scripts/spring 2020/.pylint.d/havsim.simulation.simulation1.stats
 *.stats
+scripts/spring 2020/shifteql.nb
+scripts/spring 2020/shifteql notes.JPG

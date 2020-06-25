@@ -49,19 +49,22 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
         lead/fol relationships, their lane/roads, memory, etc.).
     """
     # update followers/leaders for all lane changes
+    relaxvehs = []  # keeps track of vehicles which have relaxation applied
     for veh in lc_actions.keys():
-        oldfol = veh.fol
+        relaxvehs.append(veh.fol)
+
         # update leader follower relationships, lane/road
         update_change(lc_actions, veh, timeind)  # this is the only thing which can't be done in parralel
 
-        # apply relaxation
-        veh.set_relax(timeind, dt)
-        veh.fol.set_relax(timeind, dt)
-        oldfol.set_relax(timeind, dt)
+        relaxvehs.append(veh)
+        relaxvehs.append(veh.fol)
 
         # update a vehicle's lane events and route events for the new lane
         set_lane_events(veh)
         set_route_events(veh)
+
+    for veh in set(relaxvehs):  # apply relaxation
+        veh.set_relax(timeind, dt)
 
     # update all states, memory and headway
     for veh in vehicles:
@@ -830,7 +833,7 @@ def new_relaxation(veh, timeind, dt, relax_speed = False):
         relaxamount_s = olds-news
         relaxamount_v = oldv-newv
         relaxlen = math.ceil(rp/dt) - 1
-        curr = np.zeros(relaxlen,2)
+        curr = np.zeros((relaxlen,2))
         curr[:,0] = np.linspace((1 - dt/rp)*relaxamount_s, (1 - dt/rp*relaxlen)*relaxamount_s, relaxlen)
         curr[:,1] = np.linspace((1 - dt/rp)*relaxamount_v, (1 - dt/rp*relaxlen)*relaxamount_v, relaxlen)
 
@@ -862,6 +865,34 @@ def new_relaxation(veh, timeind, dt, relax_speed = False):
             veh.in_relax = True
             veh.relax_start = timeind + 1
             veh.relax = curr
+
+
+def new_relaxation_acc(veh, timeind, dt):
+    """Relaxation for acceleration. Recommended to use new_relaxation instead."""
+    # This formulation is not as robust as relaxing speed/headway instead.
+    rp = veh.relax_parameters
+    lead = veh.lead
+    if lead is None or rp is None:
+        return
+    oldacc = veh.acc
+    newhd = get_headway(veh, lead)
+    newacc = veh.get_cf(newhd, veh.speed, lead, veh.lane, timeind, dt, veh.in_relax)
+
+    relaxamount = oldacc - newacc
+    relaxlen = math.ceil(rp/dt) - 1
+    curr = np.linspace((1 - dt/rp)*relaxamount, (1 - dt/rp*relaxlen)*relaxamount, relaxlen)
+
+    if veh.in_relax:  # add to existing relax
+        curlen = len(veh.relax)
+        newend = timeind + relaxlen  # time index when relax ends
+        newrelax = np.zeros((newend - veh.relax_start+1))
+        newrelax[0:curlen] = veh.relax
+        newrelax[timeind-veh.relax_start+1:] += curr
+        veh.relax = newrelax
+    else:  # create new relax
+        veh.in_relax = True
+        veh.relax_start = timeind + 1
+        veh.relax = curr
 
 
 def update_veh_lane(veh, oldlane, newlane, timeind, side=None):
@@ -1710,33 +1741,34 @@ class Vehicle:
         """Responsible for the actual call to cf_model / call_downstream.
 
         Args:
-            hd (TYPE): headway
-            spd (TYPE): speed
-            lead (TYPE): lead Vehicle
-            curlane (TYPE): lane self Vehicle is on
-            timeind (TYPE): time index
-            dt (TYPE): timestep
-            userelax (TYPE): boolean for relaxation
+            hd (float): headway
+            spd (float): speed
+            lead (Vehicle): lead Vehicle
+            curlane (Lane): lane self Vehicle is on
+            timeind (int): time index
+            dt (float): timestep
+            userelax (bool): boolean for relaxation
 
         Returns:
-            acc (TYPE): DESCRIPTION.
+            acc (float): longitudinal acceleration for current timestep
         """
         if lead is None:
             acc = curlane.call_downstream(self, timeind, dt)
 
         else:
             if userelax:
-                # currelax = self.relax[timeind - self.relax_start]  # hd only relax - dont use leadspeed
-                currelax, currelax_v = self.relax[timeind-self.relax_start, :]  # hd + v relax
-                leadspeed = lead.speed + currelax_v
-
-                # accident free formulation of relaxation - uses constant of 15
-                if hd < 15:
-                    usehd = hd + (hd/15)**4*currelax
+                # accident free formulation of relaxation
+                ttc = hd / (self.speed - lead.speed)
+                if ttc < 1.5 and ttc > 0:
+                    temp = (ttc/1.5)**2
+                    # currelax, currelax_v = self.relax[timeind-self.relax_start, :]*temp  # hd + v relax
+                    currelax = self.relax[timeind - self.relax_start]
                 else:
-                    usehd = hd + currelax
+                    # currelax, currelax_v = self.relax[timeind-self.relax_start, :]
+                    currelax = self.relax[timeind - self.relax_start]
 
-                acc = self.cf_model(self.cf_parameters, [usehd, spd, leadspeed])
+                # acc = self.cf_model(self.cf_parameters, [hd + currelax, spd, lead.speed + currelax_v])
+                acc = self.cf_model(self.cf_parameters, [hd, spd, lead.speed]) + currelax
             else:
                 acc = self.cf_model(self.cf_parameters, [hd, spd, lead.speed])
 
@@ -1748,7 +1780,7 @@ class Vehicle:
 
     def set_relax(self, timeind, dt):
         """Applies relaxation - make sure get_cf is set up to correctly use relaxation."""
-        new_relaxation(self, timeind, dt, True)
+        new_relaxation_acc(self, timeind, dt)
 
     def free_cf(self, p, spd):
         """Defines car following model in free flow.
@@ -1792,7 +1824,7 @@ class Vehicle:
                 If x is a speed, we return a headway. Otherwise we return a speed.
 
         Returns:
-            TYPE: DESCRIPTION.
+            flow (float)
 
         """
         if leadlen is None:
@@ -1825,20 +1857,6 @@ class Vehicle:
         Returns:
             TYPE: float acceleration
         """
-        # TODO fix this - acceleration too weak, use different formulation
-        # could use formulation based on another DE which pushes towards a new eql, uses cf_model
-        # to calculate what the base acceleration at this new eql would be
-        # also figure out what the call signature should look like
-
-        # In Treiber/Kesting JS code they have another way of doing this where vehicles will use their
-        # new deceleration if its greater than -2b
-
-        # if state == 'decel':
-        #     temp = shift_parameters[0]**2
-        # else:
-        #     temp = shift_parameters[1]**2
-
-        # return (1 - temp)/temp*p[3]*(1 - (v/p[0])**4)
         return hm.generic_shift(0, 0, self.shift_parameters, state)
 
     def set_lc(self, lc_actions, timeind, dt):
@@ -1871,7 +1889,7 @@ class Vehicle:
         return acc
 
     def update(self, timeind, dt):
-        """Applies bounds and updates a vehicle longitudinal state/memory."""
+        """Applies bounds and updates a vehicle's longitudinal state/memory."""
         # bounds on acceleration
         # acc = self.acc_bounds(self.acc)
         acc = self.acc
@@ -1948,8 +1966,7 @@ class Vehicle:
 
     def _chk_leadfol(self, verbose=True):
         """Returns True if the leader/follower relationships of the Vehicle are correct."""
-        # If verbose = True, we print whether each relationship is passing or not. Note that this does
-        # not actually verify the relationships are correct, it verifies that they are possible.
+        # If verbose = True, we print whether each relationship is passing or not.
         lfolpass = True
         lfolmsg = []
         if self.lfol is not None:
@@ -2406,7 +2423,7 @@ def eql_inflow_free(curlane, inflow, *args, **kwargs):
 
 
 def eql_speed(curlane, *args, c=.8, **kwargs):
-    """Like eql_inflow, but get equilibrium headdway from leader's speed instead of inverting flow."""
+    """Like eql_inflow, but get equilibrium headway from leader's speed instead of inverting flow."""
     lead = curlane.anchor.lead
     hd = get_headway(curlane.anchor, lead)
     spd = lead.speed
@@ -2499,7 +2516,7 @@ def newell_inflow(curlane, inflow, timeind, dt, p=[1, 2], accel_bound=-2, **kwar
     return curlane.start, spd, hd
 
 
-def speed_inflow(curlane, inflow, timeind, dt, speed_series=None, accel_bound=-2):
+def speed_inflow(curlane, inflow, timeind, dt, speed_series=None, accel_bound=-2, **kwargs):
     """Like shifted_speed_inflow, but gets speed from speed_series instead of the shifted leader speed."""
     lead = curlane.anchor.lead
     hd = get_headway(curlane.anchor, lead)
@@ -2565,12 +2582,14 @@ def increment_inflow_wrapper(method='ceql', speed_series=None, accel_bound=-.5, 
         self.inflow_buffer += inflow * dt
 
         if self.inflow_buffer >= 1:
-            if self.anchor.lead is None:
+            if self.anchor.lead is None:  # rule for adding vehicles when road is empty
                 if spd is None:
-                    # spd = speed_series(timeind)
-                    spd = self.newveh.inv_flow(inflow, congested=False)
+                    if speed_series is not None:
+                        spd = speed_series(timeind)
+                    else:
+                        spd = self.newveh.inv_flow(inflow, congested=False)
                 out = (self.start, spd, None)
-            else:
+            else:  # normal rule for adding vehicles
                 out = method_fun(self, inflow, timeind, dt, c=c, check_gap=check_gap, accel_bound=accel_bound,
                                  shift=shift, p=p, speed_series=speed_series)
 
@@ -2627,8 +2646,6 @@ def increment_inflow_wrapper(method='ceql', speed_series=None, accel_bound=-.5, 
             vehicles.add(newveh)
 
             # create next vehicle
-            # cf_parameters, lc_parameters, kwargs = self.new_vehicle()
-            # self.newveh = Vehicle(vehid, self, cf_parameters, lc_parameters, **kwargs)
             self.new_vehicle(vehid)
             vehid = vehid + 1
         return vehid
@@ -2644,7 +2661,7 @@ def get_headway(veh, lead):
     return hd
 
 
-def get_dist(self, veh, lead):
+def get_dist(veh, lead):
     """ Calculates distance from veh to the front of lead."""
     dist = lead.pos-veh.pos
     if veh.road != lead.road:
@@ -2686,6 +2703,8 @@ class Lane:
     # TODO need a RoadNetwork object, possibly Road object as well.
     # should create common road configurations. Should different road configurations have their own
     # logics to create routes?
+    # Also combine lane events and route events into a single sorted list? This would let you check only 1
+    # position per timestep instead of two
     # Also need a better (easier) way to allow boundary conditions to be defined, and in a more modular way
     # E.g. of good design - create road network by specifying types of roads (e.g. road, on/off ramp, merge)
     # add boundary conditions to road network.
