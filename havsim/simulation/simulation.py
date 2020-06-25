@@ -1761,14 +1761,14 @@ class Vehicle:
                 ttc = hd / (self.speed - lead.speed)
                 if ttc < 1.5 and ttc > 0:
                     temp = (ttc/1.5)**2
-                    # currelax, currelax_v = self.relax[timeind-self.relax_start, :]*temp  # hd + v relax
-                    currelax = self.relax[timeind - self.relax_start]
+                    currelax, currelax_v = self.relax[timeind-self.relax_start, :]*temp  # hd + v relax
+                    # currelax = self.relax[timeind - self.relax_start]
                 else:
-                    # currelax, currelax_v = self.relax[timeind-self.relax_start, :]
-                    currelax = self.relax[timeind - self.relax_start]
+                    currelax, currelax_v = self.relax[timeind-self.relax_start, :]
+                    # currelax = self.relax[timeind - self.relax_start]
 
-                # acc = self.cf_model(self.cf_parameters, [hd + currelax, spd, lead.speed + currelax_v])
-                acc = self.cf_model(self.cf_parameters, [hd, spd, lead.speed]) + currelax
+                acc = self.cf_model(self.cf_parameters, [hd + currelax, spd, lead.speed + currelax_v])
+                # acc = self.cf_model(self.cf_parameters, [hd, spd, lead.speed]) + currelax
             else:
                 acc = self.cf_model(self.cf_parameters, [hd, spd, lead.speed])
 
@@ -1780,7 +1780,7 @@ class Vehicle:
 
     def set_relax(self, timeind, dt):
         """Applies relaxation - make sure get_cf is set up to correctly use relaxation."""
-        new_relaxation_acc(self, timeind, dt)
+        new_relaxation(self, timeind, dt, True)
 
     def free_cf(self, p, spd):
         """Defines car following model in free flow.
@@ -2154,7 +2154,7 @@ def downstream_wrapper(method='speed', time_series=None, congested=True, merge_s
     if method == 'speed':  # specify a function which takes in time and returns the speed
         def call_downstream(self, veh, timeind, dt):
             speed = time_series(timeind)
-            return (speed - veh.speed)/dt
+            return veh.acc_bounds((speed - veh.speed)/dt)
         return call_downstream
 
     # options - none

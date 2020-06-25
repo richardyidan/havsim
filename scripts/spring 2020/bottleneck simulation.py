@@ -29,18 +29,18 @@ import time
 #vehicle parameters
 def onramp_newveh(self, vehid, *args):
     cf_p, lc_p  = IDM_parameters()
-    kwargs = {'route':['main road', 'exit'], 'maxspeed': cf_p[0]-1e-6, 'relax_parameters':15,
+    kwargs = {'route':['main road', 'exit'], 'maxspeed': cf_p[0]-1e-6, 'relax_parameters':None,
               'shift_parameters': [-1.5, 1]}
     self.newveh = Vehicle(vehid, self, cf_p, lc_p, **kwargs)
 
 def mainroad_newveh(self, vehid, *args):
     cf_p, lc_p  = IDM_parameters()
-    kwargs = {'route':['exit'], 'maxspeed': cf_p[0]-1e-6, 'relax_parameters':15, 'shift_parameters': [-1.5, 1]}
+    kwargs = {'route':['exit'], 'maxspeed': cf_p[0]-1e-6, 'relax_parameters':None, 'shift_parameters': [-1.5, 1]}
     self.newveh = Vehicle(vehid, self, cf_p, lc_p, **kwargs)
 #inflow amounts
 def onramp_inflow(timeind, *args):
     # return .06 + np.random.rand()/25
-    return .08
+    return .07
 def mainroad_inflow(*args):
     # return .43 + np.random.rand()*24/100
     return .48
@@ -53,7 +53,7 @@ def mainroad_outflow(*args):
     return outspeed
 
 def speed_inflow(*args):
-    return inspeed
+    return outspeed
 
 #define boundary conditions
 get_inflow1 = {'time_series':onramp_inflow}
@@ -115,7 +115,7 @@ inflow_lanes = [lane0, lane1, lane2]
 simulation = Simulation(inflow_lanes, merge_lanes, dt = .25)
 
 #call
-timesteps = 5000
+timesteps = 10000
 start = time.time()
 simulation.simulate(timesteps)
 end = time.time()
@@ -138,9 +138,9 @@ for veh in sim.keys():
 platoonplot(sim, None, siminfo, lane = 2, opacity = 0)
 platoonplot(sim, None, siminfo, lane = 1, opacity = 0)
 # platoonplot(sim, None, siminfo, lane = 0, opacity = 0)
-platoonplot(sim, None, siminfo, lane = 2, colorcode = False)
-platoonplot(sim, None, siminfo, lane = 1, colorcode = False)
-# #%%
+# platoonplot(sim, None, siminfo, lane = 2, colorcode = False)
+# platoonplot(sim, None, siminfo, lane = 1, colorcode = False)
+# %%
 # plotspacetime(sim, siminfo, lane = 2)
 # plotspacetime(sim, siminfo, lane = 1)
 # plotspacetime(sim, siminfo, lane = 0)
