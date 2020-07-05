@@ -19,8 +19,8 @@ import time
 # q,k = calculateflows(meas, [[200,600],[1000,1400]], [0, 9900], 30*10, lane = 6)
 
 #option 3 - can also just make boudnary conditions based on what the FD looks like
-# tempveh = Vehicle(-1, None, [30, 1.5, 2, 1.1, 1.5], None, maxspeed = 33-1e-6)
-# spds = np.arange(0,33,.01)
+# tempveh = Vehicle(-1, None, [30, 1.5, 2, 1.1, 1.5], None, maxspeed = 30-1e-6)
+# spds = np.arange(0,30,.01)
 # flows = np.array([tempveh.get_flow(i) for i in spds])
 # density = np.divide(flows,spds)
 # plt.plot(density,flows)
