@@ -26,7 +26,7 @@ def worker(arg):
     return obj.my_process(m, a)
 
 if __name__ == "__main__":
-    list_of_numbers = range(0, 5000000)
+    list_of_numbers = range(0, 10000)
     list_of_objects = [MyClass(i) for i in list_of_numbers]
 
     start = time.time()
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     pool.join()
     print(time.time()-start)
 
-list_of_numbers = range(0, 5000000)
+list_of_numbers = range(0, 10000)
 list_of_objects = [MyClass(i) for i in list_of_numbers]
 start = time.time()
 out = []

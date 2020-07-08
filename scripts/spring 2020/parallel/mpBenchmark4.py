@@ -12,11 +12,11 @@ def f(x):
 if __name__ == '__main__':
     p = Pool(5)
     l = [x for x in range(2000000)]
-    start = time.clock()
+    start = time.time()
     p.map(f, l)
-    end = time.clock()
+    end = time.time()
     print('pool processing time {}'.format(end - start))
-    start = time.clock()
+    start = time.time()
     map(f, l)
-    end = time.clock()
+    end = time.time()
     print('sequential processing time {}'.format(end - start))
