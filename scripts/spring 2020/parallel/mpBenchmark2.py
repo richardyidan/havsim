@@ -2,7 +2,7 @@
 """
 @author: rlk268@cornell.edu
 """
-
+print(' use benchmark 1 or 3')
 import time
 
 class MyClass():

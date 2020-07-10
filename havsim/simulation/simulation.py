@@ -2587,7 +2587,7 @@ def increment_inflow_wrapper(method='ceql', speed_series=None, accel_bound=-.5, 
                     if speed_series is not None:
                         spd = speed_series(timeind)
                     else:
-                        spd = self.newveh.inv_flow(inflow, congested=False)
+                        spd = self.newveh.inv_flow(inflow, congested=True)
                 out = (self.start, spd, None)
             else:  # normal rule for adding vehicles
                 out = method_fun(self, inflow, timeind, dt, c=c, check_gap=check_gap, accel_bound=accel_bound,
