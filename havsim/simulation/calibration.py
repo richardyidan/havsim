@@ -27,7 +27,6 @@ class CalibrationVehicle(Vehicle):
         self.hdbounds = (0, 1e4) if hdbounds is None else hdbounds
         self.eql_type = eql_type
 
-        self.initlead = initlead
         # self.lead = lead
         # self.fol = fol
 
@@ -82,47 +81,25 @@ class Calibration:
     def __init__(vehicles):
         pass
 
+    def step(self, timeind):
+        for veh in self.vehicles:
+            veh.set_cf(self.timeind, self.dt)
+
+
+
 def make_calibration(vehicles, meas, platooninfo):
-    leadvehs = {}
     vehicle_list = []
     event_list = []
+    id2obj = {}
+    if type(vehicles) == list:
+        vehicles = set(vehicles)
 
     for veh in vehicles:
-        # see what lead vehicles veh needs, if any. Results are stored in leadvehs where keys are the leaders,
-        # values are a list of starting, ending times
+        #make lead memory
         leads = set(platooninfo[veh][4])
         needleads = leads.difference(vehicles)
         if len(needleads) > 0:
-            leadinfo = helper.makeleadinfo([veh],platooninfo,meas)
-            for j in leadinfo[0]:
-                curlead, start, end = j
-                if curlead in needleads:
-                    if curlead in leadvehs:
-                        leadvehs[curlead].extend([start, end])
-                    else:
-                        leadvehs[curlead] = [start, end]
-
-        # get initial values, y for veh
-        t_nstar, inittime, endtime = platooninfo[veh][0,1,2]
-        initlead, initpos, initspd, length = meas[veh][inittime-t_nstar,[4,2,3,6]]
-        y = meas[veh][inittime-t_nstar:endtime+1-t_nstar]
-
-        #make the CalibrationVehicle object for veh
-        newveh = CalibrationVehicle(veh, y, initpos, initspd, initlead, length = length)
-        vehicle_list.append(newveh)
-
-        #make the add/remove events for veh
-        event_list.append((inittime, 'add', newveh))
-        event_list.append((endtime, 'remove', newveh))
-
-        #make the lane changing events for veh
-
-        event_list.append()
-
-
-        if len(needleads) > 0:
-            leadid = 'lead'+str(int(veh))  # hash value
-            leadpos, leadspd, leadlen = [], [], []  # list of positions, speeds, lengths
+            leadmem = []
             leadinittime = None  # initial time lead is used
             leadinfo = helper.makeleadinfo([veh],platooninfo,meas)
             for j in leadinfo[0]:
@@ -131,21 +108,60 @@ def make_calibration(vehicles, meas, platooninfo):
                     if not leadinittime:
                         leadinittime = start
                     leadt_n = platooninfo[curlead][0]
-                    leadpos.extend(list(meas[curlead][start-leadt_n:end-leadt_n+1,2]))
-                    leadspd.extend(list(meas[curlead][start-leadt_n:end-leadt_n+1,3]))
-                    leadlen.extend(list(meas[curlead][start-leadt_n:end-leadt_n+1,6]))
+                    poslist = list(meas[curlead][start-leadt_n:end-leadt_n+1,2])
+                    spdlist = list(meas[curlead][start-leadt_n:end-leadt_n+1,3])
+                    leadmem.extend(zip(poslist,spdlist))
                 elif leadinittime is not None:
                     temp = [0]*(end-start+1)
-                    leadpos.extend(temp), leadspd.extend(temp), leadlen.extend(temp)
-            leadendtime = leadinittime + len(leadpos)-1
+                    leadmem.extend(temp)
 
+        # get initial values, y for veh
+        t_nstar, inittime, endtime = platooninfo[veh][0,1,2]
+        initlead, initpos, initspd, length = meas[veh][inittime-t_nstar,[4,2,3,6]]
+        y = meas[veh][inittime-t_nstar:endtime+1-t_nstar]
 
+        #create vehicle object
+        newveh = CalibrationVehicle(veh, y, initpos, initspd, length=length)
+        vehicle_list.append(newveh)
+        id2obj[veh] = newveh
 
+    # create events
+    for veh in vehicles:
+        curveh = id2obj[veh]
+        leadinfo = helper.makeleadinfo([veh],platooninfo,meas)[0]
+        # first make the add event, which includes handling the first leader
+        curlead, start, end = leadinfo[0]
+        if curlead in vehicles:  # curlead is simulated in the same calibration object
+            curlead = id2obj[curlead]
+            curlen = curlead.len
+        else:
+            curlen = meas[curlead][0,6]  # curlead is already simulated, stored in curveh.leadmem
+            curlead = None
+        # check if curveh is a merging vehicle
+        t_nstar, t_n = platooninfo[veh][0,1]
+        if t_n > t_nstar and meas[veh][t_n-t_nstar-1,7]==7 and meas[veh][t_n-t_nstar,7]==6:
+            userelax = True
+        else:
+            userelax = False
 
+        # make the add event
+        curevent = (start, 'lc', curveh, curlead, curlen, userelax)
+        curevent = (start, 'add', curveh, curevent)
+        event_list.append(curevent)
 
+        # make the lead change events
+        for j in leadinfo[1:]:
+            curlead, start, end = j
+            if curlead in vehicles:  # curlead is simulated in the same calibration object
+                curlead = id2obj[curlead]
+                curlen = curlead.len
+            else:
+                curlen = meas[curlead][0,6]  # curlead is already simulated, stored in curveh.leadmem
+                curlead = None
+            curevent = (start, 'lc', curveh, curlead, curlen, True)
+            event_list.append(curevent)
 
-
-    pass
+    event_list.sort(key = lambda x: x[0])  # sort events in time
 
 def optimize():
     pass
