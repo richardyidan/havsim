@@ -789,7 +789,7 @@ def update_merge_anchors(curlane, lc_actions):
                 curlane.merge_anchors[i][0] = veh.fol
 
 
-def new_relaxation(veh, timeind, dt, relax_speed = False):
+def new_relaxation(veh, timeind, dt, relax_speed=False):
     """Generates relaxation for a vehicle after it experiences a lane change.
 
     This is called directly after a vehicle changes it lane, while it still has the old value for its

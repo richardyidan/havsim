@@ -1,8 +1,17 @@
-"""Refactors the functionality of the calibration.opt module."""
+"""Refactors the functionality of the calibration.opt module.
+
+The simulation module does an entire micro simulation. The calibration module is supposed to either
+calibrate only the longitudinal, or only the latitudinal model. This allows direct comparison with the
+data on a microscopic level.
+"""
 
 import numpy as np
 from havsim.simulation.simulation import Vehicle
 import havsim.calibration.helper as helper
+import math
+
+# TODO finish implementing calibration for platoons of vehicles (handle downstream boundary, removing)
+# TODO implement calibration for latitudinal models only
 
 class CalibrationVehicle(Vehicle):
     def __init__(self, vehid, y, initpos, initspd, leadstatemem, leadinittime, length=3,
@@ -30,6 +39,9 @@ class CalibrationVehicle(Vehicle):
 
         if leadstatemem is not None:
             self.leadveh = LeadVehicle(leadstatemem, leadinittime)
+
+    def set_relax(self, relaxamounts, timeind, dt):
+        make_relaxation(self, relaxamounts, timeind, dt, True)
 
     def loss(self):
         return sum(np.square(np.array(self.posmem) - np.array(self.y)))
@@ -164,79 +176,113 @@ def add_event(event):
     pass
 
 
-def lc_event(event):
+def lc_event(event, timeind, dt):
     """Applies lead change event, updating a CalibrationVehicle's leader.
 
     Lead change events are a tuple of
         start (float) - time index of the event
         'lc' (str) - identifies event as a lane change event
         curveh - CalibrationVehicle object which has the leader change at time start
-        curlead - The new leader for curveh. If the new leader is being simulated, curlead is a
+        newlead - The new leader for curveh. If the new leader is being simulated, curlead is a
             CalibrationVehicle, otherwise curlead is a float corresponding to the vehicle ID
-        curlen - If curlead is a float (i.e. the new leader is not simulated), curlen is the length of
+        leadlen - If newlead is a float (i.e. the new leader is not simulated), curlen is the length of
             curlead. Otherwise, curlen is None (curlead.len gives the length for a CalibrationVehicle)
         userelax - bool, whether to apply relaxation
         leadstate - if the new leader is not simulated, leadstate is a tuple which gives the position/speed
             to use for computing the relaxation amount
     """
-    unused, unused, curveh, curlead, curlen, userelax, oldlead = event
+    unused, unused, curveh, newlead, leadlen, userelax, leadstate = event
 
-    #calculate relaxation amount
+    # calculate relaxation amount
     if userelax:
-        if not curveh.leadmem:  # relaxation for merge
+        # get olds/oldv
+        if curveh.lead is None:  # rule for merges
             olds, oldv = curveh.get_eql(curveh.speed), curveh.speed
-        elif oldlead[0] is None:  # old leader is simulated
-            olds, oldv  = curveh.hd, curveh.lead.speed
-        else:  # old leader is not simulated
-            olds, oldv = curveh.hd + oldlead[0], oldlead[1]
+        else:  # normal rule
+            olds, oldv = curveh.hd, newlead.speed
+
+        # get news/newv
+        uselen = newlead.len if leadlen is None else leadlen
+        if leadstate[0] is None:
+            newpos, newv = newlead.pos, newlead.speed
+        else:
+            newpos, newv = leadstate
+        news = newpos - uselen - curveh.pos
+
+        # apply relaxation
+        relaxamounts = (olds - news, oldv - newv)
+        curveh.set_relax(relaxamounts, timeind, dt)
+
+    update_lead(curveh, newlead, leadlen, timeind)  # update leader
 
 
-    pass
+def update_lead(curveh, newlead, leadlen, timeind):
+    """Updates leader for curveh. newlead is CalibrationVehicle (simulated) or float (use LeadVehicle)."""
+    if leadlen is None:  # newlead is simulated
+        curveh.lead = newlead
+        curveh.leadmem.append([newlead, timeind+1])
+    else:  # LeadVehicle
+        curveh.lead = curveh.leadveh
+        curveh.lead.set_len(leadlen)  # must set the length of LeadVehicle
+        curveh.leadmem.append([newlead, timeind+1])
+
+
+def make_relaxation(veh, relaxamounts, timeind, dt, relax_speed=False):
+    """Generates relaxation for a vehicle after it experiences a lane change, given the relaxation amounts.
+
+    Very similar to new_relaxation in simulation module but for this you need to pass the
+    relaxation amounts.
+
+    Args:
+        veh: Vehicle to add relaxation to
+        relaxamounts: tuple of (headway, speed) relaxation amounts
+        timeind: time index
+        dt: time step
+        relax_speed: If True, relaxation is applied to speed as well as headway.
+    Returns:
+        None.
+    """
+    rp = veh.relax_parameters
+    if rp is None:
+        return
+
+    if relax_speed:
+        relaxamount_s, relaxamount_v = relaxamounts
+        relaxlen = math.ceil(rp/dt) - 1
+        curr = np.zeros((relaxlen,2))
+        curr[:,0] = np.linspace((1 - dt/rp)*relaxamount_s, (1 - dt/rp*relaxlen)*relaxamount_s, relaxlen)
+        curr[:,1] = np.linspace((1 - dt/rp)*relaxamount_v, (1 - dt/rp*relaxlen)*relaxamount_v, relaxlen)
+
+        if veh.in_relax:
+            curlen = len(veh.relax)
+            newend = timeind + relaxlen  # time index when relax ends
+            newrelax = np.zeros((newend - veh.relax_start+1, 2))
+            newrelax[0:curlen,:] = veh.relax
+            newrelax[timeind-veh.relax_start+1:,:] += curr
+            veh.relax = newrelax
+        else:
+            veh.in_relax = True
+            veh.relax_start = timeind + 1
+            veh.relax = curr
+
+    else:
+        relaxamount = relaxamounts[0]
+        relaxlen = math.ceil(rp/dt) - 1
+        curr = np.linspace((1 - dt/rp)*relaxamount, (1 - dt/rp*relaxlen)*relaxamount, relaxlen)
+
+        if veh.in_relax:  # add to existing relax
+            curlen = len(veh.relax)
+            newend = timeind + relaxlen  # time index when relax ends
+            newrelax = np.zeros((newend - veh.relax_start+1))
+            newrelax[0:curlen] = veh.relax
+            newrelax[timeind-veh.relax_start+1:] += curr
+            veh.relax = newrelax
+        else:  # create new relax
+            veh.in_relax = True
+            veh.relax_start = timeind + 1
+            veh.relax = curr
+
+
 
 def optimize():
     pass
-
-"""
-Note on relaxation
-
-This relaxation is calculated slightly differently than that for the simulation module. This is because
-
-"""
-
-
-# class LeadVehicle:
-#     """Used for simulating a vehicle which follows a predetermined trajectory - it has no models."""
-#     def __init__(self, posmem, speedmem, length, inittime):
-#         """
-#         posmem - list of positions
-#         speedmem - list of speeds
-#         length - vehicle length
-#         inittime - time corresponding to the 0 index of memory
-#         """
-#         self.posmem = posmem
-#         self.speedmem = speedmem
-#         self.len = length
-#         self.inittime
-#         self.cf_parameters = None
-
-#     def update(self, timeind, dt):
-#         """position/speed are determined by posmem/speedmem"""
-#         temp = timeind - self.inittime
-#         self.pos = self.posmem[temp]
-#         self.speed = self.speedmem[temp]
-
-#     def set_cf(self, *args):
-#         pass
-
-#     def set_relax(self, *args):
-#         pass
-
-#     def loss(self, *args):
-#         pass
-
-#     def reset(self):
-#         pass
-
-#     def initialize(self):
-#         pass
-
