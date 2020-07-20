@@ -1211,7 +1211,7 @@ class Simulation:
                 curlane.new_vehicle(self.vehid)
                 self.vehid += 1
 
-    def step(self, timeind):
+    def step(self):
         """Logic for doing a single step of simulation.
 
         Args:
@@ -1237,7 +1237,7 @@ class Simulation:
     def simulate(self, timesteps):
         """Call step method timesteps number of times."""
         for i in range(timesteps):
-            self.step(self.timeind)
+            self.step()
 
     def reset(self):  # noqa # TODO - ability to put simulation back to initial time
         pass
