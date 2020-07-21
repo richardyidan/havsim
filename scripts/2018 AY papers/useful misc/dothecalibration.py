@@ -60,7 +60,7 @@ args = (True,6)
 #curplatoon = [[],995,998,1013,1023] #995 good for testing lane changing #1003 1014 was original pair we used for testing where 1014 was the follower
 #curplatoon = [[],581, 611]
 # curplatoon = [381.0, 391.0, 335.0, 326.0, 334.0]
-curplatoon = [381]
+curplatoon = [3111]
 #curplatoon = [335, 326]
 #curplatoon = platoonlist[17]
 n = len(curplatoon)
@@ -112,6 +112,12 @@ start = time.time()
 bfgs = sc.fmin_l_bfgs_b(platoonobjfn_objder,p,None,(model, modeladjsys, modeladj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo,*args),0,bounds,maxfun=200)
 end = time.time()
 bfgstime = end-start
+
+### comparison purposes
+print('time for objective is '+str(objtime))
+t_n, T_nm1 = platooninfo[curplatoon[0]][1:3]
+print('time for calibration is '+str(bfgstime)+' with mse '+str((bfgs[1]/((T_nm1-t_n)*.1))**.5))
+plt.plot(sim[curplatoon[0]][:,3])
 
 start = time.time()
 #sqp = SQP2(platoonobjfn_obj,platoonobjfn_objder, platoonobjfn_der,p,bounds,nmbacktrack,(OVM, OVMadjsys, OVMadj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo,False,5), maxit = 200, t=2, eps=5e-7)

@@ -29,10 +29,6 @@ class CalibrationVehicle(Vehicle):
         self.road = None
         self.lane = None
 
-        self.in_relax = False
-        self.relax = None
-        self.relax_start = None
-
         if accbounds is None:
             self.minacc, self.maxacc = -7, 3
         else:
@@ -62,15 +58,20 @@ class CalibrationVehicle(Vehicle):
 
     def initialize(self, parameters):
         """Resets memory, applies initial conditions, and sets the parameters for the next simulation."""
-        self.lead = None
+        # memory
         self.leadmem = []
         self.posmem = []
         self.speedmem = []
         self.relaxmem = []
-
+        # initial conditions
+        self.lead = None
         self.pos = self.initpos
         self.speed = self.initspd
-
+        # reset relax
+        self.in_relax = False
+        self.relax = None
+        self.relax_start = None
+        # parameters
         self.cf_parameters = parameters[:-1]
         self.relax_parameters = parameters[-1]
 
@@ -101,7 +102,7 @@ class Calibration:
         self.all_add_events = add_events
         self.all_lc_events = lc_events
 
-        self.starttime = add_events[0][0]
+        self.starttime = add_events[-1][0]
         self.endtime = endtime
         self.dt = dt
 
@@ -124,8 +125,8 @@ class Calibration:
         self.vehicles = set()
         self.add_events = self.all_add_events.copy()
         self.lc_events = self.all_lc_events.copy()
-        self.addtime = self.add_events[0][0]
-        self.lctime = self.lc_events[0][0] if len(self.lc_events)>0 else math.inf
+        self.addtime = self.add_events[-1][0]
+        self.lctime = self.lc_events[-1][0] if len(self.lc_events)>0 else math.inf
         self.timeind = self.starttime
         self.addtime = update_add_event(self.vehicles, self.add_events, self.addtime, self.timeind-1, self.dt)
         for veh in self.vehicles:
@@ -163,22 +164,22 @@ def update_calibration(vehicles, add_events, lc_events, addtime, lctime, timeind
 def update_lc_event(lc_events, lctime, timeind, dt):
     if lctime == timeind+1:
         lc_event(lc_events.pop(), timeind, dt)
-        lctime = lc_events[0][0] if len(lc_events)>0 else math.inf
+        lctime = lc_events[-1][0] if len(lc_events)>0 else math.inf
         if lctime == timeind+1:
             while lctime == timeind+1:
                 lc_event(lc_events.pop(), timeind, dt)
-                lctime = lc_events[0][0] if len(lc_events)>0 else math.inf
+                lctime = lc_events[-1][0] if len(lc_events)>0 else math.inf
     return lctime
 
 
 def update_add_event(vehicles, add_events, addtime, timeind, dt):
     if addtime == timeind+1:
         add_event(add_events.pop(), vehicles, timeind, dt)
-        addtime = add_events[0][0] if len(add_events)>0 else math.inf
+        addtime = add_events[-1][0] if len(add_events)>0 else math.inf
         if addtime == timeind+1:
             while addtime == timeind+1:
                 add_event(add_events.pop(), vehicles, timeind, dt)
-                addtime = add_events[0][0] if len(add_events)>0 else math.inf
+                addtime = add_events[-1][0] if len(add_events)>0 else math.inf
     return addtime
 
 
@@ -249,9 +250,10 @@ def make_calibration(vehicles, meas, platooninfo, dt):
                 else:
                     leadstate = (meas[curlead][start-leadt_nstar,2], meas[curlead][start-leadt_nstar,3])
 
-            if count == 0:  # add event adds vehicle to simulation, checks for merge
+            if count == 0:  # add event adds vehicle to simulation
                 t_nstar, t_n = platooninfo[veh][0:2]
-                if t_n > t_nstar and meas[veh][t_n-t_nstar-1,7]==7 and meas[veh][t_n-t_nstar,7]==6:
+                # if t_n > t_nstar and meas[veh][t_n-t_nstar-1,7]==7 and meas[veh][t_n-t_nstar,7]==6:
+                if t_n > t_nstar:
                     userelax, leadstate = True, (None,)
                 else:
                     userelax, leadstate = False, (None,)
@@ -260,11 +262,11 @@ def make_calibration(vehicles, meas, platooninfo, dt):
                 curevent = (start, 'add', curveh, curevent)
                 addevent_list.append(curevent)
             else:  # lc event changes leader, applies relax
-                curevent = (start, 'lc', curveh, curlead, curlen, userelax, leadstate)
+                curevent = (start, 'lc', curveh, curlead, curlen, True, leadstate)
                 lcevent_list.append(curevent)
 
-    addevent_list.sort(key = lambda x: x[0])  # sort events in time
-    lcevent_list.sort(key = lambda x: x[0])
+    addevent_list.sort(key = lambda x: x[0], reverse = True)  # sort events in time
+    lcevent_list.sort(key = lambda x: x[0], reverse = True)
 
     # make calibration object
     return Calibration(vehicle_list, addevent_list, lcevent_list, dt, endtime=endtime)
@@ -300,7 +302,7 @@ def lc_event(event, timeind, dt):
         if curveh.lead is None:  # rule for merges
             olds, oldv = curveh.get_eql(curveh.speed), curveh.speed
         else:  # normal rule
-            olds, oldv = curveh.hd, newlead.speed
+            olds, oldv = curveh.hd, curveh.lead.speed
 
         # get news/newv
         uselen = newlead.len if leadlen is None else leadlen
