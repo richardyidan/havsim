@@ -40,7 +40,7 @@ def mainroad_newveh(self, vehid, *args):
 #inflow amounts
 def onramp_inflow(timeind, *args):
     # return .06 + np.random.rand()/25
-    return .07
+    return .09
 def mainroad_inflow(*args):
     # return .43 + np.random.rand()*24/100
     return .48
@@ -49,11 +49,15 @@ def mainroad_inflow(*args):
 tempveh = Vehicle(-1, None, [30, 1.5, 2, 1.1, 1.5], None, maxspeed = 30-1e-6)
 outspeed = tempveh.inv_flow(.48, congested = False)
 inspeed, inhd = tempveh.inv_flow(.48, output_type = 'both', congested = True)
+inspeedramp, inhd = tempveh.inv_flow(.07, output_type = 'both', congested = True)
 def mainroad_outflow(*args):
     return outspeed
 
 def speed_inflow(*args):
-    return outspeed
+    return inspeed
+
+def speed_inflow_ramp(*args):
+    return inspeedramp
 
 #define boundary conditions
 get_inflow1 = {'time_series':onramp_inflow}
@@ -62,6 +66,8 @@ get_inflow2 = {'time_series':mainroad_inflow}
 # increment_inflow = {'method': 'seql', 'c':.8}
 # increment_inflow = {'method': 'shifted', 'accel_bound':-.3, 'shift':1.5}
 increment_inflow = {'method': 'speed', 'accel_bound':-.1, 'speed_series':speed_inflow}
+increment_inflow_ramp = {'method': 'speed', 'accel_bound':-.1, 'speed_series':speed_inflow_ramp}
+# increment_inflow_ramp=increment_inflow
 downstream1 ={'method':'free', }
 # downstream1 = {'method': 'speed', 'time_series':mainroad_outflow}
 
@@ -78,7 +84,7 @@ lane0 = Lane(0,mainroadlen, road, 0, downstream = downstream1, increment_inflow 
 lane1 = Lane(0,mainroadlen, road, 1, downstream = downstream1, increment_inflow = increment_inflow, get_inflow = get_inflow2, new_vehicle = mainroad_newveh)
 road[0] = lane0
 road[1] = lane1
-lane2 = Lane(startmerge-100,endmerge,onramp,0, increment_inflow = increment_inflow, get_inflow = get_inflow1, new_vehicle = onramp_newveh)
+lane2 = Lane(startmerge-100,endmerge,onramp,0, increment_inflow = increment_inflow_ramp, get_inflow = get_inflow1, new_vehicle = onramp_newveh)
 # downstream2 = {'method':'merge', 'merge_anchor_ind':0, 'target_lane': lane1, 'self_lane':lane2, 'stopping':'ballistic'}
 downstream2 = {'method': 'free merge', 'self_lane':lane2, 'stopping':'car following'}
 # downstream2 = {'method': 'free merge', 'time_series':mainroad_outflow, 'stopping':'ballistic', 'self_lane':lane2}
