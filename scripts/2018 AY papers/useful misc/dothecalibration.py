@@ -1,49 +1,50 @@
 # -*- coding: utf-8 -*-
 """
 Created on Fri Aug 10 01:44:13 2018
-Testing and debugging functions. 
-I also use this script to benchmark the speed and accuracy of the adjoint method. 
+Testing and debugging functions.
+I also use this script to benchmark the speed and accuracy of the adjoint method.
 There are also examples of how to setup the optimization problem and call different algorithms. However these examples are pretty deprecated, refer
-to files like adjointcontent, relaxcontent or algtesting2 for more up to date optimization routines being called 
+to files like adjointcontent, relaxcontent or algtesting2 for more up to date optimization routines being called
 
-can verify that in discrete time the gradient isn't necessarily continuous, specifically there are issues with how many 
-timesteps get put into each gradient calculation, simplest example is relaxatino phenomenon 
-around 5 i.e. 5-1e-8 adjoint gets 4 timesteps with sensitivity, 5+1e-8 it gets 5 timesteps 
-with sensitivity, and so you get an extra kick to the total gradient when this happens because 
-of the extra timestep. 
+can verify that in discrete time the gradient isn't necessarily continuous, specifically there are issues with how many
+timesteps get put into each gradient calculation, simplest example is relaxatino phenomenon
+around 5 i.e. 5-1e-8 adjoint gets 4 timesteps with sensitivity, 5+1e-8 it gets 5 timesteps
+with sensitivity, and so you get an extra kick to the total gradient when this happens because
+of the extra timestep.
 @author: rlk268
 """
 
 from havsim.calibration.opt import *
 from havsim.calibration.helper import makeleadfolinfo
-from havsim.calibration.models import OVM, OVMadj, OVMadjsys
+from havsim.calibration.models import *
+import time
 
-#make the platoons and platooninfo, as well as get the measurements in dictionary form 
-#meas, platooninfo, platoonlist = makeplatoonlist(data, 10)  
-#meas, platooninfo, platoonlist = makeplatoonlist(rawdata, 22, False, [5,11,14,15,8,13,12])        
+#make the platoons and platooninfo, as well as get the measurements in dictionary form
+#meas, platooninfo, platoonlist = makeplatoonlist(data, 10)
+#meas, platooninfo, platoonlist = makeplatoonlist(rawdata, 22, False, [5,11,14,15,8,13,12])
 
 #sim = copy.deepcopy(meas) #simulation is initialized to be the same as the measurements
 
 #pguess = [16.8*3.3,.086/3.3, 1.545, 2, .175 ] #this is what we are using for the initial guess for OVM; it comes from the bando et al paper 'phenomological study ...'
-##mybounds = [(30,100),(.01,.05),(.3,2),(1,3),(0,.5)] #conservative bounds 
-#mybounds = [(30,200),(.001,.1),(.1,10),(.1,5),(0,2)] #less conservative bounds 
+##mybounds = [(30,100),(.01,.05),(.3,2),(1,3),(0,.5)] #conservative bounds
+#mybounds = [(30,200),(.001,.1),(.1,10),(.1,5),(0,2)] #less conservative bounds
 
 
 
-#%%#get a specific platoon, get the platoon length, make the lead/fol info, and initialize the parameters for all the vehicles in the platoon 
+#%%#get a specific platoon, get the platoon length, make the lead/fol info, and initialize the parameters for all the vehicles in the platoon
 sim = copy.deepcopy(meas)
 #pguess = [16.8*3.3,.086/3.3, 1.545, 2, .175 ] #OVM
 
-pguess = [10*3.3,.086/3.3, 1.545, 2, .175, 5.01]
+# pguess = [10*3.3,.086/3.3, 1.545, 2, .175, 5.01]
 #mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3)] #less conservative bounds #can mess with the bounds to make them loser (may get weird stuff but in general better) or tighter (can cause higher values)
-mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)] #less conservative bounds 
+# mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)] #less conservative bounds
 
 
 
-#pguess =  [40,1,1,3,10,25] #IDM 
-#mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
+pguess =  [40,1,1,3,10,25] #IDM
+mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
 
-#pguess =  [24,1,1,3,15] #IDM 
+#pguess =  [24,1,1,3,15] #IDM
 #mybounds = [(20,120),(.1,5),(.1,25),(.1,20),(.1,20)]
 
 args = (True,6)
@@ -55,37 +56,38 @@ args = (True,6)
 #mybounds = [(.1,10),(0,100),(40,120),(.1,75)]
 
 #curplatoon = platoonlist[93]
-#curplatoon = [[], 995,998,1013,1023,1030]  #[[],995,998,1013,1023,1030] this is a good test platoon 
+#curplatoon = [[], 995,998,1013,1023,1030]  #[[],995,998,1013,1023,1030] this is a good test platoon
 #curplatoon = [[],995,998,1013,1023] #995 good for testing lane changing #1003 1014 was original pair we used for testing where 1014 was the follower
 #curplatoon = [[],581, 611]
-curplatoon = [381.0, 391.0, 335.0, 326.0, 334.0]
+# curplatoon = [381.0, 391.0, 335.0, 326.0, 334.0]
+curplatoon = [381]
 #curplatoon = [335, 326]
 #curplatoon = platoonlist[17]
 n = len(curplatoon)
 
-leadinfo, folinfo, rinfo = makeleadfolinfo(curplatoon, platooninfo,meas) 
+leadinfo, folinfo, rinfo = makeleadfolinfo(curplatoon, platooninfo,meas)
 #leadinfo,folinfo,rinfo = makeleadfolinfo(curplatoon,platooninfo,meas)
 p = np.tile(pguess, n)
-p = [10*3.3,.086/3.3, 1.545, 2, .175, 5.01, 9*3.3,.083/3.3, 2, 1.5, .275, 15.01, 11*3.3,.075/3.3, 1.545, 2.2, .175, 25.01, 
-          10.5*3.3,.086/3.3, 1.6, 2, .175, 10.01, 9.6*3.3,.095/3.3, 1.6, 2.1, .255, 8.01]
+# p = [10*3.3,.086/3.3, 1.545, 2, .175, 5.01, 9*3.3,.083/3.3, 2, 1.5, .275, 15.01, 11*3.3,.075/3.3, 1.545, 2.2, .175, 25.01,
+#           10.5*3.3,.086/3.3, 1.6, 2, .175, 10.01, 9.6*3.3,.095/3.3, 1.6, 2.1, .255, 8.01]
 #p = p[0:12]
 bounds = np.tile(mybounds,(n,1))
 #p = finitebfgs['x']
 ##########################################################################################
 ################test objective and gradient evaluation##################
-#model = IDM_b3
-#modeladjsys = IDMadjsys_b3
-#modeladj = IDMadj_b3
-model = OVM
-modeladjsys = OVMadjsys
-modeladj = OVMadj
+model = IDM_b3
+modeladjsys = IDMadjsys_b3
+modeladj = IDMadj_b3
+# model = OVM
+# modeladjsys = OVMadjsys
+# modeladj = OVMadj
 #model = daganzo
 #modeladjsys = daganzoadjsys
 #modeladj = daganzoadj
 start = time.time()
 obj = platoonobjfn_obj(p,model, modeladjsys, modeladj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo, rinfo,*args)
 end = time.time()
-objtime = end-start #note that the obj is supposed to be around 500k for the initial platoon with 5 vehicles, initial guess for ovm 
+objtime = end-start #note that the obj is supposed to be around 500k for the initial platoon with 5 vehicles, initial guess for ovm
 
 start = time.time()
 adjder = platoonobjfn_objder(p,model, modeladjsys, modeladj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo,*args)
@@ -107,7 +109,7 @@ print(acc2)
 #############test calibration#####################
 
 start = time.time()
-#bfgs = sc.fmin_l_bfgs_b(platoonobjfn_objder,p,None,(model, modeladjsys, modeladj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo,*args),0,bounds,maxfun=200)
+bfgs = sc.fmin_l_bfgs_b(platoonobjfn_objder,p,None,(model, modeladjsys, modeladj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo,*args),0,bounds,maxfun=200)
 end = time.time()
 bfgstime = end-start
 
@@ -229,6 +231,6 @@ gdtime = end-start
 #newtonCG = sc.minimize(platoonobjfn_noder,p,(OVM, OVMadjsys, OVMadj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo),'trust-constr',platoonobjfn_der, '2-point', None, bounds)
 #end = time.time()
 #newtonCGtime = end-start
-    
+
 
 

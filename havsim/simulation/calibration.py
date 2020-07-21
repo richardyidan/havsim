@@ -6,13 +6,13 @@ data on a microscopic level.
 """
 
 import numpy as np
-from havsim.simulation.simulation import Vehicle, get_headway, get_dist
+from havsim.simulation.simulation import Vehicle, get_headway
 import havsim.calibration.helper as helper
 import math
 
 # TODO finish implementing calibration for platoons of vehicles (handle downstream boundary, removing, etc.)
-    #asdfasdfasdf
-    #asdfasdfasdf
+    #handle assigning parameters for multiple vehicles
+    #removing vehicles and downstream boundary
 # TODO implement calibration for latitudinal models only
 
 class CalibrationVehicle(Vehicle):
@@ -58,7 +58,7 @@ class CalibrationVehicle(Vehicle):
 
     def loss(self):
         """Calculates loss."""
-        return sum(np.square(np.array(self.posmem) - np.array(self.y)))
+        return sum(np.square(np.array(self.posmem) - self.y))/len(self.posmem)
 
     def initialize(self, parameters):
         """Resets memory, applies initial conditions, and sets the parameters for the next simulation."""
@@ -74,9 +74,6 @@ class CalibrationVehicle(Vehicle):
         self.cf_parameters = parameters[:-1]
         self.relax_parameters = parameters[-1]
 
-    def dbc(self):
-        RuntimeError('not implemented')  # TODO implement boundary conditions for platoons
-
 
 class LeadVehicle:
     """Used for simulating a vehicle which follows a predetermined trajectory - it has no models."""
@@ -91,7 +88,7 @@ class LeadVehicle:
 
     def update(self, timeind, *args):
         """Update position/speed."""
-        self.pos, self.spd = self.leadstatemem[timeind - self.inittime]
+        self.pos, self.speed = self.leadstatemem[timeind - self.inittime]
 
     def set_len(self, length):
         """Set len so headway can be computed correctly."""
@@ -123,17 +120,22 @@ class Calibration:
         for veh in self.all_vehicles:
             veh.initialize(parameters)
 
-        # add the first vehicle and set up simulation
+        # initialize events, add the first vehicle(s), initialize vehicles headways/LeadVehicles
         self.vehicles = set()
         self.add_events = self.all_add_events.copy()
         self.lc_events = self.all_lc_events.copy()
         self.addtime = self.add_events[0][0]
-        self.lctime = self.lc_events[0][0]
+        self.lctime = self.lc_events[0][0] if len(self.lc_events)>0 else math.inf
         self.timeind = self.starttime
         self.addtime = update_add_event(self.vehicles, self.add_events, self.addtime, self.timeind-1, self.dt)
+        for veh in self.vehicles:
+            if veh.in_leadveh:
+                veh.leadveh.update(self.timeind)
+            veh.hd = get_headway(veh, veh.lead)
+
 
         # do simulation by calling step repeatedly
-        for i in range(self.endtime - self.starttime):
+        for i in range(self.endtime - self.starttime+1):
             self.step()
 
         # calculate and return loss
@@ -161,22 +163,22 @@ def update_calibration(vehicles, add_events, lc_events, addtime, lctime, timeind
 def update_lc_event(lc_events, lctime, timeind, dt):
     if lctime == timeind+1:
         lc_event(lc_events.pop(), timeind, dt)
-        lctime = lc_events[0][0]
+        lctime = lc_events[0][0] if len(lc_events)>0 else math.inf
         if lctime == timeind+1:
             while lctime == timeind+1:
                 lc_event(lc_events.pop(), timeind, dt)
-                lctime = lc_events[0][0]
+                lctime = lc_events[0][0] if len(lc_events)>0 else math.inf
     return lctime
 
 
 def update_add_event(vehicles, add_events, addtime, timeind, dt):
     if addtime == timeind+1:
         add_event(add_events.pop(), vehicles, timeind, dt)
-        addtime = add_events[0][0]
+        addtime = add_events[0][0] if len(add_events)>0 else math.inf
         if addtime == timeind+1:
             while addtime == timeind+1:
                 add_event(add_events.pop(), vehicles, timeind, dt)
-                addtime = add_events[0][0]
+                addtime = add_events[0][0] if len(add_events)>0 else math.inf
     return addtime
 
 
@@ -212,9 +214,9 @@ def make_calibration(vehicles, meas, platooninfo, dt):
             leadstatemem, leadinittime = None
 
         # get initial values, y for veh
-        t_nstar, inittime, endtime = platooninfo[veh][0,1,2]
+        t_nstar, inittime, endtime = platooninfo[veh][0:3]
         initlead, initpos, initspd, length = meas[veh][inittime-t_nstar,[4,2,3,6]]
-        y = meas[veh][inittime-t_nstar:endtime+1-t_nstar]
+        y = meas[veh][inittime-t_nstar:endtime+1-t_nstar,2]
 
         # create vehicle object
         newveh = CalibrationVehicle(veh, y, initpos, initspd, inittime, leadstatemem, leadinittime,
@@ -248,7 +250,7 @@ def make_calibration(vehicles, meas, platooninfo, dt):
                     leadstate = (meas[curlead][start-leadt_nstar,2], meas[curlead][start-leadt_nstar,3])
 
             if count == 0:  # add event adds vehicle to simulation, checks for merge
-                t_nstar, t_n = platooninfo[veh][0,1]
+                t_nstar, t_n = platooninfo[veh][0:2]
                 if t_n > t_nstar and meas[veh][t_n-t_nstar-1,7]==7 and meas[veh][t_n-t_nstar,7]==6:
                     userelax, leadstate = True, (None,)
                 else:
@@ -264,8 +266,8 @@ def make_calibration(vehicles, meas, platooninfo, dt):
     addevent_list.sort(key = lambda x: x[0])  # sort events in time
     lcevent_list.sort(key = lambda x: x[0])
 
-    #make calibration object
-    #debug, refactor optimization
+    # make calibration object
+    return Calibration(vehicle_list, addevent_list, lcevent_list, dt, endtime=endtime)
 
 
 def add_event(event, vehicles, timeind, dt):
@@ -382,8 +384,3 @@ def make_relaxation(veh, relaxamounts, timeind, dt, relax_speed=False):
             veh.in_relax = True
             veh.relax_start = timeind + 1
             veh.relax = curr
-
-
-
-def optimize():
-    pass
