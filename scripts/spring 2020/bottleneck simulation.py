@@ -26,6 +26,7 @@ import time
 # plt.plot(density,flows)
 
 #%%
+# done with - accident free relax, no acceleration bounds, max speed bounds
 #vehicle parameters
 def onramp_newveh(self, vehid, *args):
     cf_p, lc_p  = IDM_parameters()

@@ -50,7 +50,7 @@ class CalibrationVehicle(Vehicle):
         super().update(timeind, dt)
 
         if self.in_leadveh:
-            self.leadveh.update(timeind)
+            self.leadveh.update(timeind+1)
 
     def loss(self):
         """Calculates loss."""
@@ -58,11 +58,6 @@ class CalibrationVehicle(Vehicle):
 
     def initialize(self, parameters):
         """Resets memory, applies initial conditions, and sets the parameters for the next simulation."""
-        # memory
-        self.leadmem = []
-        self.posmem = []
-        self.speedmem = []
-        self.relaxmem = []
         # initial conditions
         self.lead = None
         self.pos = self.initpos
@@ -71,8 +66,14 @@ class CalibrationVehicle(Vehicle):
         self.in_relax = False
         self.relax = None
         self.relax_start = None
+        # memory
+        self.leadmem = []
+        self.posmem = [self.pos]
+        self.speedmem = [self.speed]
+        self.relaxmem = []
         # parameters
         self.cf_parameters = parameters[:-1]
+        self.maxspeed = parameters[0]-.1
         self.relax_parameters = parameters[-1]
 
 
@@ -136,7 +137,7 @@ class Calibration:
 
 
         # do simulation by calling step repeatedly
-        for i in range(self.endtime - self.starttime+1):
+        for i in range(self.endtime - self.starttime):
             self.step()
 
         # calculate and return loss
@@ -183,7 +184,7 @@ def update_add_event(vehicles, add_events, addtime, timeind, dt):
     return addtime
 
 
-def make_calibration(vehicles, meas, platooninfo, dt):
+def make_calibration(vehicles, meas, platooninfo, dt, vehicle_class):
     vehicle_list = []
     addevent_list = []
     lcevent_list = []
@@ -220,7 +221,7 @@ def make_calibration(vehicles, meas, platooninfo, dt):
         y = meas[veh][inittime-t_nstar:endtime+1-t_nstar,2]
 
         # create vehicle object
-        newveh = CalibrationVehicle(veh, y, initpos, initspd, inittime, leadstatemem, leadinittime,
+        newveh = vehicle_class(veh, y, initpos, initspd, inittime, leadstatemem, leadinittime,
                                     length=length)
         vehicle_list.append(newveh)
         id2obj[veh] = newveh
@@ -254,9 +255,9 @@ def make_calibration(vehicles, meas, platooninfo, dt):
                 t_nstar, t_n = platooninfo[veh][0:2]
                 # if t_n > t_nstar and meas[veh][t_n-t_nstar-1,7]==7 and meas[veh][t_n-t_nstar,7]==6:
                 if t_n > t_nstar:
-                    userelax, leadstate = True, (None,)
+                    userelax = True
                 else:
-                    userelax, leadstate = False, (None,)
+                    userelax = False
                 # make the add event
                 curevent = (start, 'lc', curveh, curlead, curlen, userelax, leadstate)
                 curevent = (start, 'add', curveh, curevent)
@@ -348,12 +349,14 @@ def make_relaxation(veh, relaxamounts, timeind, dt, relax_speed=False):
         None.
     """
     rp = veh.relax_parameters
+    relaxlen = math.ceil(rp/dt) - 1
+    if relaxlen == 0:
+        return
     if rp is None:
         return
 
     if relax_speed:
         relaxamount_s, relaxamount_v = relaxamounts
-        relaxlen = math.ceil(rp/dt) - 1
         curr = np.zeros((relaxlen,2))
         curr[:,0] = np.linspace((1 - dt/rp)*relaxamount_s, (1 - dt/rp*relaxlen)*relaxamount_s, relaxlen)
         curr[:,1] = np.linspace((1 - dt/rp)*relaxamount_v, (1 - dt/rp*relaxlen)*relaxamount_v, relaxlen)
@@ -372,7 +375,6 @@ def make_relaxation(veh, relaxamounts, timeind, dt, relax_speed=False):
 
     else:
         relaxamount = relaxamounts[0]
-        relaxlen = math.ceil(rp/dt) - 1
         curr = np.linspace((1 - dt/rp)*relaxamount, (1 - dt/rp*relaxlen)*relaxamount, relaxlen)
 
         if veh.in_relax:  # add to existing relax

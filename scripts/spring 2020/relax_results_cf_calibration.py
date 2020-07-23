@@ -16,3 +16,8 @@ for veh in veh_list:
         lc_list.append(veh)
     else:
         nolc_list.append(veh)
+
+
+"""
+Run 1: IDM with no accident-free relax, no max speed bound, no acceleration bound
+"""

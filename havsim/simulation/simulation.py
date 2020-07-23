@@ -823,7 +823,7 @@ def new_relaxation(veh, timeind, dt, relax_speed=False):
         olds = veh.hd
     news = get_headway(veh, veh.lead)
 
-    if relax_speed:  # relax speed + headway so we have a 2d array of relax values
+    if relax_speed:  # relax speed + headway so we have a list of tuples
         if prevlead is None:
             oldv = veh.speed
         else:
@@ -832,39 +832,78 @@ def new_relaxation(veh, timeind, dt, relax_speed=False):
 
         relaxamount_s = olds-news
         relaxamount_v = oldv-newv
-        relaxlen = math.ceil(rp/dt) - 1
-        curr = np.zeros((relaxlen,2))
-        curr[:,0] = np.linspace((1 - dt/rp)*relaxamount_s, (1 - dt/rp*relaxlen)*relaxamount_s, relaxlen)
-        curr[:,1] = np.linspace((1 - dt/rp)*relaxamount_v, (1 - dt/rp*relaxlen)*relaxamount_v, relaxlen)
+        relax_helper_vhd(rp, relaxamount_s, relaxamount_v, veh, timeind, dt)
 
-        if veh.in_relax:
-            curlen = len(veh.relax)
-            newend = timeind + relaxlen  # time index when relax ends
-            newrelax = np.zeros((newend - veh.relax_start+1, 2))
-            newrelax[0:curlen,:] = veh.relax
-            newrelax[timeind-veh.relax_start+1:,:] += curr
-            veh.relax = newrelax
-        else:
-            veh.in_relax = True
-            veh.relax_start = timeind + 1
-            veh.relax = curr
 
-    else:  # relax headway only = 1d array of relax values
+    else:  # relax headway only = list of float of relax values
         relaxamount = olds-news
-        relaxlen = math.ceil(rp/dt) - 1
-        curr = np.linspace((1 - dt/rp)*relaxamount, (1 - dt/rp*relaxlen)*relaxamount, relaxlen)
+        relax_helper(rp, relaxamount, veh, timeind, dt)
 
-        if veh.in_relax:  # add to existing relax
-            curlen = len(veh.relax)
-            newend = timeind + relaxlen  # time index when relax ends
-            newrelax = np.zeros((newend - veh.relax_start+1))
-            newrelax[0:curlen] = veh.relax
-            newrelax[timeind-veh.relax_start+1:] += curr
-            veh.relax = newrelax
-        else:  # create new relax
-            veh.in_relax = True
-            veh.relax_start = timeind + 1
-            veh.relax = curr
+
+def relax_helper_vhd(rp, relaxamount_s, relaxamount_v, veh, timeind, dt):
+    """Helper function for headway + speed relaxation."""
+    #rp = parameter, relaxamount_s = headway relaxation, _v = velocity relaxation
+    relaxlen = math.ceil(rp/dt) - 1
+    tempdt = -dt*rp*relaxamount_s
+    tempdt2 = -dt*rp*relaxamount_v
+    temp = [relaxamount_s + tempdt*(i+1) for i in range(relaxlen)]
+    temp2 = [relaxamount_v + tempdt2*(i+1) for i in range(relaxlen)]
+    curr = list(zip(temp,temp2))
+
+    if veh.in_relax:  # add to existing relax
+        overlap_end = min(veh.relax_end, timeind+relaxlen)
+        prevr_indoffset = timeind - veh.relax_start+1
+        prevr = veh.relax
+        for i in range(overlap_end-timeind-1):
+            curtime = prevr_indoffset+i
+            prevrelax, currelax = prevr[curtime], curr[i]
+            prevr[curtime] = (prevrelax[0]+currelax[0], prevrelax[1]+currelax[1])
+        prevr.extend(curr[overlap_end-timeind-1:])
+        veh.relax_end = max(veh.relax_end, timeind+relaxlen)
+    else:
+        veh.in_relax = True
+        veh.relax_start = timeind + 1  # add relax
+        veh.relax = curr
+        veh.relax_end = timeind + relaxlen
+
+
+def relax_helper(rp, relaxamount, veh, timeind, dt):
+    """Helper function for headway only relaxation."""
+    #rp = parameter, relaxamount = float relaxation amount
+    relaxlen = math.ceil(rp/dt) - 1
+    tempdt = -dt*rp*relaxamount
+    curr = [relaxamount + tempdt*(i+1) for i in range(relaxlen)]
+
+    if veh.in_relax:  # add to existing relax
+        overlap_end = min(veh.relax_end, timeind+relaxlen)
+        prevr_indoffset = timeind - veh.relax_start+1
+        prevr = veh.relax
+        for i in range(overlap_end-timeind-1):
+            prevr[prevr_indoffset+i] += curr[i]
+        prevr.extend(curr[overlap_end-timeind-1:])
+        veh.relax_end = max(veh.relax_end, timeind+relaxlen)
+    else:
+        veh.in_relax = True
+        veh.relax_start = timeind + 1  # add relax
+        veh.relax = curr
+        veh.relax_end = timeind + relaxlen
+
+##### previous numpy based code for relax - using python lists/list comprehension now
+# relaxlen = math.ceil(rp/dt) - 1
+# curr = np.zeros((relaxlen,2))
+# curr[:,0] = np.linspace((1 - dt/rp)*relaxamount_s, (1 - dt/rp*relaxlen)*relaxamount_s, relaxlen)
+# curr[:,1] = np.linspace((1 - dt/rp)*relaxamount_v, (1 - dt/rp*relaxlen)*relaxamount_v, relaxlen)
+# if veh.in_relax:
+#     curlen = len(veh.relax)
+#     newend = timeind + relaxlen  # time index when relax ends
+#     newrelax = np.zeros((newend - veh.relax_start+1, 2))
+#     newrelax[0:curlen,:] = veh.relax
+#     newrelax[timeind-veh.relax_start+1:,:] += curr
+#     veh.relax = newrelax
+# else:
+#     veh.in_relax = True
+#     veh.relax_start = timeind + 1
+#     veh.relax = curr
 
 
 def new_relaxation_acc(veh, timeind, dt):
@@ -1532,9 +1571,11 @@ class Vehicle:
         cf_parameters: list of float parameters for the cf model
         lc_parameters: list of float parameters for the lc model
         relax_parameters: float parameter for relaxation; if None, no relaxation
+        relax: if there is currently relaxation, a list of floats or list of tuples giving the relaxation
+            values.
         in_relax: bool, True if there is currently relaxation
-        relax: if there is currently relaxation, relax is a list of floats giving the relaxation values.
-        relax_start: time index corresponding to relax[0] if in_relax, otherwise None. (int)
+        relax_start: time index corresponding to relax[0]. (int)
+        relax_end: The last time index when relaxation is active. (int)
         route_parameters: parameters for the route model (list of floats)
         route: list of road names (str). When the vehicle first enters the simulation or enters a new road,
             the route gets pop().
@@ -1756,15 +1797,17 @@ class Vehicle:
             acc = curlane.call_downstream(self, timeind, dt)
 
         else:
-            if userelax:
+            if self.in_relax:
                 # accident free formulation of relaxation
-                ttc = hd / (self.speed - lead.speed)
-                if ttc < 1.5 and ttc > 0:
+                # ttc = hd / (self.speed - lead.speed)
+                # if ttc < 1.5 and ttc > 0:
+                if False:  # disable accident free
                     temp = (ttc/1.5)**2
-                    currelax, currelax_v = self.relax[timeind-self.relax_start, :]*temp  # hd + v relax
-                    # currelax = self.relax[timeind - self.relax_start]
+                    currelax, currelax_v = self.relax[timeind-self.relax_start]  # hd + v relax
+                    currelax, currelax_v = currelax*temp, currelax_v*temp
+                    # currelax = self.relax[timeind - self.relax_start]*temp
                 else:
-                    currelax, currelax_v = self.relax[timeind-self.relax_start, :]
+                    currelax, currelax_v = self.relax[timeind-self.relax_start]
                     # currelax = self.relax[timeind - self.relax_start]
 
                 acc = self.cf_model(self.cf_parameters, [hd + currelax, spd, lead.speed + currelax_v])
@@ -1892,7 +1935,7 @@ class Vehicle:
         """Applies bounds and updates a vehicle's longitudinal state/memory."""
         # bounds on acceleration
         # acc = self.acc_bounds(self.acc)
-        acc = self.acc
+        acc = self.acc  # no bounds
 
         # bounds on speed
         temp = acc*dt
@@ -1901,22 +1944,22 @@ class Vehicle:
             nextspeed = 0
             temp = -self.speed
             nextspeed = 0
-        elif nextspeed > self.maxspeed:
-            nextspeed = self.maxspeed
-            temp = self.maxspeed - self.speed
-            nextspeed = self.maxspeed
+        # elif nextspeed > self.maxspeed:
+        #     nextspeed = self.maxspeed
+        #     temp = self.maxspeed - self.speed
+        #     nextspeed = self.maxspeed
 
         # update state
         self.pos += self.speed*dt + .5*temp*dt
         self.speed = nextspeed
 
-        # update memory and relax
+        # update memory
         self.posmem.append(self.pos)
         self.speedmem.append(self.speed)
         if self.in_relax:
-            if timeind == self.relax_start + len(self.relax) - 1:
+            if timeind == self.relax_end:
                 self.in_relax = False
-                self.relaxmem.append((self.relax_start, timeind, self.relax))
+                self.relaxmem.append((self.relax_start, self.relax))
 
     def __hash__(self):
         """Vehicles need to be hashable. We hash them with a unique vehicle ID."""
@@ -2703,8 +2746,9 @@ class Lane:
     # TODO need a RoadNetwork object, possibly Road object as well.
     # should create common road configurations. Should different road configurations have their own
     # logics to create routes?
-    # Also combine lane events and route events into a single sorted list? This would let you check only 1
-    # position per timestep instead of two
+    # Also combine lane events and route events into a single sorted list. This would let you check only 1
+    # position per timestep instead of two. Can store the next value to check as well, to avoid the indexing
+    # operations.
     # Also need a better (easier) way to allow boundary conditions to be defined, and in a more modular way
     # E.g. of good design - create road network by specifying types of roads (e.g. road, on/off ramp, merge)
     # add boundary conditions to road network.
