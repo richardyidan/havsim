@@ -844,8 +844,10 @@ def relax_helper_vhd(rp, relaxamount_s, relaxamount_v, veh, timeind, dt):
     """Helper function for headway + speed relaxation."""
     #rp = parameter, relaxamount_s = headway relaxation, _v = velocity relaxation
     relaxlen = math.ceil(rp/dt) - 1
-    tempdt = -dt*rp*relaxamount_s
-    tempdt2 = -dt*rp*relaxamount_v
+    if relaxlen == 0:
+        return
+    tempdt = -dt/rp*relaxamount_s
+    tempdt2 = -dt/rp*relaxamount_v
     temp = [relaxamount_s + tempdt*(i+1) for i in range(relaxlen)]
     temp2 = [relaxamount_v + tempdt2*(i+1) for i in range(relaxlen)]
     curr = list(zip(temp,temp2))
@@ -871,7 +873,9 @@ def relax_helper(rp, relaxamount, veh, timeind, dt):
     """Helper function for headway only relaxation."""
     #rp = parameter, relaxamount = float relaxation amount
     relaxlen = math.ceil(rp/dt) - 1
-    tempdt = -dt*rp*relaxamount
+    if relaxlen == 0:
+        return
+    tempdt = -dt/rp*relaxamount
     curr = [relaxamount + tempdt*(i+1) for i in range(relaxlen)]
 
     if veh.in_relax:  # add to existing relax
@@ -905,33 +909,17 @@ def relax_helper(rp, relaxamount, veh, timeind, dt):
 #     veh.relax_start = timeind + 1
 #     veh.relax = curr
 
-
-def new_relaxation_acc(veh, timeind, dt):
-    """Relaxation for acceleration. Recommended to use new_relaxation instead."""
-    # This formulation is not as robust as relaxing speed/headway instead.
-    rp = veh.relax_parameters
-    lead = veh.lead
-    if lead is None or rp is None:
-        return
-    oldacc = veh.acc
-    newhd = get_headway(veh, lead)
-    newacc = veh.get_cf(newhd, veh.speed, lead, veh.lane, timeind, dt, veh.in_relax)
-
-    relaxamount = oldacc - newacc
-    relaxlen = math.ceil(rp/dt) - 1
-    curr = np.linspace((1 - dt/rp)*relaxamount, (1 - dt/rp*relaxlen)*relaxamount, relaxlen)
-
-    if veh.in_relax:  # add to existing relax
-        curlen = len(veh.relax)
-        newend = timeind + relaxlen  # time index when relax ends
-        newrelax = np.zeros((newend - veh.relax_start+1))
-        newrelax[0:curlen] = veh.relax
-        newrelax[timeind-veh.relax_start+1:] += curr
-        veh.relax = newrelax
-    else:  # create new relax
-        veh.in_relax = True
-        veh.relax_start = timeind + 1
-        veh.relax = curr
+#### def new_relaxation_acc(veh, timeind, dt):
+#     """Relaxation for acceleration. Recommended to use new_relaxation instead."""
+#     # This formulation is not as robust as relaxing speed/headway instead.
+#     rp = veh.relax_parameters
+#     lead = veh.lead
+#     if lead is None or rp is None:
+#         return
+#     oldacc = veh.acc
+#     newhd = get_headway(veh, lead)
+#     newacc = veh.get_cf(newhd, veh.speed, lead, veh.lane, timeind, dt, veh.in_relax)
+#     relax_helper(rp, oldacc-newacc, veh, timeind, dt)
 
 
 def update_veh_lane(veh, oldlane, newlane, timeind, side=None):
@@ -1807,7 +1795,10 @@ class Vehicle:
                     currelax, currelax_v = currelax*temp, currelax_v*temp
                     # currelax = self.relax[timeind - self.relax_start]*temp
                 else:
-                    currelax, currelax_v = self.relax[timeind-self.relax_start]
+                    try:
+                        currelax, currelax_v = self.relax[timeind-self.relax_start]
+                    except:
+                        print('hello')
                     # currelax = self.relax[timeind - self.relax_start]
 
                 acc = self.cf_model(self.cf_parameters, [hd + currelax, spd, lead.speed + currelax_v])

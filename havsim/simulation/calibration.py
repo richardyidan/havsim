@@ -6,7 +6,7 @@ data on a microscopic level.
 """
 
 import numpy as np
-from havsim.simulation.simulation import Vehicle, get_headway
+from havsim.simulation.simulation import Vehicle, get_headway, relax_helper_vhd, relax_helper
 import havsim.calibration.helper as helper
 import math
 
@@ -43,7 +43,11 @@ class CalibrationVehicle(Vehicle):
 
     def set_relax(self, relaxamounts, timeind, dt):
         """Applies relaxation given the relaxation amounts."""
-        make_relaxation(self, relaxamounts, timeind, dt, True)
+        rp = self.relax_parameters
+        if self.relax_parameters is None:
+            return
+        relaxamount_s, relaxamount_v = relaxamounts
+        relax_helper_vhd(rp, relaxamount_s, relaxamount_v, self, timeind, dt)
 
     def update(self, timeind, dt):
         """Update for longitudinal state. Updates LeadVehicle if applicable."""
@@ -331,60 +335,3 @@ def update_lead(curveh, newlead, leadlen, timeind):
         curveh.lead.set_len(leadlen)  # must set the length of LeadVehicle
         curveh.leadmem.append([newlead, timeind+1])
         curveh.in_leadveh = True
-
-
-def make_relaxation(veh, relaxamounts, timeind, dt, relax_speed=False):
-    """Generates relaxation for a vehicle after it experiences a lane change, given the relaxation amounts.
-
-    Very similar to new_relaxation in simulation module but for this you need to pass the
-    relaxation amounts.
-
-    Args:
-        veh: Vehicle to add relaxation to
-        relaxamounts: tuple of (headway, speed) relaxation amounts
-        timeind: time index
-        dt: time step
-        relax_speed: If True, relaxation is applied to speed as well as headway.
-    Returns:
-        None.
-    """
-    rp = veh.relax_parameters
-    relaxlen = math.ceil(rp/dt) - 1
-    if relaxlen == 0:
-        return
-    if rp is None:
-        return
-
-    if relax_speed:
-        relaxamount_s, relaxamount_v = relaxamounts
-        curr = np.zeros((relaxlen,2))
-        curr[:,0] = np.linspace((1 - dt/rp)*relaxamount_s, (1 - dt/rp*relaxlen)*relaxamount_s, relaxlen)
-        curr[:,1] = np.linspace((1 - dt/rp)*relaxamount_v, (1 - dt/rp*relaxlen)*relaxamount_v, relaxlen)
-
-        if veh.in_relax:
-            curlen = len(veh.relax)
-            newend = timeind + relaxlen  # time index when relax ends
-            newrelax = np.zeros((newend - veh.relax_start+1, 2))
-            newrelax[0:curlen,:] = veh.relax
-            newrelax[timeind-veh.relax_start+1:,:] += curr
-            veh.relax = newrelax
-        else:
-            veh.in_relax = True
-            veh.relax_start = timeind + 1
-            veh.relax = curr
-
-    else:
-        relaxamount = relaxamounts[0]
-        curr = np.linspace((1 - dt/rp)*relaxamount, (1 - dt/rp*relaxlen)*relaxamount, relaxlen)
-
-        if veh.in_relax:  # add to existing relax
-            curlen = len(veh.relax)
-            newend = timeind + relaxlen  # time index when relax ends
-            newrelax = np.zeros((newend - veh.relax_start+1))
-            newrelax[0:curlen] = veh.relax
-            newrelax[timeind-veh.relax_start+1:] += curr
-            veh.relax = newrelax
-        else:  # create new relax
-            veh.in_relax = True
-            veh.relax_start = timeind + 1
-            veh.relax = curr
