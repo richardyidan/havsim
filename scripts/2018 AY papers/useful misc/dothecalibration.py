@@ -33,16 +33,16 @@ import time
 
 #%%#get a specific platoon, get the platoon length, make the lead/fol info, and initialize the parameters for all the vehicles in the platoon
 sim = copy.deepcopy(meas)
-#pguess = [16.8*3.3,.086/3.3, 1.545, 2, .175 ] #OVM
+# pguess = [16.8*3.3,.086/3.3, 1.545, 2, .175 ] #OVM
 
-# pguess = [10*3.3,.086/3.3, 1.545, 2, .175, 5.01]
+pguess = [10*3.3,.086/3.3, 1.545, 2, .175, 5.01]
 #mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3)] #less conservative bounds #can mess with the bounds to make them loser (may get weird stuff but in general better) or tighter (can cause higher values)
-# mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)] #less conservative bounds
+mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)] #less conservative bounds
 
 
 
-pguess =  [40,1,1,3,10,25] #IDM
-mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
+# pguess =  [40,1,1,3,10,25] #IDM
+# mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
 
 #pguess =  [24,1,1,3,15] #IDM
 #mybounds = [(20,120),(.1,5),(.1,25),(.1,20),(.1,20)]
@@ -60,7 +60,7 @@ args = (True,6)
 #curplatoon = [[],995,998,1013,1023] #995 good for testing lane changing #1003 1014 was original pair we used for testing where 1014 was the follower
 #curplatoon = [[],581, 611]
 # curplatoon = [381.0, 391.0, 335.0, 326.0, 334.0]
-curplatoon = [520]
+curplatoon = [509]
 #curplatoon = [335, 326]
 #curplatoon = platoonlist[17]
 n = len(curplatoon)
@@ -75,12 +75,12 @@ bounds = np.tile(mybounds,(n,1))
 #p = finitebfgs['x']
 ##########################################################################################
 ################test objective and gradient evaluation##################
-model = IDM_b3
-modeladjsys = IDMadjsys_b3
-modeladj = IDMadj_b3
-# model = OVM
-# modeladjsys = OVMadjsys
-# modeladj = OVMadj
+# model = IDM_b3
+# modeladjsys = IDMadjsys_b3
+# modeladj = IDMadj_b3
+model = OVM
+modeladjsys = OVMadjsys
+modeladj = OVMadj
 #model = daganzo
 #modeladjsys = daganzoadjsys
 #modeladj = daganzoadj

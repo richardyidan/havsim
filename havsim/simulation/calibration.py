@@ -44,7 +44,7 @@ class CalibrationVehicle(Vehicle):
     def set_relax(self, relaxamounts, timeind, dt):
         """Applies relaxation given the relaxation amounts."""
         rp = self.relax_parameters
-        if self.relax_parameters is None:
+        if rp is None:
             return
         relaxamount_s, relaxamount_v = relaxamounts
         relax_helper_vhd(rp, relaxamount_s, relaxamount_v, self, timeind, dt)

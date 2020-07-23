@@ -34,6 +34,36 @@ def IDM_eql(p, v):
     return s
 
 
+def OVM(p, state):
+    """Optimal Velocity Model (OVM), second order ODE.
+
+    Different forms of the optimal velocity function are possible - this implements the original
+    formulation which uses tanh, with 4 parameters for the optimal velocity function.
+
+    Args:
+        p: parameters - p[0],p[1],p[2],p[4] are shape parameters for the optimal velocity function.
+            The maximum speed is p[0]*(1 - tanh(-p[2])), jam spacing is p[4]. p[1] controls the
+            slope of the velocity/headway equilibrium curve. p[3] is a sensitivity parameter
+            which controls the strength of acceleration.
+        state: list of [headway, self velocity, leader velocity] (leader velocity unused)
+
+    Returns:
+        acceleration
+    """
+
+    return p[3]*(p[0]*(math.tanh(p[1]*state[0]-p[2]-p[4])-math.tanh(-p[2]))-state[1])
+
+
+def OVM_free(p, state):
+    """Free flow model for OVM"""
+    return p[3]*(p[0]*(1-math.tanh(-p[2])) - state[1])
+
+
+def OVM_eql(p, s):
+    """Equilibrium Solution for OVM, s = headway, p = parameters. Note that eql_type = 's'."""
+    return p[0]*(math.tanh(p[1]*s-p[2]-p[4])-math.tanh(-p[2]))
+
+
 def IDM_shift_eql(p, v, shift_parameters, state):
     """Calculates an acceleration which shifts the equilibrium solution for IDM.
 

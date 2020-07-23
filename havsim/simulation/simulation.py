@@ -1795,14 +1795,11 @@ class Vehicle:
                     currelax, currelax_v = currelax*temp, currelax_v*temp
                     # currelax = self.relax[timeind - self.relax_start]*temp
                 else:
-                    try:
-                        currelax, currelax_v = self.relax[timeind-self.relax_start]
-                    except:
-                        print('hello')
+                    currelax, currelax_v = self.relax[timeind-self.relax_start]
                     # currelax = self.relax[timeind - self.relax_start]
 
                 acc = self.cf_model(self.cf_parameters, [hd + currelax, spd, lead.speed + currelax_v])
-                # acc = self.cf_model(self.cf_parameters, [hd, spd, lead.speed]) + currelax
+                # acc = self.cf_model(self.cf_parameters, [hd + currelax, spd, lead.speed])
             else:
                 acc = self.cf_model(self.cf_parameters, [hd, spd, lead.speed])
 
