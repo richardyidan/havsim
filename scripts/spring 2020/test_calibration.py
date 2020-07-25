@@ -57,25 +57,29 @@ class OVMCalibrationVehicle(hc.CalibrationVehicle):
         super().initialize(parameters)
         self.maxspeed = parameters[0]*(1-math.tanh(-parameters[2]))
         self.eql_type = 's'  # you are supposed to set this in __init__
+        
 
 # parameters
-pguess =  [40,1,1,3,10,25] #IDM
+pguess =  [80,1,15,1,1,35] #IDM  #[40,1,1,3,10,25]
+# mybounds = [(20,120),(.1,3),(.1,40),(.1,10),(.1,10),(.1,60)]
 mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
 
-pguess = [10*3.3,.086/3.3, 1.545, 2, .175, 5 ] #OVM
-mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)] #OVM
+# pguess = [10*3.3,.086/3.3, 1.545, 2, .175, 5 ] #OVM
+# mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)] #OVM
 
-curplatoon = [495]
-# cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hc.CalibrationVehicle)
-cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, OVMCalibrationVehicle)
+curplatoon = [2040]
+cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hc.CalibrationVehicle)
+# cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, OVMCalibrationVehicle)
 
 start = time.time()
 cal.simulate(pguess)
 print('time to compute loss is '+str(time.time()-start))
 
 start = time.time()
-bfgs = sc.fmin_l_bfgs_b(cal.simulate, pguess, bounds = mybounds, approx_grad=1)
-print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs[1]))
+# bfgs = sc.fmin_l_bfgs_b(cal.simulate, pguess, bounds = mybounds, approx_grad=1)
+bfgs = sc.differential_evolution(cal.simulate, bounds = mybounds)
+print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs['fun']))
+# print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs[1]))
 
 plt.plot(cal.all_vehicles[0].speedmem)
 
