@@ -46,9 +46,10 @@ def training_ga(veh_id_list, bounds, meas, platooninfo, dt, vehicle_object, work
         cal = hc.make_calibration([veh_id], meas, platooninfo, dt, vehicle_object)
         ga = sc.differential_evolution(cal.simulate, bounds = bounds, workers = workers)
         out.append(ga)
-    
+
     return out
 
+#%%
 """
 Run 1: IDM with no accident-free relax, no max speed bound, no acceleration bound (only for merge, lc)
 """
@@ -64,7 +65,7 @@ Run 2: Like Run 1, but with relax disabled. (for all vehicles)
 """
 #subclass calibrationvehicle as necessary
 class NoRelaxIDM(hc.CalibrationVehicle):
-    def set_relax(self, *args):  
+    def set_relax(self, *args):
         pass
 
     def initialize(self, parameters):  # just need to set parameters correctly
@@ -183,3 +184,94 @@ with open('OVMnorelax.pkl', 'wb') as f:
 
 
 #%%
+"""
+Run 5: Newell with no accident free
+"""
+class NewellCalibrationVehicle(hc.CalibrationVehicle):
+    """Implementation of Newell model in Differential form, example of 1st order ODE implementation."""
+    def cf_model(self, p, state):
+        """p = parameters, state = headway"""
+        return (state - p[1])/p[0]
+
+    def get_cf(self, hd, lead, curlane, timeind, dt, userelax):
+        if lead is None:
+            acc = curlane.call_downstream(self, timeind, dt)
+
+        else:
+            if self.in_relax:
+                currelax = self.relax[timeind - self.relax_start]
+                spd = self.cf_model(self.cf_parameters, hd+currelax)
+            else:
+                spd = self.cf_model(self.cf_parameters, hd)
+        return spd
+
+    def set_cf(self, timeind, dt):
+        self.speed = self.get_cf(self.hd, self.lead, self.lane, timeind, dt, self.in_relax)
+
+    def eqlfun(self, p, v):
+        return p[0]*v+p[1]
+
+    def set_relax(self, relaxamounts, timeind, dt):
+        rp = self.relax_parameters
+        if rp is None:
+            return
+        relaxamount_s, relaxamount_v = relaxamounts
+        hs.relax_helper(rp, relaxamount_s, self, timeind, dt)
+
+    def update(self, timeind, dt):
+        # bounds on speed must be applied for 1st order model
+        curspeed = self.speed
+        if curspeed < 0:
+            curspeed = 0
+        elif curspeed > self.maxspeed:
+            curspeed = self.maxspeed
+        # update state
+        self.pos += curspeed*dt
+        self.speed = curspeed
+        # update memory
+        self.posmem.append(self.pos)
+        self.speedmem.append(self.speed)
+        if self.in_relax:
+            if timeind == self.relax_end:
+                self.in_relax = False
+                self.relaxmem.append((self.relax_start, self.relax))
+
+        if self.in_leadveh:  # only difference is we update the LeadVehicle if applicable
+            self.leadveh.update(timeind+1)
+
+
+    def initialize(self, parameters):
+        super().initialize(parameters)  # before the first cf call, the speed is initialized as initspd.
+        # this handles the edge case for if a vehicle tries to access the speed before the first cf call.
+        # after the first cf call, in this case the speed will simply be the speed from the previous timestep
+        self.speedmem = []  # note that speedmem will be 1 len shorter than posmem for a 1st order model
+        self.maxspeed = parameters[2]
+
+
+bounds = [(.1,10),(0,100),(40,120),(.1,75)]
+relax_lc_res_newell = training_ga(lc_list, bounds, meas, platooninfo, .1, NewellCalibrationVehicle)
+relax_merge_res_newell = training_ga(merge_list, bounds, meas, platooninfo, .1, NewellCalibrationVehicle)
+
+with open('Newellrelax.pkl','wb') as f:
+    pickle.dump([relax_lc_res_newell, relax_merge_res_newell], f)
+
+
+"""
+Run 6: Like Run 5, but with no relax
+"""
+class NoRelaxNewell(NewellCalibrationVehicle):
+    def set_relax(self, *args):
+        pass
+
+    def initialize(self, parameters):
+        super().initialize(parameters)
+        self.cf_parameters = parameters
+        self.relax_parameters = None
+
+bounds = [(.1,10),(0,100),(40,120)]
+norelax_lc_res_newell = training_ga(lc_list, bounds, meas, platooninfo, .1, NoRelaxNewell)
+norelax_merge_res_newell = training_ga(merge_list, bounds, meas, platooninfo, .1, NoRelaxNewell)
+norelax_nolc_res_newell = training_ga(nolc_list, bounds, meas, platooninfo, .1, NoRelaxNewell)
+
+with open('Newellnorelax.pkl','wb') as f:
+    pickle.dump([norelax_lc_res_newell, norelax_merge_res_newell, norelax_nolc_res_newell], f)

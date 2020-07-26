@@ -1941,14 +1941,13 @@ class Vehicle:
         if nextspeed < 0:
             nextspeed = 0
             temp = -self.speed
-            nextspeed = 0
         # elif nextspeed > self.maxspeed:
         #     nextspeed = self.maxspeed
         #     temp = self.maxspeed - self.speed
-        #     nextspeed = self.maxspeed
 
         # update state
-        self.pos += self.speed*dt + .5*temp*dt
+        self.pos += self.speed*dt + .5*temp*dt  # ballistic update
+        # self.pos += self.speed*dt  # euler update
         self.speed = nextspeed
 
         # update memory

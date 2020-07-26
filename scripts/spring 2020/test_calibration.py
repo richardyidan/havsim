@@ -15,6 +15,7 @@ import math
 
 # for testing OVM
 class OVMCalibrationVehicle(hc.CalibrationVehicle):
+    """Optimal Velocity Model Implementation."""
     def cf_model(self, p, state):
         return hm.OVM(p, state)
 
@@ -57,34 +58,96 @@ class OVMCalibrationVehicle(hc.CalibrationVehicle):
         super().initialize(parameters)
         self.maxspeed = parameters[0]*(1-math.tanh(-parameters[2]))-.1
         self.eql_type = 's'  # you are supposed to set this in __init__
-        
+
 
 # for Newell
 class NewellCalibrationVehicle(hc.CalibrationVehicle):
-    def cf_model(p, state):
-        pass
+    """Implementation of Newell model in Differential form, example of 1st order ODE implementation."""
+    def cf_model(self, p, state):
+        """p = parameters, state = headway"""
+        return (state - p[1])/p[0]
 
-# parameters
-# pguess =  [80,1,15,1,1,35] #IDM  #[40,1,1,3,10,25]
-# mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
+    def get_cf(self, hd, lead, curlane, timeind, dt, userelax):
+        if lead is None:
+            acc = curlane.call_downstream(self, timeind, dt)
 
-pguess = [10*3.3,.086/3.3, 1.545, 2, .175, 5 ] #OVM
-mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)] #OVM
+        else:
+            if self.in_relax:
+                currelax = self.relax[timeind - self.relax_start]
+                spd = self.cf_model(self.cf_parameters, hd+currelax)
+            else:
+                spd = self.cf_model(self.cf_parameters, hd)
+        return spd
 
-curplatoon = [363]
-# cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hc.CalibrationVehicle)
-cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, OVMCalibrationVehicle)
+    def set_cf(self, timeind, dt):
+        self.speed = self.get_cf(self.hd, self.lead, self.lane, timeind, dt, self.in_relax)
 
-start = time.time()
-cal.simulate(pguess)
-print('time to compute loss is '+str(time.time()-start))
+    def eqlfun(self, p, v):
+        return p[0]*v+p[1]
 
-start = time.time()
-# bfgs = sc.fmin_l_bfgs_b(cal.simulate, pguess, bounds = mybounds, approx_grad=1)
-# print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs[1]))
+    def set_relax(self, relaxamounts, timeind, dt):
+        rp = self.relax_parameters
+        if rp is None:
+            return
+        relaxamount_s, relaxamount_v = relaxamounts
+        hs.relax_helper(rp, relaxamount_s, self, timeind, dt)
 
-bfgs = sc.differential_evolution(cal.simulate, bounds = mybounds, workers = 1)
-print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs['fun']))
+    def update(self, timeind, dt):
+        # bounds on speed must be applied for 1st order model
+        curspeed = self.speed
+        if curspeed < 0:
+            curspeed = 0
+        elif curspeed > self.maxspeed:
+            curspeed = self.maxspeed
+        # update state
+        self.pos += curspeed*dt
+        self.speed = curspeed
+        # update memory
+        self.posmem.append(self.pos)
+        self.speedmem.append(self.speed)
+        if self.in_relax:
+            if timeind == self.relax_end:
+                self.in_relax = False
+                self.relaxmem.append((self.relax_start, self.relax))
 
-plt.plot(cal.all_vehicles[0].speedmem)
+        if self.in_leadveh:  # only difference is we update the LeadVehicle if applicable
+            self.leadveh.update(timeind+1)
+
+
+    def initialize(self, parameters):
+        super().initialize(parameters)  # before the first cf call, the speed is initialized as initspd.
+        # this handles the edge case for if a vehicle tries to access the speed before the first cf call.
+        # after the first cf call, in this case the speed will simply be the speed from the previous timestep
+        self.speedmem = []  # note that speedmem will be 1 len shorter than posmem for a 1st order model
+        self.maxspeed = parameters[2]
+
+use_model = 'Newell'   # change to one of IDM, OVM, Newell
+curplatoon = [509]  # test vehicle to calibrate
+if __name__ == '__main__':
+    if use_model == 'IDM':
+        pguess =  [40,1,1,3,10,25] #[80,1,15,1,1,35]
+        mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
+        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hc.CalibrationVehicle)
+    elif use_model == 'Newell':
+        pguess = [1,40,100,5]
+        mybounds = [(.1,10),(0,100),(40,120),(.1,75)]
+        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, NewellCalibrationVehicle)
+    elif use_model == 'OVM':
+        pguess = [10*3.3,.086/3.3, 1.545, 2, .175, 5 ]
+        mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)]
+        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, OVMCalibrationVehicle)
+
+    start = time.time()
+    cal.simulate(pguess)
+    print('time to compute loss is '+str(time.time()-start))
+
+    start = time.time()
+    # bfgs = sc.fmin_l_bfgs_b(cal.simulate, pguess, bounds = mybounds, approx_grad=1)  # BFGS
+    # print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs[1]))
+    bfgs = sc.differential_evolution(cal.simulate, bounds = mybounds, workers = 1)  # GA
+    print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs['fun']))
+
+    plt.plot(cal.all_vehicles[0].speedmem)
+    plt.ylabel('speed')
+    plt.xlabel('time index')
 
