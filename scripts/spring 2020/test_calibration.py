@@ -144,7 +144,7 @@ if __name__ == '__main__':
     start = time.time()
     # bfgs = sc.fmin_l_bfgs_b(cal.simulate, pguess, bounds = mybounds, approx_grad=1)  # BFGS
     # print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs[1]))
-    bfgs = sc.differential_evolution(cal.simulate, bounds = mybounds, workers = 1)  # GA
+    bfgs = sc.differential_evolution(cal.simulate, bounds = mybounds, workers = 2)  # GA
     print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs['fun']))
 
     plt.plot(cal.all_vehicles[0].speedmem)

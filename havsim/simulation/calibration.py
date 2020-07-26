@@ -366,7 +366,7 @@ def make_calibration(vehicles, meas, platooninfo, dt, vehicle_class):
                     temp = [0]*(end-start+1)
                     leadstatemem.extend(temp)
         else:
-            leadstatemem, leadinittime = None
+            leadstatemem, leadinittime = None, None
 
         # get initial values, y for veh
         t_nstar, inittime, endtime = platooninfo[veh][0:3]
@@ -391,16 +391,16 @@ def make_calibration(vehicles, meas, platooninfo, dt, vehicle_class):
             # the vehicle is simulated or not, and second, whether the vehicle is available at start-1
             if curlead in vehicles:  # curlead is simulated (in the same calibration object)
                 if start-1 < leadt_nstar:  # handle edge case where t_nstar = start
-                    leadstate = (meas[curlead][0,2], meas[curlead][0,3])
-                    leadstate[0] += -leadstate[1]*dt
+                    leadstate = (meas[curlead][0,2]-meas[curlead][0,3]*dt,
+                                 meas[curlead][0,3])
                 else:
                     leadstate = (None,)
                 curlead, curlen = id2obj[curlead], None
             else:
                 curlen = meas[curlead][0,6]  # curlead is already simulated, stored in curveh.leadstatemem
                 if start-1 < leadt_nstar:  # handle edge case where t_nstar = start
-                    leadstate = (meas[curlead][0,2], meas[curlead][0,3])
-                    leadstate[0] += -leadstate[1]*dt
+                    leadstate = (meas[curlead][0,2]-meas[curlead][0,3]*dt,
+                                 meas[curlead][0,3])
                 else:
                     leadstate = (meas[curlead][start-leadt_nstar,2], meas[curlead][start-leadt_nstar,3])
 
