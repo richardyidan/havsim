@@ -17,17 +17,24 @@ import havsim.simulation.models as hm
 def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, dt):
     """Updates all quantities for a road network.
 
-    After evaluating all vehicle's longitudinal and latitudinal actions, this function does the rest
-    of the updates. In order:
-        completeing requested lane changes
-            -moving vehicle to new lane and setting its new route/lane events
-            -updating all leader/follower relationships (including l/rfol) for all vehicles involved
-            -possibly applying relaxation
-        updating state and memory
-        updating all leader/follower relationships (also updates merge anchors)
-        updating all vehicles lane/route events (including possibly removing vehicles)
-        updating inflow conditions for all lanes with inflow (including possibly adding new vehicles and
-        generating the parameters for the next new vehicle)
+    The simulation logics are as follows. At the beginning of the timestep, all vehicles/states/events
+    are assumed to be fully updated for the current timestep. Then, in order:
+        -evaluate the longitudinal action (cf model) for all vehicles (done in Simulation.step)
+        -evaluation the latitudinal action (lc model) for all vehicles (done in Simulation.step)
+        -complete requested lane changes
+            -move vehicle to the new lane and set its new route/lane events
+            -updating all leader/follower relationships (including l/rfol) for all vehicles involved. This
+            means updating vehicles in up to 4 lanes (opside, self lane, lcside, and new lcside).
+            -apply relaxation to any vehicles as necessary
+        -update all states and memory for all vehicles
+        -update headway for all vehicles
+        -update any merge anchors
+        -updating lane/route events for all vehicles, including removing vehicles if they leave the network.
+        -update all lfol/rfol relationships
+        -update the inflow conditions for all lanes with inflow, including possible adding new vehicles,
+            and generating the parameters for the next new vehicle
+    After the updating is complete, all vehicles/states/events are updated to their values for the next
+    timestep, so when the time index is incremented, the iteration can continue.
 
     Args:
         vehicles: set containing all vehicle objects being actively simulated
