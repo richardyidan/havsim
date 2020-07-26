@@ -59,9 +59,13 @@ class OVMCalibrationVehicle(hc.CalibrationVehicle):
         self.eql_type = 's'  # you are supposed to set this in __init__
         
 
+# for Newell
+class NewellCalibrationVehicle(hc.CalibrationVehicle):
+    def cf_model(p, state):
+        pass
+
 # parameters
 # pguess =  [80,1,15,1,1,35] #IDM  #[40,1,1,3,10,25]
-# mybounds = [(20,120),(.1,3),(.1,40),(.1,10),(.1,10),(.1,60)]
 # mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
 
 pguess = [10*3.3,.086/3.3, 1.545, 2, .175, 5 ] #OVM
@@ -77,9 +81,10 @@ print('time to compute loss is '+str(time.time()-start))
 
 start = time.time()
 # bfgs = sc.fmin_l_bfgs_b(cal.simulate, pguess, bounds = mybounds, approx_grad=1)
+# print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs[1]))
+
 bfgs = sc.differential_evolution(cal.simulate, bounds = mybounds, workers = 1)
 print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs['fun']))
-# print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs[1]))
 
 plt.plot(cal.all_vehicles[0].speedmem)
 
