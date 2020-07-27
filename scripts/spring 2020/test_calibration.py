@@ -120,9 +120,43 @@ class NewellCalibrationVehicle(hc.CalibrationVehicle):
         # after the first cf call, in this case the speed will simply be the speed from the previous timestep
         self.speedmem = []  # note that speedmem will be 1 len shorter than posmem for a 1st order model
         self.maxspeed = parameters[2]
+        
+        
+class SKA_IDM(hc.CalibrationVehicle):
+    """IDM with a relaxation model based on Schakel, Knoop, van Arem (2012).
+    
+    In the original paper, they give a full microsimulation model, and the relaxation is integrated in the 
+    sense that the 'desire' parameter controls both the gap acceptance as well as the relaxation amount.
+    In this implementation, the relaxation amount is its own parameter, thus it has two relax parameters,
+    the first being the desire which controls the relaxation amount, and the second being the rate
+    of change for the relaxation.
+    """
+    def initialize(self, parameters):
+        super().initialize(parameters)
+        self.cf_parameters = parameters[:-2]
+        self.relax_parameters = parameters[-2:]
+        self.relax_end = math.inf
+        self.max_relax = parameters[1]
+    
+    def set_relax(self, relaxamounts, timeind, dt):
+        # in_relax is always False, and we implement the relaxation by just 
+        # changing the time headway (cf_parameter[1]) appropriately
+        self.relax_start = 'r'  # give special value 'r' in case we need to be adjusting the time headway
+        temp = dt/self.relax_parameters[1]
+        self.cf_parameters[1] = (self.relax_parameters[0] - self.max_relax*temp)/(1-temp)  # handle first 
+        # relaxation value correctly (because it will be updated once before being used)
+        
+    def update(self, timeind, dt):
+        super().update(timeind, dt)
+        
+        if self.relax_start == 'r':
+            temp = dt/self.relax_parameters[1]
+            self.cf_parameters[1] += (self.max_relax-self.cf_parameters[1])*temp
+        
+    
 
-use_model = 'IDM'   # change to one of IDM, OVM, Newell
-curplatoon = [219]  # test vehicle to calibrate
+use_model = 'SKA'   # change to one of IDM, OVM, Newell
+curplatoon = [2910]  # test vehicle to calibrate
 if __name__ == '__main__':
     if use_model == 'IDM':
         pguess =  [40,1,1,3,10,25] #[80,1,15,1,1,35]
@@ -136,16 +170,19 @@ if __name__ == '__main__':
         pguess = [10*3.3,.086/3.3, 1.545, 2, .175, 5 ]
         mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)]
         cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, OVMCalibrationVehicle)
-
+    elif use_model == 'SKA':
+        pguess =  [40,1,1,3,10,.5,25] #[80,1,15,1,1,35]
+        mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.1,75)]
+        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, SKA_IDM)
     start = time.time()
     cal.simulate(pguess)
     print('time to compute loss is '+str(time.time()-start))
 
     start = time.time()
-    bfgs = sc.fmin_l_bfgs_b(cal.simulate, pguess, bounds = mybounds, approx_grad=1)  # BFGS
-    print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs[1]))
-    # bfgs = sc.differential_evolution(cal.simulate, bounds = mybounds, workers = 2)  # GA
-    # print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs['fun']))
+    # bfgs = sc.fmin_l_bfgs_b(cal.simulate, pguess, bounds = mybounds, approx_grad=1)  # BFGS
+    # print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs[1]))
+    bfgs = sc.differential_evolution(cal.simulate, bounds = mybounds, workers = 2)  # GA
+    print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs['fun']))
 
     plt.plot(cal.all_vehicles[0].speedmem)
     plt.ylabel('speed')

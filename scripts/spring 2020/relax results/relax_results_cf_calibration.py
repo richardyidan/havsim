@@ -294,3 +294,48 @@ norelax_nolc_res_newell = training_ga(nolc_list, bounds, meas, platooninfo, .1, 
 
 with open('Newellnorelax.pkl','wb') as f:
     pickle.dump([norelax_lc_res_newell, norelax_merge_res_newell, norelax_nolc_res_newell], f)
+
+
+#%%
+"""
+Run 7: Try existing Relaxation model due to Schakel, Knoop, van Arem (2012)
+"""
+
+
+class SKA_IDM(hc.CalibrationVehicle):
+    """IDM with a relaxation model based on Schakel, Knoop, van Arem (2012).
+    
+    In the original paper, they give a full microsimulation model, and the relaxation is integrated in the 
+    sense that the 'desire' parameter controls both the gap acceptance as well as the relaxation amount.
+    In this implementation, the relaxation amount is its own parameter, thus it has two relax parameters,
+    the first being the desire which controls the relaxation amount, and the second being the relaxation time.
+    """
+    def initialize(self, parameters):
+        super().initialize(parameters)
+        self.cf_parameters = parameters[:-2]
+        self.relax_parameters = parameters[-2:]
+        self.relax_end = math.inf
+        self.max_relax = parameters[1]
+    
+    def set_relax(self, relaxamounts, timeind, dt):
+        # in_relax is always False, we implement the relaxation by changing the time headway 
+        # (cf_parameter[1]) appropriately
+        self.relax_start = 'r'  # give special value 'r' in case we need to be adjusting the time headway
+        temp = dt/self.relax_parameters[1]
+        self.cf_parameters[1] = (self.relax_parameters[0] - self.max_relax*temp)/(1-temp)  # handle first 
+        # relaxation value correctly (because it will be updated once before being used)
+        
+    def update(self, timeind, dt):
+        super().update(timeind, dt)
+        
+        if self.relax_start == 'r':
+            temp = dt/self.relax_parameters[1]
+            self.cf_parameters[1] += (self.max_relax-self.cf_parameters[1])*temp
+            
+bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.1,75)]
+relax_lc_res_ska = training_ga(lc_list, bounds, meas, platooninfo, .1, SKA_IDM)
+
+with open('SKArelax.pkl', 'wb') as f:
+    pickle.dump(relax_lc_res_ska,f)
+            
+            

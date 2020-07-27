@@ -10,11 +10,11 @@ import havsim.simulation.calibration as hc
 import math
 import scipy.optimize as sc
 
-testres = [(bfgs[1], count) for count, bfgs in enumerate(relax_lc_res)]
-badlist = []
-for i in testres:
-    if i[0] > 200:
-        badlist.append(i)
+# testres = [(bfgs[1], count) for count, bfgs in enumerate(relax_lc_res)]
+# badlist = []
+# for i in testres:
+#     if i[0] > 200:
+#         badlist.append(i)
 
 
 def training(veh_id, plist, bounds, meas, platooninfo, dt, vehicle_object, cutoff = 6):
