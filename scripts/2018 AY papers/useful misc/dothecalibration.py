@@ -18,6 +18,7 @@ from havsim.calibration.opt import *
 from havsim.calibration.helper import makeleadfolinfo
 from havsim.calibration.models import *
 import time
+import copy
 
 #make the platoons and platooninfo, as well as get the measurements in dictionary form
 #meas, platooninfo, platoonlist = makeplatoonlist(data, 10)
@@ -60,7 +61,7 @@ args = (True,6)
 #curplatoon = [[],995,998,1013,1023] #995 good for testing lane changing #1003 1014 was original pair we used for testing where 1014 was the follower
 #curplatoon = [[],581, 611]
 # curplatoon = [381.0, 391.0, 335.0, 326.0, 334.0]
-curplatoon = [219]
+curplatoon = [1252]
 #curplatoon = [335, 326]
 #curplatoon = platoonlist[17]
 n = len(curplatoon)

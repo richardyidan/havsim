@@ -1946,8 +1946,8 @@ class Vehicle:
         #     temp = self.maxspeed - self.speed
 
         # update state
-        self.pos += self.speed*dt + .5*temp*dt  # ballistic update
-        # self.pos += self.speed*dt  # euler update
+        # self.pos += self.speed*dt + .5*temp*dt  # ballistic update
+        self.pos += self.speed*dt  # euler update
         self.speed = nextspeed
 
         # update memory
