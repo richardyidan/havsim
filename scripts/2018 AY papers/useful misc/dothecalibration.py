@@ -41,26 +41,26 @@ mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)] #less conservative 
 
 
 
-# pguess =  [40,1,1,3,10,25] #IDM
-# mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
+pguess =  [40,1,1,3,10,25] #IDM
+mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
 
 #pguess =  [24,1,1,3,15] #IDM
 #mybounds = [(20,120),(.1,5),(.1,25),(.1,20),(.1,20)]
 
-# args = (True,6)
+args = (True,6)
 #args = (False,5)
 
-args = (True,4)
+# args = (True,4)
 #
-pguess = [1,40,100,5]
-mybounds = [(.1,10),(0,100),(40,120),(.1,75)]
+# pguess = [1,40,100,5]
+# mybounds = [(.1,10),(0,100),(40,120),(.1,75)]
 
 #curplatoon = platoonlist[93]
 #curplatoon = [[], 995,998,1013,1023,1030]  #[[],995,998,1013,1023,1030] this is a good test platoon
 #curplatoon = [[],995,998,1013,1023] #995 good for testing lane changing #1003 1014 was original pair we used for testing where 1014 was the follower
 #curplatoon = [[],581, 611]
 # curplatoon = [381.0, 391.0, 335.0, 326.0, 334.0]
-curplatoon = [509]
+curplatoon = [219]
 #curplatoon = [335, 326]
 #curplatoon = platoonlist[17]
 n = len(curplatoon)
@@ -75,15 +75,15 @@ bounds = np.tile(mybounds,(n,1))
 #p = finitebfgs['x']
 ##########################################################################################
 ################test objective and gradient evaluation##################
-# model = IDM_b3
-# modeladjsys = IDMadjsys_b3
-# modeladj = IDMadj_b3
+model = IDM_b3
+modeladjsys = IDMadjsys_b3
+modeladj = IDMadj_b3
 # model = OVM
 # modeladjsys = OVMadjsys
 # modeladj = OVMadj
-model = daganzo
-modeladjsys = daganzoadjsys
-modeladj = daganzoadj
+# model = daganzo
+# modeladjsys = daganzoadjsys
+# modeladj = daganzoadj
 start = time.time()
 obj = platoonobjfn_obj(p,model, modeladjsys, modeladj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo, rinfo,*args)
 end = time.time()

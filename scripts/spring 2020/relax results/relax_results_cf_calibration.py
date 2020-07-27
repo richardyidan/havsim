@@ -14,7 +14,7 @@ import havsim.simulation.simulation as hs
 
 # load data
 try:
-    with open('C:/Users/rlk268/OneDrive - Cornell University/important misc/datasets/trajectory data/mydata.pkl', 'rb') as f:
+    with open('C:/Users/rlk268/OneDrive - Cornell University/hav-sim/datasets/trajectory data/mydata.pkl', 'rb') as f:
         rawdata, truedata, data, trueextradata = pickle.load(f) #load data
 except:
     with open('/home/rlk268/data/mydata.pkl', 'rb') as f:
@@ -36,6 +36,7 @@ for veh in veh_list:
     elif len(platooninfo[veh][4]) == 1:
         nolc_list.append(veh)
 
+
 # define training loop
 def training_ga(veh_id_list, bounds, meas, platooninfo, dt, vehicle_object, workers = 2):
     """Runs differential evolution to fit parameters for a list of CalibrationVehicle's"""
@@ -48,6 +49,24 @@ def training_ga(veh_id_list, bounds, meas, platooninfo, dt, vehicle_object, work
         out.append(ga)
 
     return out
+
+
+def training(veh_id, plist, bounds, meas, platooninfo, dt, vehicle_object, cutoff = 6):
+    """Runs bfgs with multiple initial guesses to fit parameters for a CalibrationVehicle"""
+    #veh_id = float vehicle id, plist = list of parameters, bounds = bounds for optimizer (list of tuples),
+    #vehicle_object = (possibly subclassed) CalibrationVehicle object, cutoff = minimum mse required for
+    #multiple guesses
+    cal = hc.make_calibration([veh_id], meas, platooninfo, dt, vehicle_object)
+    bestmse = math.inf
+    best = None
+    for guess in plist:
+        bfgs = sc.fmin_l_bfgs_b(cal.simulate, guess, bounds = bounds, approx_grad=1)
+        if bfgs[1] < bestmse:
+            best = bfgs
+            bestmse = bfgs[1]
+        if bestmse < cutoff:
+            break
+    return best
 
 #%%
 """

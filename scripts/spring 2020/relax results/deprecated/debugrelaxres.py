@@ -15,8 +15,8 @@ badlist = []
 for i in testres:
     if i[0] > 200:
         badlist.append(i)
-        
-        
+
+
 def training(veh_id, plist, bounds, meas, platooninfo, dt, vehicle_object, cutoff = 6):
     """Runs bfgs with multiple initial guesses to fit parameters for a CalibrationVehicle"""
     #veh_id = float vehicle id, plist = list of parameters, bounds = bounds for optimizer (list of tuples),
@@ -54,9 +54,9 @@ class NoRelaxIDM(hc.CalibrationVehicle):
         self.relaxmem = []
         # parameters
         self.cf_parameters = parameters
-        
-        
-veh_id = 2862
+
+
+veh_id = 209
 # plist = [[40,1,1,3,10,25], [60,1,1,3,10,5], [80,1,15,1,1,35], [40,1,1,3,10,.1], [30,2.5,15,1,2,35]]
 plist = [[40,1,1,3,10,25], [60,1,1,3,10,5], [80,1,15,1,1,35]]
 bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]

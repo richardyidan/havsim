@@ -121,8 +121,8 @@ class NewellCalibrationVehicle(hc.CalibrationVehicle):
         self.speedmem = []  # note that speedmem will be 1 len shorter than posmem for a 1st order model
         self.maxspeed = parameters[2]
 
-use_model = 'Newell'   # change to one of IDM, OVM, Newell
-curplatoon = [509]  # test vehicle to calibrate
+use_model = 'IDM'   # change to one of IDM, OVM, Newell
+curplatoon = [219]  # test vehicle to calibrate
 if __name__ == '__main__':
     if use_model == 'IDM':
         pguess =  [40,1,1,3,10,25] #[80,1,15,1,1,35]
@@ -142,10 +142,10 @@ if __name__ == '__main__':
     print('time to compute loss is '+str(time.time()-start))
 
     start = time.time()
-    # bfgs = sc.fmin_l_bfgs_b(cal.simulate, pguess, bounds = mybounds, approx_grad=1)  # BFGS
-    # print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs[1]))
-    bfgs = sc.differential_evolution(cal.simulate, bounds = mybounds, workers = 2)  # GA
-    print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs['fun']))
+    bfgs = sc.fmin_l_bfgs_b(cal.simulate, pguess, bounds = mybounds, approx_grad=1)  # BFGS
+    print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs[1]))
+    # bfgs = sc.differential_evolution(cal.simulate, bounds = mybounds, workers = 2)  # GA
+    # print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs['fun']))
 
     plt.plot(cal.all_vehicles[0].speedmem)
     plt.ylabel('speed')
