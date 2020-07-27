@@ -337,7 +337,7 @@ class SKA_IDM(hc.CalibrationVehicle):
             temp = dt/self.relax_parameters[1]
             self.cf_parameters[1] += (self.max_relax-self.cf_parameters[1])*temp
 
-bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.1,75)]
+bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.101,75)]
 relax_lc_res_ska = training_ga(lc_list, bounds, meas, platooninfo, .1, SKA_IDM)
 
 with open('SKArelax.pkl', 'wb') as f:
