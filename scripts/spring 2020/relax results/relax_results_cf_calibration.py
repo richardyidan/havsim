@@ -42,7 +42,10 @@ def training_ga(veh_id_list, bounds, meas, platooninfo, dt, vehicle_object, work
     out = []
     for veh_id in veh_id_list:
         cal = hc.make_calibration([veh_id], meas, platooninfo, dt, vehicle_object)
-        ga = sc.differential_evolution(cal.simulate, bounds = bounds, workers = workers)
+        try:
+            ga = sc.differential_evolution(cal.simulate, bounds = bounds, workers = workers)
+        except:
+            break
         out.append(ga)
 
     return out
