@@ -42,44 +42,41 @@ def training_ga(veh_id_list, bounds, meas, platooninfo, dt, vehicle_object, work
     out = []
     for veh_id in veh_id_list:
         cal = hc.make_calibration([veh_id], meas, platooninfo, dt, vehicle_object)
-        try:
-            ga = sc.differential_evolution(cal.simulate, bounds = bounds, workers = workers)
-        except:
-            break
+        ga = sc.differential_evolution(cal.simulate, bounds = bounds, workers = workers)
         out.append(ga)
 
     return out
 
 
-def training(veh_id, plist, bounds, meas, platooninfo, dt, vehicle_object, cutoff = 6):
+def training(plist, veh_id_list, bounds, meas, platooninfo, dt, vehicle_object, cutoff = 6):
     """Runs bfgs with multiple initial guesses to fit parameters for a CalibrationVehicle"""
     #veh_id = float vehicle id, plist = list of parameters, bounds = bounds for optimizer (list of tuples),
     #vehicle_object = (possibly subclassed) CalibrationVehicle object, cutoff = minimum mse required for
     #multiple guesses
-    cal = hc.make_calibration([veh_id], meas, platooninfo, dt, vehicle_object)
-    bestmse = math.inf
-    best = None
-    for guess in plist:
-        bfgs = sc.fmin_l_bfgs_b(cal.simulate, guess, bounds = bounds, approx_grad=1)
-        if bfgs[1] < bestmse:
-            best = bfgs
-            bestmse = bfgs[1]
-        if bestmse < cutoff:
-            break
-    return best
+    out = []
+    for veh_id in veh_id_list:
+        cal = hc.make_calibration([veh_id], meas, platooninfo, dt, vehicle_object)
+        bestmse = math.inf
+        best = None
+        for guess in plist:
+            bfgs = sc.fmin_l_bfgs_b(cal.simulate, guess, bounds = bounds, approx_grad=1)
+            if bfgs[1] < bestmse:
+                best = bfgs
+                bestmse = bfgs[1]
+            if bestmse < cutoff:
+                break
+        out.append(best)
+    return out
+
 
 #%%
-"""Note: All the results originally used a ballistic update for the second order models. We found
-that using a ballistic update works quite poorly with gradient based optimization, which was why a genetic
-algorithm was used. As the ballistic update seems to confer no benefits, we suggest using an euler update
-with a gradient based algorithm instead."""
-
 """
 Run 1: IDM with no accident-free relax, no max speed bound, no acceleration bound (only for merge, lc)
 """
+plist = [[40,1,1,3,10,25], [60,1,1,3,10,5], [80,1,15,1,1,35], [70,2,10,2,2,15]]
 bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
-relax_lc_res = training_ga(lc_list, bounds, meas, platooninfo, .1, hc.CalibrationVehicle)
-relax_merge_res = training_ga(merge_list, bounds, meas, platooninfo, .1, hc.CalibrationVehicle)
+relax_lc_res = training(lc_list, plist, bounds, meas, platooninfo, .1, hc.CalibrationVehicle)
+relax_merge_res = training(merge_list, plist, bounds, meas, platooninfo, .1, hc.CalibrationVehicle)
 
 with open('IDMrelax.pkl','wb') as f:
     pickle.dump((relax_lc_res,relax_merge_res), f)
@@ -109,10 +106,11 @@ class NoRelaxIDM(hc.CalibrationVehicle):
         # parameters
         self.cf_parameters = parameters
 
+plist = [[40,1,1,3,10], [60,1,1,3,10], [80,1,15,1,1], [70,2,10,2,2]]
 bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20)]
-norelax_lc_res = training_ga(lc_list, bounds, meas, platooninfo, .1 ,NoRelaxIDM)
-norelax_merge_res = training_ga(merge_list, bounds, meas, platooninfo, .1, NoRelaxIDM)
-norelax_nolc_res = training_ga(nolc_list, bounds, meas, platooninfo, .1, NoRelaxIDM)
+norelax_lc_res = training(plist, lc_list, bounds, meas, platooninfo, .1 ,NoRelaxIDM)
+norelax_merge_res = training(plist, merge_list, bounds, meas, platooninfo, .1, NoRelaxIDM)
+norelax_nolc_res = training(plist, nolc_list, bounds, meas, platooninfo, .1, NoRelaxIDM)
 
 with open('IDMnorelax.pkl','wb') as f:
     pickle.dump((norelax_lc_res,norelax_merge_res,norelax_nolc_res),f)
@@ -165,9 +163,11 @@ class OVMCalibrationVehicle(hc.CalibrationVehicle):
         self.maxspeed = parameters[0]*(1-math.tanh(-parameters[2]))-.1
         self.eql_type = 's'  # you are supposed to set this in __init__
 
+plist = [[10*3.3,.086/3.3, 1.545, 2, .175, 5 ], [20*3.3,.086/3.3/2, 1.545, .5, .175, 60 ],
+         [10*3.3,.086/3.3/2, .5, .5, .175, 60 ], [25,.05, 1,3, 1, 25]]
 bounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)]
-relax_lc_res_ovm = training_ga(lc_list, bounds, meas, platooninfo, .1, OVMCalibrationVehicle)
-relax_merge_res_ovm = training_ga(merge_list, bounds, meas, platooninfo, .1, OVMCalibrationVehicle)
+relax_lc_res_ovm = training(plist, lc_list, bounds, meas, platooninfo, .1, OVMCalibrationVehicle)
+relax_merge_res_ovm = training(plist, merge_list, bounds, meas, platooninfo, .1, OVMCalibrationVehicle)
 
 with open('OVMrelax.pkl', 'wb') as f:
     pickle.dump((relax_lc_res_ovm, relax_merge_res_ovm),f)
@@ -198,16 +198,62 @@ class NoRelaxOVM(OVMCalibrationVehicle):
         # parameters
         self.cf_parameters = parameters
 
+plist = [[10*3.3,.086/3.3, 1.545, 2, .175], [20*3.3,.086/3.3/2, 1.545, .5, .175 ],
+         [10*3.3,.086/3.3/2, .5, .5, .175 ], [25,.05, 1,3, 1]]
 bounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3)]
-norelax_lc_res_ovm = training_ga(lc_list, bounds, meas, platooninfo, .1, NoRelaxOVM)
-norelax_merge_res_ovm = training_ga(merge_list, bounds, meas, platooninfo, .1, NoRelaxOVM)
-norelax_nolc_res_ovm = training_ga(nolc_list, bounds, meas, platooninfo, .1, NoRelaxOVM)
+norelax_lc_res_ovm = training(plist, lc_list, bounds, meas, platooninfo, .1, NoRelaxOVM)
+norelax_merge_res_ovm = training(plist, merge_list, bounds, meas, platooninfo, .1, NoRelaxOVM)
+norelax_nolc_res_ovm = training(plist, nolc_list, bounds, meas, platooninfo, .1, NoRelaxOVM)
 
 with open('OVMnorelax.pkl', 'wb') as f:
     pickle.dump((norelax_lc_res_ovm, norelax_merge_res_ovm, norelax_nolc_res_ovm),f)
 
 
-#%%
+"""
+Run 7: Try existing Relaxation model due to Schakel, Knoop, van Arem (2012)
+"""
+
+
+class SKA_IDM(hc.CalibrationVehicle):
+    """IDM with a relaxation model based on Schakel, Knoop, van Arem (2012).
+
+    In the original paper, they give a full microsimulation model, and the relaxation is integrated in the
+    sense that the 'desire' parameter controls both the gap acceptance as well as the relaxation amount.
+    In this implementation, the relaxation amount is its own parameter, thus it has two relax parameters,
+    the first being the desire which controls the relaxation amount, and the second being the relaxation time.
+    """
+    def initialize(self, parameters):
+        super().initialize(parameters)
+        self.cf_parameters = parameters[:-2]
+        self.relax_parameters = parameters[-2:]
+        self.relax_end = math.inf
+        self.max_relax = parameters[1]
+
+    def set_relax(self, relaxamounts, timeind, dt):
+        # in_relax is always False, we implement the relaxation by changing the time headway
+        # (cf_parameter[1]) appropriately
+        self.relax_start = 'r'  # give special value 'r' in case we need to be adjusting the time headway
+        temp = dt/self.relax_parameters[1]
+        self.cf_parameters[1] = (self.relax_parameters[0] - self.max_relax*temp)/(1-temp)  # handle first
+        # relaxation value correctly (because it will be updated once before being used)
+
+    def update(self, timeind, dt):
+        super().update(timeind, dt)
+
+        if self.relax_start == 'r':
+            temp = dt/self.relax_parameters[1]
+            self.cf_parameters[1] += (self.max_relax-self.cf_parameters[1])*temp
+
+plist = [[40,1,1,3,10,1, 25], [60,1,1,3,10,1,5], [80,1,15,1,1,1,35], [70,2,10,2,2,2,15]]
+bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.101,75)]
+relax_lc_res_ska = training(plist, lc_list, bounds, meas, platooninfo, .1, SKA_IDM)
+relax_merge_res_ska = training(plist, merge_list, bounds, meas, platooninfo, .1, SKA_IDM)
+
+with open('SKArelax.pkl', 'wb') as f:
+    pickle.dump([relax_lc_res_ska, relax_merge_res_ska],f)
+
+
+#%%  Used GA for results for newell models
 """
 Run 5: Newell with no accident free
 """
@@ -302,44 +348,5 @@ with open('Newellnorelax.pkl','wb') as f:
 
 
 #%%
-"""
-Run 7: Try existing Relaxation model due to Schakel, Knoop, van Arem (2012)
-"""
 
-
-class SKA_IDM(hc.CalibrationVehicle):
-    """IDM with a relaxation model based on Schakel, Knoop, van Arem (2012).
-
-    In the original paper, they give a full microsimulation model, and the relaxation is integrated in the
-    sense that the 'desire' parameter controls both the gap acceptance as well as the relaxation amount.
-    In this implementation, the relaxation amount is its own parameter, thus it has two relax parameters,
-    the first being the desire which controls the relaxation amount, and the second being the relaxation time.
-    """
-    def initialize(self, parameters):
-        super().initialize(parameters)
-        self.cf_parameters = parameters[:-2]
-        self.relax_parameters = parameters[-2:]
-        self.relax_end = math.inf
-        self.max_relax = parameters[1]
-
-    def set_relax(self, relaxamounts, timeind, dt):
-        # in_relax is always False, we implement the relaxation by changing the time headway
-        # (cf_parameter[1]) appropriately
-        self.relax_start = 'r'  # give special value 'r' in case we need to be adjusting the time headway
-        temp = dt/self.relax_parameters[1]
-        self.cf_parameters[1] = (self.relax_parameters[0] - self.max_relax*temp)/(1-temp)  # handle first
-        # relaxation value correctly (because it will be updated once before being used)
-
-    def update(self, timeind, dt):
-        super().update(timeind, dt)
-
-        if self.relax_start == 'r':
-            temp = dt/self.relax_parameters[1]
-            self.cf_parameters[1] += (self.max_relax-self.cf_parameters[1])*temp
-
-bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.101,75)]
-relax_lc_res_ska = training_ga(lc_list, bounds, meas, platooninfo, .1, SKA_IDM)
-
-with open('SKArelax.pkl', 'wb') as f:
-    pickle.dump(relax_lc_res_ska,f)
 

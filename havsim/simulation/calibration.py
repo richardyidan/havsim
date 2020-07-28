@@ -379,7 +379,7 @@ def make_calibration(vehicles, meas, platooninfo, dt, vehicle_class):
         vehicle_list.append(newveh)
         id2obj[veh] = newveh
 
-    # create events
+    # create events  # TODO this part should be more modular?
     for veh in vehicles:
         curveh = id2obj[veh]
         leadinfo = helper.makeleadinfo([veh],platooninfo,meas)[0]
@@ -446,7 +446,7 @@ def add_event(event, vehicles, timeind, dt):
     lc_event(lcevent, timeind, dt)
 
 
-def lc_event(event, timeind, dt):
+def lc_event(event, timeind, dt):  # TODO be able to specify lc_event used in Calibration?
     """Applies lead change event, updating a CalibrationVehicle's leader.
 
     Lead change events are a tuple of

@@ -153,14 +153,18 @@ class SKA_IDM(hc.CalibrationVehicle):
             temp = dt/self.relax_parameters[1]
             self.cf_parameters[1] += (self.max_relax-self.cf_parameters[1])*temp
 
+class SpecialRelaxIDM(hc.CalibrationVehicle):
+    """Implements more complicated relaxation."""
+    pass
 
 
-use_model = 'IDM'   # change to one of IDM, OVM, Newell
-curplatoon = [1252]  # test vehicle to calibrate
+
+use_model = 'Newell'   # change to one of IDM, OVM, Newell
+curplatoon = [176]  # test vehicle to calibrate
 use_method = 'BFGS' # GA or BFGS
 if __name__ == '__main__':
     if use_model == 'IDM':
-        pguess =  [40,1,1,3,10,25] #[80,1,15,1,1,35]
+        pguess =  [80,1,15,1,1,35] #[40,1,1,3,10,25]
         mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
         cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hc.CalibrationVehicle)
     elif use_model == 'Newell':
