@@ -75,8 +75,8 @@ Run 1: IDM with no accident-free relax, no max speed bound, no acceleration boun
 """
 plist = [[40,1,1,3,10,25], [60,1,1,3,10,5], [80,1,15,1,1,35], [70,2,10,2,2,15]]
 bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
-relax_lc_res = training(lc_list, plist, bounds, meas, platooninfo, .1, hc.CalibrationVehicle)
-relax_merge_res = training(merge_list, plist, bounds, meas, platooninfo, .1, hc.CalibrationVehicle)
+relax_lc_res = training(plist, lc_list,  bounds, meas, platooninfo, .1, hc.CalibrationVehicle)
+relax_merge_res = training(plist,  merge_list, bounds, meas, platooninfo, .1, hc.CalibrationVehicle)
 
 with open('IDMrelax.pkl','wb') as f:
     pickle.dump((relax_lc_res,relax_merge_res), f)
@@ -224,8 +224,8 @@ class SKA_IDM(hc.CalibrationVehicle):
     """
     def initialize(self, parameters):
         super().initialize(parameters)
-        self.cf_parameters = parameters[:-2]
-        self.relax_parameters = parameters[-2:]
+        self.cf_parameters = parameters[:-2].copy()
+        self.relax_parameters = parameters[-2:].copy()
         self.relax_end = math.inf
         self.max_relax = parameters[1]
 
