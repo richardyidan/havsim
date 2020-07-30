@@ -86,11 +86,12 @@ class NewellCalibrationVehicle(hc.CalibrationVehicle):
         return p[0]*v+p[1]
 
     def set_relax(self, relaxamounts, timeind, dt):
-        rp = self.relax_parameters
-        if rp is None:
-            return
-        relaxamount_s, relaxamount_v = relaxamounts
-        hs.relax_helper(rp, relaxamount_s, self, timeind, dt)
+        if True:
+            rp = self.relax_parameters
+            if rp is None:
+                return
+            relaxamount_s, relaxamount_v = relaxamounts
+            hs.relax_helper(rp, relaxamount_s, self, timeind, dt)
 
     def update(self, timeind, dt):
         # bounds on speed must be applied for 1st order model
@@ -166,19 +167,19 @@ class Relax2IDM(hc.CalibrationVehicle):
         # make headway relax
         rp = self.relax_parameters[0] if relaxamount_s > 0 else self.relax_parameters[1]
         relaxlen = math.ceil(rp/dt) - 1
-        tempdt = -dt*rp*relaxamount_s
-        temp = [relaxamount_s + tempdt*(i+1) for i in range(relaxlen)]
+        tempdt = -dt/rp*relaxamount_s
+        temp = [relaxamount_s + tempdt*i for i in range(1,relaxlen+1)]
         # make velocity relax
         rp2 = self.relax_parameters[0] if relaxamount_v > 0 else self.relax_parameters[1]
         relaxlen2 = math.ceil(rp2/dt) - 1
-        tempdt = -dt*rp2*relaxamount_v
-        temp2 = [relaxamount_v + tempdt*(i+1) for i in range(relaxlen2)]
+        tempdt = -dt/rp2*relaxamount_v
+        temp2 = [relaxamount_v + tempdt*i for i in range(1,relaxlen2+1)]
         # pad relax if necessary
         if relaxlen < relaxlen2:
-            temp.extend([0]*relaxlen2-relaxlen)
+            temp.extend([0]*(relaxlen2-relaxlen))
             relaxlen = relaxlen2
         elif relaxlen2 < relaxlen:
-            temp2.extend([0]*relaxlen-relaxlen2)
+            temp2.extend([0]*(relaxlen-relaxlen2))
         # rest of code is the same as relax_helper_vhd
         curr = list(zip(temp, temp2))
         if self.in_relax:  # add to existing relax
@@ -186,7 +187,7 @@ class Relax2IDM(hc.CalibrationVehicle):
             overlap_end = min(self.relax_end, timeind+relaxlen)
             prevr_indoffset = timeind - self.relax_start+1
             prevr = self.relax
-            overlap_len = max(overlap_end-timeind-1, 0)
+            overlap_len = max(overlap_end-timeind, 0)
             for i in range(overlap_len):
                 curtime = prevr_indoffset+i
                 prevrelax, currelax = prevr[curtime], curr[i]
@@ -226,7 +227,7 @@ class RelaxShapeIDM(hc.CalibrationVehicle):
             overlap_end = min(self.relax_end, timeind+relaxlen)
             prevr_indoffset = timeind - self.relax_start+1
             prevr = self.relax
-            overlap_len = max(overlap_end-timeind-1, 0)
+            overlap_len = max(overlap_end-timeind, 0)
             for i in range(overlap_len):
                 curtime = prevr_indoffset+i
                 prevrelax, currelax = prevr[curtime], curr[i]
@@ -241,11 +242,11 @@ class RelaxShapeIDM(hc.CalibrationVehicle):
 
 
 use_model = 'Newell'   # change to one of IDM, OVM, Newell
-curplatoon = [176]  # test vehicle to calibrate
-use_method = 'BFGS' # GA or BFGS
+curplatoon = [lc_list[101]]  # test vehicle to calibrate
+use_method = 'GA' # GA or BFGS
 if __name__ == '__main__':
     if use_model == 'IDM':
-        pguess =  [80,1,15,1,1,35] #[40,1,1,3,10,25]
+        pguess =  [40,1,1,3,10,25] #[80,1,15,1,1,35] #
         mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
         cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hc.CalibrationVehicle)
     elif use_model == 'Newell':
@@ -260,6 +261,15 @@ if __name__ == '__main__':
         pguess =  [40,1,1,3,10,.5,25] #[80,1,15,1,1,35]
         mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.1,75)]
         cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, SKA_IDM)
+    elif use_model == '2IDM':
+        pguess =  [40,1,1,3,10,25,25]
+        mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75), (.1, 75)]
+        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, Relax2IDM)
+    elif use_model == 'ShapeIDM':
+        pguess =  [80,1,15,1,1,35, -.5] #[40,1,1,3,10,25,.5]
+        mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75), (-1,1)]
+        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, RelaxShapeIDM)
+
     start = time.time()
     cal.simulate(pguess)
     print('time to compute loss is '+str(time.time()-start))
@@ -269,7 +279,7 @@ if __name__ == '__main__':
         bfgs = sc.fmin_l_bfgs_b(cal.simulate, pguess, bounds = mybounds, approx_grad=1)  # BFGS
         print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs[1]))
     elif use_method == 'GA':
-        bfgs = sc.differential_evolution(cal.simulate, bounds = mybounds, workers = 2)  # GA
+        bfgs = sc.differential_evolution(cal.simulate, bounds = mybounds, workers = 1)  # GA
         print('time to calibrate is '+str(time.time()-start)+' to find mse '+str(bfgs['fun']))
 
     plt.plot(cal.all_vehicles[0].speedmem)

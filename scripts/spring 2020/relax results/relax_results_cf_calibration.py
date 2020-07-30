@@ -70,13 +70,15 @@ def training(plist, veh_id_list, bounds, meas, platooninfo, dt, vehicle_object, 
 
 
 #%%
+"""Used GA + ballistic update for paper results. Using euler update is probably better in terms of mse.
+Can use BFGS instead of GA, which is significantly faster, but can have problems with local minima."""
 """
 Run 1: IDM with no accident-free relax, no max speed bound, no acceleration bound (only for merge, lc)
 """
 plist = [[40,1,1,3,10,25], [60,1,1,3,10,5], [80,1,15,1,1,35], [70,2,10,2,2,15]]
 bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
-relax_lc_res = training(plist, lc_list,  bounds, meas, platooninfo, .1, hc.CalibrationVehicle)
-relax_merge_res = training(plist,  merge_list, bounds, meas, platooninfo, .1, hc.CalibrationVehicle)
+relax_lc_res = training_ga(lc_list,  bounds, meas, platooninfo, .1, hc.CalibrationVehicle)
+relax_merge_res = training_ga(merge_list, bounds, meas, platooninfo, .1, hc.CalibrationVehicle)
 
 with open('IDMrelax.pkl','wb') as f:
     pickle.dump((relax_lc_res,relax_merge_res), f)
@@ -108,9 +110,9 @@ class NoRelaxIDM(hc.CalibrationVehicle):
 
 plist = [[40,1,1,3,10], [60,1,1,3,10], [80,1,15,1,1], [70,2,10,2,2]]
 bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20)]
-norelax_lc_res = training(plist, lc_list, bounds, meas, platooninfo, .1 ,NoRelaxIDM)
-norelax_merge_res = training(plist, merge_list, bounds, meas, platooninfo, .1, NoRelaxIDM)
-norelax_nolc_res = training(plist, nolc_list, bounds, meas, platooninfo, .1, NoRelaxIDM)
+norelax_lc_res = training_ga(lc_list, bounds, meas, platooninfo, .1 ,NoRelaxIDM)
+norelax_merge_res = training_ga(merge_list, bounds, meas, platooninfo, .1, NoRelaxIDM)
+norelax_nolc_res = training_ga(nolc_list, bounds, meas, platooninfo, .1, NoRelaxIDM)
 
 with open('IDMnorelax.pkl','wb') as f:
     pickle.dump((norelax_lc_res,norelax_merge_res,norelax_nolc_res),f)
@@ -166,8 +168,8 @@ class OVMCalibrationVehicle(hc.CalibrationVehicle):
 plist = [[10*3.3,.086/3.3, 1.545, 2, .175, 5 ], [20*3.3,.086/3.3/2, 1.545, .5, .175, 60 ],
          [10*3.3,.086/3.3/2, .5, .5, .175, 60 ], [25,.05, 1,3, 1, 25]]
 bounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)]
-relax_lc_res_ovm = training(plist, lc_list, bounds, meas, platooninfo, .1, OVMCalibrationVehicle)
-relax_merge_res_ovm = training(plist, merge_list, bounds, meas, platooninfo, .1, OVMCalibrationVehicle)
+relax_lc_res_ovm = training_ga(lc_list, bounds, meas, platooninfo, .1, OVMCalibrationVehicle)
+relax_merge_res_ovm = training_ga(merge_list, bounds, meas, platooninfo, .1, OVMCalibrationVehicle)
 
 with open('OVMrelax.pkl', 'wb') as f:
     pickle.dump((relax_lc_res_ovm, relax_merge_res_ovm),f)
@@ -201,9 +203,9 @@ class NoRelaxOVM(OVMCalibrationVehicle):
 plist = [[10*3.3,.086/3.3, 1.545, 2, .175], [20*3.3,.086/3.3/2, 1.545, .5, .175 ],
          [10*3.3,.086/3.3/2, .5, .5, .175 ], [25,.05, 1,3, 1]]
 bounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3)]
-norelax_lc_res_ovm = training(plist, lc_list, bounds, meas, platooninfo, .1, NoRelaxOVM)
-norelax_merge_res_ovm = training(plist, merge_list, bounds, meas, platooninfo, .1, NoRelaxOVM)
-norelax_nolc_res_ovm = training(plist, nolc_list, bounds, meas, platooninfo, .1, NoRelaxOVM)
+norelax_lc_res_ovm = training_ga(lc_list, bounds, meas, platooninfo, .1, NoRelaxOVM)
+norelax_merge_res_ovm = training_ga(merge_list, bounds, meas, platooninfo, .1, NoRelaxOVM)
+norelax_nolc_res_ovm = training_ga(nolc_list, bounds, meas, platooninfo, .1, NoRelaxOVM)
 
 with open('OVMnorelax.pkl', 'wb') as f:
     pickle.dump((norelax_lc_res_ovm, norelax_merge_res_ovm, norelax_nolc_res_ovm),f)
@@ -246,14 +248,115 @@ class SKA_IDM(hc.CalibrationVehicle):
 
 plist = [[40,1,1,3,10,1, 25], [60,1,1,3,10,1,5], [80,1,15,1,1,1,35], [70,2,10,2,2,2,15]]
 bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.101,75)]
-relax_lc_res_ska = training(plist, lc_list, bounds, meas, platooninfo, .1, SKA_IDM)
-relax_merge_res_ska = training(plist, merge_list, bounds, meas, platooninfo, .1, SKA_IDM)
+relax_lc_res_ska = training_ga(lc_list, bounds, meas, platooninfo, .1, SKA_IDM)
+relax_merge_res_ska = training_ga(merge_list, bounds, meas, platooninfo, .1, SKA_IDM)
 
 with open('SKArelax.pkl', 'wb') as f:
     pickle.dump([relax_lc_res_ska, relax_merge_res_ska],f)
 
+"""
+2 Parameter positive/negative relax IDM
+"""
+class Relax2IDM(hc.CalibrationVehicle):
+    """Implements relaxation with 2 seperate parameters for positive/negative relaxation amounts."""
+    def initialize(self, parameters):
+        super().initialize(parameters)
+        self.cf_parameters[:-2]
+        self.relax_parameters = parameters[-2:]
 
-#%%  Used GA for results for newell models
+    def set_relax(self, relaxamounts, timeind, dt):
+        """2 parameter positive/negative relaxation."""
+        relaxamount_s, relaxamount_v = relaxamounts
+        # make headway relax
+        rp = self.relax_parameters[0] if relaxamount_s > 0 else self.relax_parameters[1]
+        relaxlen = math.ceil(rp/dt) - 1
+        tempdt = -dt/rp*relaxamount_s
+        temp = [relaxamount_s + tempdt*i for i in range(1,relaxlen+1)]
+        # make velocity relax
+        rp2 = self.relax_parameters[0] if relaxamount_v > 0 else self.relax_parameters[1]
+        relaxlen2 = math.ceil(rp2/dt) - 1
+        tempdt = -dt/rp2*relaxamount_v
+        temp2 = [relaxamount_v + tempdt*i for i in range(1,relaxlen2+1)]
+        # pad relax if necessary
+        if relaxlen < relaxlen2:
+            temp.extend([0]*(relaxlen2-relaxlen))
+            relaxlen = relaxlen2
+        elif relaxlen2 < relaxlen:
+            temp2.extend([0]*(relaxlen-relaxlen2))
+        # rest of code is the same as relax_helper_vhd
+        curr = list(zip(temp, temp2))
+        if self.in_relax:  # add to existing relax
+            # find indexes with overlap - need to combine relax values for those
+            overlap_end = min(self.relax_end, timeind+relaxlen)
+            prevr_indoffset = timeind - self.relax_start+1
+            prevr = self.relax
+            overlap_len = max(overlap_end-timeind, 0)
+            for i in range(overlap_len):
+                curtime = prevr_indoffset+i
+                prevrelax, currelax = prevr[curtime], curr[i]
+                prevr[curtime] = (prevrelax[0]+currelax[0], prevrelax[1]+currelax[1])
+            prevr.extend(curr[overlap_len:])
+            self.relax_end = max(self.relax_end, timeind+relaxlen)
+        else:
+            self.in_relax = True
+            self.relax_start = timeind + 1  # add relax
+            self.relax = curr
+            self.relax_end = timeind + relaxlen
+
+
+bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.1,75),(.1,75)]
+relax_lc_res_2p = training_ga(lc_list, bounds, meas, platooninfo, .1, Relax2IDM)
+relax_merge_res_2p = training_ga(merge_list, bounds, meas, platooninfo, .1, Relax2IDM)
+
+"""
+2 parameter shape/time relax IDM
+"""
+
+class RelaxShapeIDM(hc.CalibrationVehicle):
+    """Implements 2 parameter relaxation where the second parameter controls the shape."""
+    def initialize(self, parameters):
+        super().initialize(parameters)
+        self.cf_parameters[:-2]
+        self.relax_parameters = parameters[-2:]
+
+    def set_relax(self, relaxamounts, timeind, dt):
+        relaxamount_s, relaxamount_v = relaxamounts
+        # parametrized by class of monotonically decreasing second order polynomials
+        rp = self.relax_parameters[0]
+        p = self.relax_parameters[-1]
+        p1 = -p-1
+        tempdt = dt/rp
+        relaxlen = math.ceil(rp/dt) - 1
+        if relaxlen == 0:
+            return
+        temp = [relaxamount_s*(p*(i*tempdt)**2+p1*i*tempdt+1) for i in range(1,relaxlen+1)]
+        temp2 = [relaxamount_v*(p*(i*tempdt)**2+p1*i*tempdt+1) for i in range(1,relaxlen+1)]
+        # rest of code is the same as relax_helper_vhd
+        curr = list(zip(temp, temp2))
+        if self.in_relax:  # add to existing relax
+            # find indexes with overlap - need to combine relax values for those
+            overlap_end = min(self.relax_end, timeind+relaxlen)
+            prevr_indoffset = timeind - self.relax_start+1
+            prevr = self.relax
+            overlap_len = max(overlap_end-timeind, 0)
+            for i in range(overlap_len):
+                curtime = prevr_indoffset+i
+                prevrelax, currelax = prevr[curtime], curr[i]
+                prevr[curtime] = (prevrelax[0]+currelax[0], prevrelax[1]+currelax[1])
+            prevr.extend(curr[overlap_len:])
+            self.relax_end = max(self.relax_end, timeind+relaxlen)
+        else:
+            self.in_relax = True
+            self.relax_start = timeind + 1  # add relax
+            self.relax = curr
+            self.relax_end = timeind + relaxlen
+
+bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.1,75),(-1,1)]
+relax_lc_res_2ps = training_ga(lc_list, bounds, meas, platooninfo, .1, RelaxShapeIDM)
+relax_merge_res_2ps = training_ga(merge_list, bounds, meas, platooninfo, .1, RelaxShapeIDM)
+
+
+#%%
 """
 Run 5: Newell with no accident free
 """

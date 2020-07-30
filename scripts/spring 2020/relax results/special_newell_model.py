@@ -51,9 +51,10 @@ class LLRelaxVehicle(hc.CalibrationVehicle):
 
     def set_relax(self, relaxamounts, timeind, dt):
         """Applies relaxation given the relaxation amounts."""
-        self.DeltaN = relaxamounts
-        self.in_relax = True
-        self.first_index = True
+        if True:
+            self.DeltaN = relaxamounts
+            self.in_relax = True
+            self.first_index = True
 
     def update(self, timeind, dt):
         curspeed = self.speed
@@ -363,6 +364,6 @@ def lc_event(event, timeind, dt):
             relaxamount = (x2 - curveh.pos)/(x1 - curveh.pos)
         else:  # vehicle is i -> x1 = xi-1, x2 = i+1
             relaxamount = (x1 - curveh.pos)/(x1 - x2)
-        curveh.set_relax(relaxamount, timeind, dt)
+        curveh.set_relax(max(relaxamount,.01), timeind, dt)
 
     hc.update_lead(curveh, newlead, leadlen, timeind)  # update leader
