@@ -14,7 +14,7 @@ import time
 
 
 #test calibration
-veh = lc_list[102]
+veh = lc_list[103]
 pguess = [.05,20,60,1]
 mybounds = [(1,100),(1,30),(30,110),(.5,3)]
 cal = make_calibration([veh], meas, platooninfo, .1)
@@ -32,9 +32,9 @@ print(str(time.time()-start)+' to find mse '+str(out['fun']))
 plt.plot(cal.all_vehicles[0].speedmem)
 t_nstar, t_n, T_nm1 = platooninfo[veh][:3]
 plt.plot(meas[veh][t_n-t_nstar:T_nm1-t_nstar,3])
-plt.figure()
-plt.plot(cal.all_vehicles[0].posmem)
-plt.plot(meas[veh][t_n-t_nstar:T_nm1-t_nstar,2])
+# plt.figure()
+# plt.plot(cal.all_vehicles[0].posmem)
+# plt.plot(meas[veh][t_n-t_nstar:T_nm1-t_nstar,2])
 
 plt.figure()
 plt.plot(cal.all_vehicles[0].DeltaNmem)

@@ -36,7 +36,7 @@ class LLRelaxVehicle(hc.CalibrationVehicle):
         self.eql_type = eql_type
 
         if leadstatemem is not None:
-            self.leadveh = LLLeadVehicle(leadstatemem, leadinittime)
+            self.leadveh = hc.LeadVehicle(leadstatemem, leadinittime)
         self.in_leadveh = False
 
     def cf_model(self, p, state):
@@ -46,7 +46,7 @@ class LLRelaxVehicle(hc.CalibrationVehicle):
         return (state[0] + state[1]*state[2] - state[3]/K - state[4])/state[2]  # calculate update
 
     def set_cf(self, timeind, dt):
-        self.speed = self.cf_model(self.cf_parameters, [self.lead.pos-self.lead.len, self.lead.nextspeed, dt, self.DeltaN,
+        self.speed = self.cf_model(self.cf_parameters, [self.lead.pos-self.lead.len, self.lead.speed, dt, self.DeltaN,
                                                         self.pos])
 
     def set_relax(self, relaxamounts, timeind, dt):
@@ -90,28 +90,28 @@ class LLRelaxVehicle(hc.CalibrationVehicle):
         self.first_index = False
 
 
-class LLLeadVehicle:
-    """Lead Vehicle which has access to the speed from the next timestep."""
-    def __init__(self, leadstatemem, inittime):
-        """
-        leadstatemem - list of tuples, each tuple is a pair of (position, speed)
-        inittime - leadstatemem[0] corresponds to time inittime
-        """
-        self.leadstatemem = leadstatemem
-        self.inittime = inittime
-        self.road = None
+# class LLLeadVehicle:
+#     """Lead Vehicle which has access to the speed from the next timestep."""
+#     def __init__(self, leadstatemem, inittime):
+#         """
+#         leadstatemem - list of tuples, each tuple is a pair of (position, speed)
+#         inittime - leadstatemem[0] corresponds to time inittime
+#         """
+#         self.leadstatemem = leadstatemem
+#         self.inittime = inittime
+#         self.road = None
 
-    def update(self, timeind, *args):
-        """Update position/speed."""
-        self.pos, self.speed = self.leadstatemem[timeind - self.inittime]
-        try:
-            self.nextspeed = self.leadstatemem[timeind-self.inittime+1][1]
-        except:
-            self.nextspeed = self.leadstatemem[timeind-self.inittime][1]
+#     def update(self, timeind, *args):
+#         """Update position/speed."""
+#         self.pos, self.speed = self.leadstatemem[timeind - self.inittime]
+#         try:
+#             self.nextspeed = self.leadstatemem[timeind-self.inittime+1][1]
+#         except:
+#             self.nextspeed = self.leadstatemem[timeind-self.inittime][1]
 
-    def set_len(self, length):
-        """Set len so headway can be computed correctly."""
-        self.len = length
+#     def set_len(self, length):
+#         """Set len so headway can be computed correctly."""
+#         self.len = length
 
 
 class LLCalibration(hc.Calibration):

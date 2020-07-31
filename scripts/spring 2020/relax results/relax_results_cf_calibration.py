@@ -277,6 +277,8 @@ class Relax2IDM(hc.CalibrationVehicle):
         relaxlen2 = math.ceil(rp2/dt) - 1
         tempdt = -dt/rp2*relaxamount_v
         temp2 = [relaxamount_v + tempdt*i for i in range(1,relaxlen2+1)]
+        if max(relaxlen, relaxlen2) == 0:
+            return
         # pad relax if necessary
         if relaxlen < relaxlen2:
             temp.extend([0]*(relaxlen2-relaxlen))
@@ -307,6 +309,9 @@ class Relax2IDM(hc.CalibrationVehicle):
 bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.1,75),(.1,75)]
 relax_lc_res_2p = training_ga(lc_list, bounds, meas, platooninfo, .1, Relax2IDM)
 relax_merge_res_2p = training_ga(merge_list, bounds, meas, platooninfo, .1, Relax2IDM)
+
+with open('2pIDM.pkl', 'wb') as f:
+    pickle.dump([relax_lc_res_2p, relax_merge_res_2p],f)
 
 """
 2 parameter shape/time relax IDM
@@ -354,6 +359,9 @@ class RelaxShapeIDM(hc.CalibrationVehicle):
 bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.1,75),(-1,1)]
 relax_lc_res_2ps = training_ga(lc_list, bounds, meas, platooninfo, .1, RelaxShapeIDM)
 relax_merge_res_2ps = training_ga(merge_list, bounds, meas, platooninfo, .1, RelaxShapeIDM)
+
+with open('2psIDM.pkl', 'wb') as f:
+    pickle.dump([relax_lc_res_2ps, relax_merge_res_2ps],f)
 
 
 #%%
