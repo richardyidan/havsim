@@ -145,6 +145,36 @@ class SKA_IDM(hc.CalibrationVehicle):
             temp = dt/self.relax_parameters[1]
             self.cf_parameters[1] += (self.max_relax-self.cf_parameters[1])*temp
 
+class RelaxExpIDM(hc.CalibrationVehicle):
+    """Implements relaxation with an exponential adjustment rate."""
+    def get_cf(self, hd, spd, lead, curlane, timeind, dt, userelax):
+        if lead is None:
+            acc = curlane.call_downstream(self, timeind, dt)
+
+        else:
+            if self.in_relax:
+                currelax, currelax_v = self.currelax
+                acc = self.cf_model(self.cf_parameters, [hd + currelax, spd, lead.speed + currelax_v])
+            else:
+                acc = self.cf_model(self.cf_parameters, [hd, spd, lead.speed])
+
+        return acc
+
+    def set_relax(self, relaxamounts, timeind, dt):
+        if self.in_relax:
+           self.currelax = (self.currelax[0] + relaxamounts[0], self.currelax[1] + relaxamounts[1])
+        else:
+            self.in_relax = True
+            self.relax_end = math.inf
+            self.currelax = relaxamounts
+
+    def update(self, timeind, dt):
+        super().update(timeind, dt)
+
+        if self.in_relax:
+            temp = 1 - dt/self.relax_parameters
+            self.currelax = (self.currelax[0]*temp, self.currelax[1]*temp)
+
 class Relax2IDM(hc.CalibrationVehicle):
     """Implements relaxation with 2 seperate parameters for positive/negative relaxation amounts."""
     def initialize(self, parameters):

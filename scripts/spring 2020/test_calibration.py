@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 import havsim.simulation.calibration_models as hm
 import math
 
-use_model = 'Newell'   # change to one of IDM, OVM, Newell
-curplatoon = [lc_list[212]]  # test vehicle to calibrate
+use_model = 'ExpIDM'   # change to one of IDM, OVM, Newell
+curplatoon = [lc_list[717]]  # test vehicle to calibrate
 use_method = 'GA' # GA or BFGS
 if __name__ == '__main__':
     if use_model == 'IDM':
@@ -49,6 +49,10 @@ if __name__ == '__main__':
         mybounds = [(1,100),(1,30),(30,110),(1, 20)]
         cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hm.NewellLL,
                                   event_maker = hm.make_ll_lc_event, lc_event_fun = hm.ll_lc_event)
+    elif use_model == 'ExpIDM':
+        pguess =  [40,1,1,3,10,15]
+        mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
+        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hm.RelaxExpIDM)
 
     start = time.time()
     cal.simulate(pguess)

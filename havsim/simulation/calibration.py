@@ -437,7 +437,7 @@ def make_lc_event(vehicles, id2obj, meas, platooninfo, dt, addevent_list, lceven
                     leadstate = (meas[curlead][0,2]-meas[curlead][0,3]*dt,
                                  meas[curlead][0,3])
                 else:
-                    leadstate = (meas[curlead][start-leadt_nstar,2], meas[curlead][start-leadt_nstar,3])
+                    leadstate = (meas[curlead][start-1-leadt_nstar,2], meas[curlead][start-1-leadt_nstar,3])
 
             if count == 0:  # add event adds vehicle to simulation
                 t_nstar, t_n = platooninfo[veh][0:2]
