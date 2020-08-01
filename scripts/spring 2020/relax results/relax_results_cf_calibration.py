@@ -82,27 +82,27 @@ relax_merge_res = training_ga(merge_list, bounds, meas, platooninfo, .1)
 with open('IDMrelax.pkl','wb') as f:
     pickle.dump((relax_lc_res,relax_merge_res), f)
 
-"""
-Run 2: Like Run 1, but with relax disabled. (for all vehicles)
-"""
-#subclass calibrationvehicle as necessary
-class NoRelaxIDM(hc.CalibrationVehicle):
-    def set_relax(self, *args):
-        pass
+# """
+# Run 2: Like Run 1, but with relax disabled. (for all vehicles)
+# """
+# #subclass calibrationvehicle as necessary
+# class NoRelaxIDM(hc.CalibrationVehicle):
+#     def set_relax(self, *args):
+#         pass
 
-    def initialize(self, parameters):  # just need to set parameters correctly
-        super().initialize(parameters)
-        self.cf_parameters = parameters
+#     def initialize(self, parameters):  # just need to set parameters correctly
+#         super().initialize(parameters)
+#         self.cf_parameters = parameters
 
-plist = [[40,1,1,3,10], [60,1,1,3,10], [80,1,15,1,1], [70,2,10,2,2]]
-bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20)]
-kwargs = {'vehicle_class': NoRelaxIDM}
-norelax_lc_res = training_ga(lc_list, bounds, meas, platooninfo, .1 , kwargs = kwargs)
-norelax_merge_res = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs = kwargs)
-norelax_nolc_res = training_ga(nolc_list, bounds, meas, platooninfo, .1, kwargs = kwargs)
+# plist = [[40,1,1,3,10], [60,1,1,3,10], [80,1,15,1,1], [70,2,10,2,2]]
+# bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20)]
+# kwargs = {'vehicle_class': NoRelaxIDM}
+# norelax_lc_res = training_ga(lc_list, bounds, meas, platooninfo, .1 , kwargs = kwargs)
+# norelax_merge_res = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs = kwargs)
+# norelax_nolc_res = training_ga(nolc_list, bounds, meas, platooninfo, .1, kwargs = kwargs)
 
-with open('IDMnorelax.pkl','wb') as f:
-    pickle.dump((norelax_lc_res,norelax_merge_res,norelax_nolc_res),f)
+# with open('IDMnorelax.pkl','wb') as f:
+#     pickle.dump((norelax_lc_res,norelax_merge_res,norelax_nolc_res),f)
 
 """
 Run 3: OVM with no accident-free relax, no max speed bound, no acceleration bound (only for merge, lc)
@@ -118,41 +118,41 @@ with open('OVMrelax.pkl', 'wb') as f:
     pickle.dump((relax_lc_res_ovm, relax_merge_res_ovm),f)
 
 
-"""
-Run 4: Like Run 3, but with relax disabled. (for all vehicles)
-"""
-class NoRelaxOVM(hm.OVMCalibrationVehicle):
-    def set_relax(self, *args):
-        pass
+# """
+# Run 4: Like Run 3, but with relax disabled. (for all vehicles)
+# """
+# class NoRelaxOVM(hm.OVMCalibrationVehicle):
+#     def set_relax(self, *args):
+#         pass
 
-    def initialize(self, parameters):
-        super().initialize(parameters)
-        self.cf_parameters = parameters
+#     def initialize(self, parameters):
+#         super().initialize(parameters)
+#         self.cf_parameters = parameters
 
-plist = [[10*3.3,.086/3.3, 1.545, 2, .175], [20*3.3,.086/3.3/2, 1.545, .5, .175 ],
-         [10*3.3,.086/3.3/2, .5, .5, .175 ], [25,.05, 1,3, 1]]
-bounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3)]
-kwargs = {'vehicle_class': NoRelaxOVM}
-norelax_lc_res_ovm = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs)
-norelax_merge_res_ovm = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs)
-norelax_nolc_res_ovm = training_ga(nolc_list, bounds, meas, platooninfo, .1, kwargs)
+# plist = [[10*3.3,.086/3.3, 1.545, 2, .175], [20*3.3,.086/3.3/2, 1.545, .5, .175 ],
+#          [10*3.3,.086/3.3/2, .5, .5, .175 ], [25,.05, 1,3, 1]]
+# bounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3)]
+# kwargs = {'vehicle_class': NoRelaxOVM}
+# norelax_lc_res_ovm = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs)
+# norelax_merge_res_ovm = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs)
+# norelax_nolc_res_ovm = training_ga(nolc_list, bounds, meas, platooninfo, .1, kwargs)
 
-with open('OVMnorelax.pkl', 'wb') as f:
-    pickle.dump((norelax_lc_res_ovm, norelax_merge_res_ovm, norelax_nolc_res_ovm),f)
+# with open('OVMnorelax.pkl', 'wb') as f:
+#     pickle.dump((norelax_lc_res_ovm, norelax_merge_res_ovm, norelax_nolc_res_ovm),f)
 
 
-"""
-Run 7: Try existing Relaxation model due to Schakel, Knoop, van Arem (2012)
-"""
+# """
+# Run 7: Try existing Relaxation model due to Schakel, Knoop, van Arem (2012)
+# """
 
-plist = [[40,1,1,3,10,1, 25], [60,1,1,3,10,1,5], [80,1,15,1,1,1,35], [70,2,10,2,2,2,15]]
-bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.101,75)]
-kwargs = {'vehicle_class': hm.SKA_IDM}
-relax_lc_res_ska = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
-relax_merge_res_ska = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
+# plist = [[40,1,1,3,10,1, 25], [60,1,1,3,10,1,5], [80,1,15,1,1,1,35], [70,2,10,2,2,2,15]]
+# bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.101,75)]
+# kwargs = {'vehicle_class': hm.SKA_IDM}
+# relax_lc_res_ska = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
+# relax_merge_res_ska = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
 
-with open('SKArelax.pkl', 'wb') as f:
-    pickle.dump([relax_lc_res_ska, relax_merge_res_ska],f)
+# with open('SKArelax.pkl', 'wb') as f:
+#     pickle.dump([relax_lc_res_ska, relax_merge_res_ska],f)
 
 """
 2 Parameter positive/negative relax IDM
@@ -165,19 +165,18 @@ relax_merge_res_2p = training_ga(merge_list, bounds, meas, platooninfo, .1, kwar
 with open('2pIDM.pkl', 'wb') as f:
     pickle.dump([relax_lc_res_2p, relax_merge_res_2p],f)
 
-"""
-2 parameter shape/time relax IDM
-"""
-bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.1,75),(-1,1)]
-kwargs = {'vehicle_class': hm.RelaxShapeIDM}
-relax_lc_res_2ps = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
-relax_merge_res_2ps = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
+# """
+# 2 parameter shape/time relax IDM
+# """
+# bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.1,75),(-1,1)]
+# kwargs = {'vehicle_class': hm.RelaxShapeIDM}
+# relax_lc_res_2ps = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
+# relax_merge_res_2ps = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
 
-with open('2psIDM.pkl', 'wb') as f:
-    pickle.dump([relax_lc_res_2ps, relax_merge_res_2ps],f)
+# with open('2psIDM.pkl', 'wb') as f:
+#     pickle.dump([relax_lc_res_2ps, relax_merge_res_2ps],f)
 
 
-#%%
 """
 Run 5: Newell with no accident free
 """
