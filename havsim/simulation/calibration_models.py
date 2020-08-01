@@ -267,18 +267,18 @@ class RelaxShapeIDM(hc.CalibrationVehicle):
 class NewellTT(hc.CalibrationVehicle):
     """Implements Newell model in trajectory translation form, based on Laval, Leclerq (2008).
 
-    3 parameters (4 with relaxation) like the model in differential form, but this form requires the leader's
-    speed to be known. Thus it forces vehicles to be updated sequentially (as opposed to in parralel).
-    Also in this form, the timestep is essentially a model parameter - it is supposed to be set to
-    1/(\omega \kappa) = p[0]/p[1].
+    3 parameters (4 with relaxation) like the model in differential form, but this form is different. It
+    should be equivalent to NewellCalibrationVehicle up to floating point error unless the maximum
+    acceleration bound is active.
     """
     def cf_model(self, p, state):
         """
         p - [space shift (1/\kappa), wave speed (\omega), max speed]
-        state - [headway, leader speed, dt]
+        state - [headway, leader speed]
         """
         K = (p[1]/p[0])/(p[1]+state[1])
-        return (state[0] + state[1]*state[2] - 1/K)/state[2]
+        tau = p[0]/p[1]
+        return (state[0] + state[1]*tau - 1/K)/tau
 
 
     def get_cf(self, hd, lead, curlane, timeind, dt, userelax):
@@ -288,9 +288,9 @@ class NewellTT(hc.CalibrationVehicle):
         else:
             if self.in_relax:
                 currelax, currelax_v = self.relax[timeind - self.relax_start]
-                spd = self.cf_model(self.cf_parameters, [self.hd + currelax, lead.speed+currelax_v, dt])
+                spd = self.cf_model(self.cf_parameters, [self.hd + currelax, lead.speed+currelax_v])
             else:
-                spd = self.cf_model(self.cf_parameters, [self.hd, lead.speed, dt])
+                spd = self.cf_model(self.cf_parameters, [self.hd, lead.speed])
         return spd
 
     def set_cf(self, timeind, dt):
@@ -341,14 +341,15 @@ class NewellLL(NewellTT):
         state - [headway, leader speed, dt, DeltaN]
         """
         K = (p[1]/p[0])/(p[1]+state[1])
-        return (state[0] + state[1]*state[2] - state[3]/K)/state[2]
+        tau = p[0]/p[1]
+        return (state[0] + state[1]*tau - state[2]/K)/tau
 
 
     def get_cf(self, hd, lead, curlane, timeind, dt, userelax):
         if lead is None:
             acc = curlane.call_downstream(self, timeind, dt)
         else:
-            spd = self.cf_model(self.cf_parameters, [self.hd, lead.speed, dt, self.DeltaN])
+            spd = self.cf_model(self.cf_parameters, [self.hd, lead.speed, self.DeltaN])
         return spd
 
     def set_relax(self, relaxamounts, timeind, dt):

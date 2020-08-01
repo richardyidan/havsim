@@ -214,7 +214,7 @@ with open('Newellnorelax.pkl','wb') as f:
 """
 LL Relaxation Model
 """
-bounds = [(1,100),(1,30),(40,120),(1, 20)]
+bounds = [(1,100),(1,120),(40,120),(.5, 20)]
 kwargs = {'vehicle_class': hm.NewellLL, 'event_maker':hm.make_ll_lc_event, 'lc_event_fun':hm.ll_lc_event}
 relax_lc_res_ll = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
 relax_merge_res_ll = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
