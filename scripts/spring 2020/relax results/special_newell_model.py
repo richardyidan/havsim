@@ -41,7 +41,7 @@ class LLRelaxVehicle(hc.CalibrationVehicle):
 
     def cf_model(self, p, state):
         #p = space shift (=1/\kappa), wave speed (\omega), max speed, \epsilon
-        #state = [lead position, next lead speed, dt, DeltaN]
+        #state = [self position, lead position-lead.len, lead speed, dt, DeltaN]
         K = (p[1]/p[0])/(p[1]+state[1])
         return (state[0] + state[1]*state[2] - state[3]/K - state[4])/state[2]  # calculate update
 

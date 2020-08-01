@@ -183,8 +183,9 @@ class Calibration:
         vehicles: set of all vehicles currently in simulation
         add_events: sorted list of remaining add events
         lc_events: sorted list of remaining lead change events
+        lc_event: function that can apply a lc_events
     """
-    def __init__(self, vehicles, add_events, lc_events, dt, endtime = None):
+    def __init__(self, vehicles, add_events, lc_events, dt, lc_event_fun = None, endtime = None):
         """Inits Calibration.
 
         Args:
@@ -192,12 +193,17 @@ class Calibration:
             add_events: list of add events, sorted in time
             lc_events: list of lead change (lc) events, sorted in time
             dt: timestep, float
+            lc_event_fun: can give a custom function for handling lc_events, otherwise we use the default
             endtime: last time index which is simulated. The starttime is inferred from add_events.
         """
 
         self.all_vehicles = vehicles
         self.all_add_events = add_events
         self.all_lc_events = lc_events
+        if lc_event_fun is None:
+            self.lc_event = lc_event
+        else:
+            self.lc_event = lc_event_fun
 
         self.starttime = add_events[-1][0]
         self.endtime = endtime
@@ -210,7 +216,8 @@ class Calibration:
             veh.set_cf(self.timeind, self.dt)
 
         self.addtime, self.lctime = update_calibration(self.vehicles, self.add_events, self.lc_events,
-                                                       self.addtime, self.lctime, self.timeind, self.dt)
+                                                       self.addtime, self.lctime, self.timeind, self.dt,
+                                                       self.lc_event)
 
         self.timeind += 1
 
@@ -234,7 +241,8 @@ class Calibration:
         self.addtime = self.add_events[-1][0]
         self.lctime = self.lc_events[-1][0] if len(self.lc_events)>0 else math.inf
         self.timeind = self.starttime
-        self.addtime = update_add_event(self.vehicles, self.add_events, self.addtime, self.timeind-1, self.dt)
+        self.addtime = update_add_event(self.vehicles, self.add_events, self.addtime, self.timeind-1, self.dt,
+                                        self.lc_event)
         for veh in self.vehicles:
             if veh.in_leadveh:
                 veh.leadveh.update(self.timeind)
@@ -253,7 +261,7 @@ class Calibration:
         return loss
 
 
-def update_calibration(vehicles, add_events, lc_events, addtime, lctime, timeind, dt):
+def update_calibration(vehicles, add_events, lc_events, addtime, lctime, timeind, dt, lc_event):
     """Main logic for a single step of the Calibration simulation.
 
     At the beginning of the timestep, vehicles/states/events are assumed to be fully updated. Then, in order,
@@ -273,13 +281,14 @@ def update_calibration(vehicles, add_events, lc_events, addtime, lctime, timeind
         lctime: next time a lead change event occurs
         timeind: time index
         dt: timestep
+        lc_event: function to apply a single entry in lc_events
     """
-    lctime = update_lc_event(lc_events, lctime, timeind, dt)
+    lctime = update_lc_event(lc_events, lctime, timeind, dt, lc_event)
 
     for veh in vehicles:
         veh.update(timeind, dt)
 
-    addtime = update_add_event(vehicles, add_events, addtime, timeind, dt)
+    addtime = update_add_event(vehicles, add_events, addtime, timeind, dt, lc_event)
 
     for veh in vehicles:
         veh.hd = get_headway(veh, veh.lead)
@@ -287,7 +296,7 @@ def update_calibration(vehicles, add_events, lc_events, addtime, lctime, timeind
     return addtime, lctime
 
 
-def update_lc_event(lc_events, lctime, timeind, dt):
+def update_lc_event(lc_events, lctime, timeind, dt, lc_event):
     """Check if we need to apply the next lc event, apply it and update lctime if so.
 
     Args:
@@ -306,7 +315,7 @@ def update_lc_event(lc_events, lctime, timeind, dt):
     return lctime
 
 
-def update_add_event(vehicles, add_events, addtime, timeind, dt):
+def update_add_event(vehicles, add_events, addtime, timeind, dt, lc_event):
     """Check if we need to apply the next add event, apply it and update addtime if so.
 
     Args:
@@ -316,16 +325,17 @@ def update_add_event(vehicles, add_events, addtime, timeind, dt):
         dt: timestep
     """
     if addtime == timeind+1:
-        add_event(add_events.pop(), vehicles, timeind, dt)
+        add_event(add_events.pop(), vehicles, timeind, dt, lc_event)
         addtime = add_events[-1][0] if len(add_events)>0 else math.inf
         if addtime == timeind+1:
             while addtime == timeind+1:
-                add_event(add_events.pop(), vehicles, timeind, dt)
+                add_event(add_events.pop(), vehicles, timeind, dt, lc_event)
                 addtime = add_events[-1][0] if len(add_events)>0 else math.inf
     return addtime
 
 
-def make_calibration(vehicles, meas, platooninfo, dt, vehicle_class):
+def make_calibration(vehicles, meas, platooninfo, dt, vehicle_class = None, calibration_class = None,
+                     event_maker = None, lc_event_fun = None):
     """Sets up a Calibration object.
 
     Extracts the relevant quantities (e.g. LeadVehicle, initial conditions, loss) from the data
@@ -336,8 +346,21 @@ def make_calibration(vehicles, meas, platooninfo, dt, vehicle_class):
         meas: from havsim.calibration.algs.makeplatoonlist
         platooninfo: from havsim.calibration.algs.makeplatoonlist
         dt: timestep
-        vehicle_class: subclassed Vehicle to use
+        vehicle_class: subclassed Vehicle to use - if None defaults to CalibrationVehicle
+        calibration_class: subclassed Calibration to use - if None defaults to Calibration
+        event_maker: specify a function to create custom (lc) events
+        lc_event_fun: specify function which handles custom lc events
     """
+    if vehicle_class is None:
+        vehicle_class = CalibrationVehicle
+    if calibration_class is None:
+        calibration_class = Calibration
+    if event_maker is None:
+        event_maker = make_lc_event
+    if lc_event_fun is None:
+        lc_event_fun = lc_event
+
+    # initialize
     vehicle_list = []
     addevent_list = []
     lcevent_list = []
@@ -379,7 +402,18 @@ def make_calibration(vehicles, meas, platooninfo, dt, vehicle_class):
         vehicle_list.append(newveh)
         id2obj[veh] = newveh
 
-    # create events  # TODO this part should be more modular?
+    # create events
+    addevent_list, lcevent_list = event_maker(vehicles, id2obj, meas, platooninfo, dt,
+                                                addevent_list, lcevent_list)
+
+    addevent_list.sort(key = lambda x: x[0], reverse = True)  # sort events in time
+    lcevent_list.sort(key = lambda x: x[0], reverse = True)
+
+    # make calibration object
+    return calibration_class(vehicle_list, addevent_list, lcevent_list, dt, endtime=endtime)
+
+
+def make_lc_event(vehicles, id2obj, meas, platooninfo, dt, addevent_list, lcevent_list):
     for veh in vehicles:
         curveh = id2obj[veh]
         leadinfo = helper.makeleadinfo([veh],platooninfo,meas)[0]
@@ -419,14 +453,10 @@ def make_calibration(vehicles, meas, platooninfo, dt, vehicle_class):
                 curevent = (start, 'lc', curveh, curlead, curlen, True, leadstate)
                 lcevent_list.append(curevent)
 
-    addevent_list.sort(key = lambda x: x[0], reverse = True)  # sort events in time
-    lcevent_list.sort(key = lambda x: x[0], reverse = True)
-
-    # make calibration object
-    return Calibration(vehicle_list, addevent_list, lcevent_list, dt, endtime=endtime)
+    return addevent_list, lcevent_list
 
 
-def add_event(event, vehicles, timeind, dt):
+def add_event(event, vehicles, timeind, dt, lc_event):
     """Adds a vehicle to the simulation and applies the first lead change event.
 
     Add events are a tuple of
@@ -446,7 +476,7 @@ def add_event(event, vehicles, timeind, dt):
     lc_event(lcevent, timeind, dt)
 
 
-def lc_event(event, timeind, dt):  # TODO be able to specify lc_event used in Calibration?
+def lc_event(event, timeind, dt):
     """Applies lead change event, updating a CalibrationVehicle's leader.
 
     Lead change events are a tuple of
