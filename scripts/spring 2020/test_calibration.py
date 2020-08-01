@@ -13,7 +13,7 @@ import havsim.simulation.calibration_models as hm
 import math
 
 use_model = 'Newell'   # change to one of IDM, OVM, Newell
-curplatoon = [lc_list[101]]  # test vehicle to calibrate
+curplatoon = [lc_list[212]]  # test vehicle to calibrate
 use_method = 'GA' # GA or BFGS
 if __name__ == '__main__':
     if use_model == 'IDM':
@@ -22,24 +22,33 @@ if __name__ == '__main__':
         cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hc.CalibrationVehicle)
     elif use_model == 'Newell':
         pguess = [1,40,100,5]
-        mybounds = [(.1,10),(0,100),(40,120),(.1,75)]
-        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, NewellCalibrationVehicle)
+        mybounds = [(.1,10),(0,100),(30,110),(.1,75)]
+        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hm.NewellCalibrationVehicle)
     elif use_model == 'OVM':
         pguess = [10*3.3,.086/3.3, 1.545, 2, .175, 5 ]
         mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)]
-        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, OVMCalibrationVehicle)
+        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hm.OVMCalibrationVehicle)
     elif use_model == 'SKA':
         pguess =  [40,1,1,3,10,.5,25] #[80,1,15,1,1,35]
         mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.1,75)]
-        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, SKA_IDM)
+        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hm.SKA_IDM)
     elif use_model == '2IDM':
         pguess =  [40,1,1,3,10,25,25]
         mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75), (.1, 75)]
-        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, Relax2IDM)
+        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hm.Relax2IDM)
     elif use_model == 'ShapeIDM':
         pguess =  [80,1,15,1,1,35, -.5] #[40,1,1,3,10,25,.5]
         mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75), (-1,1)]
-        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, RelaxShapeIDM)
+        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hm.RelaxShapeIDM)
+    elif use_model == 'TT':
+        pguess = [25, 10, 80, 25]
+        mybounds = [(1,100),(1,30),(30,110), (.1, 75)]
+        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hm.NewellTT)
+    elif use_model == 'LL':
+        pguess = [25, 10, 80, 10]
+        mybounds = [(1,100),(1,30),(30,110),(1, 20)]
+        cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hm.NewellLL,
+                                  event_maker = hm.make_ll_lc_event, lc_event_fun = hm.ll_lc_event)
 
     start = time.time()
     cal.simulate(pguess)

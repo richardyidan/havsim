@@ -240,8 +240,7 @@ class NewellTT(hc.CalibrationVehicle):
     3 parameters (4 with relaxation) like the model in differential form, but this form requires the leader's
     speed to be known. Thus it forces vehicles to be updated sequentially (as opposed to in parralel).
     Also in this form, the timestep is essentially a model parameter - it is supposed to be set to
-    1/(\omega \kappa) = p[0]/p[1]. Despite these drawbacks, this form of the model is generally more
-    accurate.
+    1/(\omega \kappa) = p[0]/p[1].
     """
     def cf_model(self, p, state):
         """
@@ -258,8 +257,8 @@ class NewellTT(hc.CalibrationVehicle):
 
         else:
             if self.in_relax:
-                currelax = self.relax[timeind - self.relax_start]
-                spd = self.cf_model(self.cf_parameters, [self.hd + currelax, lead.speed, dt])
+                currelax, currelax_v = self.relax[timeind - self.relax_start]
+                spd = self.cf_model(self.cf_parameters, [self.hd + currelax, lead.speed+currelax_v, dt])
             else:
                 spd = self.cf_model(self.cf_parameters, [self.hd, lead.speed, dt])
         return spd
@@ -269,13 +268,6 @@ class NewellTT(hc.CalibrationVehicle):
 
     def eqlfun(self, p, v):
         pass
-
-    def set_relax(self, relaxamounts, timeind, dt):
-        rp = self.relax_parameters
-        if rp is None:
-            return
-        relaxamount_s, relaxamount_v = relaxamounts
-        hs.relax_helper(rp, relaxamount_s, self, timeind, dt)
 
     def update(self, timeind, dt):
         #calculate which regime we are in (congested, free flow, or free acceleration)
@@ -367,6 +359,9 @@ class NewellLL(NewellTT):
                 Kvj = (p[1]/p[0])/(p[1]+self.prevleadspeed)
                 Kvjp1 = (p[1]/p[0])/(p[1]+self.lead.speed)
                 self.DeltaN = (self.DeltaN/Kvj + (self.lead.speed-vtilde)*dt)*Kvjp1
+                if self.DeltaN >= 1:
+                    self.DeltaN = 1
+                    self._in_relax = False
 
 
     def initialize(self, parameters):
@@ -376,6 +371,7 @@ class NewellLL(NewellTT):
         #attributes for the LL relaxation formulation
         self.prevleadspeed = None
         self.DeltaN = 1
+        self.DeltaNmem = []
         self.first_index = False
 
 

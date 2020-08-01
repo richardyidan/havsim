@@ -410,7 +410,8 @@ def make_calibration(vehicles, meas, platooninfo, dt, vehicle_class = None, cali
     lcevent_list.sort(key = lambda x: x[0], reverse = True)
 
     # make calibration object
-    return calibration_class(vehicle_list, addevent_list, lcevent_list, dt, endtime=endtime)
+    return calibration_class(vehicle_list, addevent_list, lcevent_list, dt, endtime=endtime,
+                             lc_event_fun = lc_event_fun)
 
 
 def make_lc_event(vehicles, id2obj, meas, platooninfo, dt, addevent_list, lcevent_list):

@@ -8,8 +8,7 @@ import scipy.optimize as sc
 import matplotlib.pyplot as plt
 import math
 import pickle
-import havsim.simulation.models as hm
-import havsim.simulation.simulation as hs
+import havsim.simulation.calibration_models as hm
 
 # load data
 try:
@@ -35,27 +34,27 @@ for veh in veh_list:
 
 
 # define training loop
-def training_ga(veh_id_list, bounds, meas, platooninfo, dt, vehicle_object, workers = 2):
+def training_ga(veh_id_list, bounds, meas, platooninfo, dt, workers = 2, kwargs = {}):
     """Runs differential evolution to fit parameters for a list of CalibrationVehicle's"""
     #veh_id_list = list of float vehicle id, bounds = bounds for optimizer (list of tuples),
-    #vehicle_object = (possibly subclassed) CalibrationVehicle object
+    #kwargs = dictionary with keyword arguments for hc.make_calibration
     out = []
     for veh_id in veh_id_list:
-        cal = hc.make_calibration([veh_id], meas, platooninfo, dt, vehicle_object)
+        cal = hc.make_calibration([veh_id], meas, platooninfo, dt, **kwargs)
         ga = sc.differential_evolution(cal.simulate, bounds = bounds, workers = workers)
         out.append(ga)
 
     return out
 
 
-def training(plist, veh_id_list, bounds, meas, platooninfo, dt, vehicle_object, cutoff = 6):
+def training(plist, veh_id_list, bounds, meas, platooninfo, dt, vehicle_object, cutoff = 6, kwargs = {}):
     """Runs bfgs with multiple initial guesses to fit parameters for a CalibrationVehicle"""
     #veh_id = float vehicle id, plist = list of parameters, bounds = bounds for optimizer (list of tuples),
-    #vehicle_object = (possibly subclassed) CalibrationVehicle object, cutoff = minimum mse required for
-    #multiple guesses
+    #cutoff = minimum mse required for multiple guesses
+    #kwargs = dictionary with keyword arguments for hc.make_calibration
     out = []
     for veh_id in veh_id_list:
-        cal = hc.make_calibration([veh_id], meas, platooninfo, dt, vehicle_object)
+        cal = hc.make_calibration([veh_id], meas, platooninfo, dt, **kwargs)
         bestmse = math.inf
         best = None
         for guess in plist:
@@ -69,7 +68,7 @@ def training(plist, veh_id_list, bounds, meas, platooninfo, dt, vehicle_object, 
     return out
 
 
-#%%
+#%%  # updated, but not tested, after the 'refactored calibration + added calibration_models' commit
 """Used GA + ballistic update for paper results. Using euler update is probably better in terms of mse.
 Can use BFGS instead of GA, which is significantly faster, but can have problems with local minima."""
 """
@@ -77,8 +76,8 @@ Run 1: IDM with no accident-free relax, no max speed bound, no acceleration boun
 """
 plist = [[40,1,1,3,10,25], [60,1,1,3,10,5], [80,1,15,1,1,35], [70,2,10,2,2,15]]
 bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
-relax_lc_res = training_ga(lc_list,  bounds, meas, platooninfo, .1, hc.CalibrationVehicle)
-relax_merge_res = training_ga(merge_list, bounds, meas, platooninfo, .1, hc.CalibrationVehicle)
+relax_lc_res = training_ga(lc_list,  bounds, meas, platooninfo, .1)
+relax_merge_res = training_ga(merge_list, bounds, meas, platooninfo, .1)
 
 with open('IDMrelax.pkl','wb') as f:
     pickle.dump((relax_lc_res,relax_merge_res), f)
@@ -92,27 +91,15 @@ class NoRelaxIDM(hc.CalibrationVehicle):
         pass
 
     def initialize(self, parameters):  # just need to set parameters correctly
-        # initial conditions
-        self.lead = None
-        self.pos = self.initpos
-        self.speed = self.initspd
-        # reset relax
-        self.in_relax = False
-        self.relax = None
-        self.relax_start = None
-        # memory
-        self.leadmem = []
-        self.posmem = [self.pos]
-        self.speedmem = [self.speed]
-        self.relaxmem = []
-        # parameters
+        super().initialize(parameters)
         self.cf_parameters = parameters
 
 plist = [[40,1,1,3,10], [60,1,1,3,10], [80,1,15,1,1], [70,2,10,2,2]]
 bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20)]
-norelax_lc_res = training_ga(lc_list, bounds, meas, platooninfo, .1 ,NoRelaxIDM)
-norelax_merge_res = training_ga(merge_list, bounds, meas, platooninfo, .1, NoRelaxIDM)
-norelax_nolc_res = training_ga(nolc_list, bounds, meas, platooninfo, .1, NoRelaxIDM)
+kwargs = {'vehicle_class': NoRelaxIDM}
+norelax_lc_res = training_ga(lc_list, bounds, meas, platooninfo, .1 , kwargs = kwargs)
+norelax_merge_res = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs = kwargs)
+norelax_nolc_res = training_ga(nolc_list, bounds, meas, platooninfo, .1, kwargs = kwargs)
 
 with open('IDMnorelax.pkl','wb') as f:
     pickle.dump((norelax_lc_res,norelax_merge_res,norelax_nolc_res),f)
@@ -120,56 +107,12 @@ with open('IDMnorelax.pkl','wb') as f:
 """
 Run 3: OVM with no accident-free relax, no max speed bound, no acceleration bound (only for merge, lc)
 """
-# make OVM calibrationvehicle
-class OVMCalibrationVehicle(hc.CalibrationVehicle):
-    def cf_model(self, p, state):
-        return hm.OVM(p, state)
-
-    def get_cf(self, hd, spd, lead, curlane, timeind, dt, userelax):
-        if lead is None:
-            acc = curlane.call_downstream(self, timeind, dt)
-
-        else:
-            if self.in_relax:
-                # accident free formulation of relaxation
-                # ttc = hd / (self.speed - lead.speed)
-                # if ttc < 1.5 and ttc > 0:
-                if False:  # disable accident free
-                    temp = (ttc/1.5)**2
-                    # currelax, currelax_v = self.relax[timeind-self.relax_start]  # hd + v relax
-                    # currelax, currelax_v = currelax*temp, currelax_v*temp
-                    currelax = self.relax[timeind - self.relax_start]*temp
-                else:
-                    # currelax, currelax_v = self.relax[timeind-self.relax_start]
-                    currelax = self.relax[timeind - self.relax_start]
-
-                # acc = self.cf_model(self.cf_parameters, [hd + currelax, spd, lead.speed + currelax_v])
-                acc = self.cf_model(self.cf_parameters, [hd + currelax, spd, lead.speed])
-            else:
-                acc = self.cf_model(self.cf_parameters, [hd, spd, lead.speed])
-
-        return acc
-
-    def eqlfun(self, p, s):
-        return hm.OVM_eql(p, s)
-
-    def set_relax(self, relaxamounts, timeind, dt):
-        rp = self.relax_parameters
-        if rp is None:
-            return
-        relaxamount_s, relaxamount_v = relaxamounts
-        hs.relax_helper(rp, relaxamount_s, self, timeind, dt)
-
-    def initialize(self, parameters):
-        super().initialize(parameters)
-        self.maxspeed = parameters[0]*(1-math.tanh(-parameters[2]))-.1
-        self.eql_type = 's'  # you are supposed to set this in __init__
-
 plist = [[10*3.3,.086/3.3, 1.545, 2, .175, 5 ], [20*3.3,.086/3.3/2, 1.545, .5, .175, 60 ],
          [10*3.3,.086/3.3/2, .5, .5, .175, 60 ], [25,.05, 1,3, 1, 25]]
 bounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)]
-relax_lc_res_ovm = training_ga(lc_list, bounds, meas, platooninfo, .1, OVMCalibrationVehicle)
-relax_merge_res_ovm = training_ga(merge_list, bounds, meas, platooninfo, .1, OVMCalibrationVehicle)
+kwargs = {'vehicle_class': hm.OVMCalibrationVehicle}
+relax_lc_res_ovm = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs = kwargs)
+relax_merge_res_ovm = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs = kwargs)
 
 with open('OVMrelax.pkl', 'wb') as f:
     pickle.dump((relax_lc_res_ovm, relax_merge_res_ovm),f)
@@ -178,34 +121,21 @@ with open('OVMrelax.pkl', 'wb') as f:
 """
 Run 4: Like Run 3, but with relax disabled. (for all vehicles)
 """
-
-class NoRelaxOVM(OVMCalibrationVehicle):
+class NoRelaxOVM(hm.OVMCalibrationVehicle):
     def set_relax(self, *args):
         pass
 
     def initialize(self, parameters):
-        # initial conditions
-        self.lead = None
-        self.pos = self.initpos
-        self.speed = self.initspd
-        # reset relax
-        self.in_relax = False
-        self.relax = None
-        self.relax_start = None
-        # memory
-        self.leadmem = []
-        self.posmem = [self.pos]
-        self.speedmem = [self.speed]
-        self.relaxmem = []
-        # parameters
+        super().initialize(parameters)
         self.cf_parameters = parameters
 
 plist = [[10*3.3,.086/3.3, 1.545, 2, .175], [20*3.3,.086/3.3/2, 1.545, .5, .175 ],
          [10*3.3,.086/3.3/2, .5, .5, .175 ], [25,.05, 1,3, 1]]
 bounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3)]
-norelax_lc_res_ovm = training_ga(lc_list, bounds, meas, platooninfo, .1, NoRelaxOVM)
-norelax_merge_res_ovm = training_ga(merge_list, bounds, meas, platooninfo, .1, NoRelaxOVM)
-norelax_nolc_res_ovm = training_ga(nolc_list, bounds, meas, platooninfo, .1, NoRelaxOVM)
+kwargs = {'vehicle_class': NoRelaxOVM}
+norelax_lc_res_ovm = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs)
+norelax_merge_res_ovm = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs)
+norelax_nolc_res_ovm = training_ga(nolc_list, bounds, meas, platooninfo, .1, kwargs)
 
 with open('OVMnorelax.pkl', 'wb') as f:
     pickle.dump((norelax_lc_res_ovm, norelax_merge_res_ovm, norelax_nolc_res_ovm),f)
@@ -215,41 +145,11 @@ with open('OVMnorelax.pkl', 'wb') as f:
 Run 7: Try existing Relaxation model due to Schakel, Knoop, van Arem (2012)
 """
 
-
-class SKA_IDM(hc.CalibrationVehicle):
-    """IDM with a relaxation model based on Schakel, Knoop, van Arem (2012).
-
-    In the original paper, they give a full microsimulation model, and the relaxation is integrated in the
-    sense that the 'desire' parameter controls both the gap acceptance as well as the relaxation amount.
-    In this implementation, the relaxation amount is its own parameter, thus it has two relax parameters,
-    the first being the desire which controls the relaxation amount, and the second being the relaxation time.
-    """
-    def initialize(self, parameters):
-        super().initialize(parameters)
-        self.cf_parameters = parameters[:-2].copy()
-        self.relax_parameters = parameters[-2:].copy()
-        self.relax_end = math.inf
-        self.max_relax = parameters[1]
-
-    def set_relax(self, relaxamounts, timeind, dt):
-        # in_relax is always False, we implement the relaxation by changing the time headway
-        # (cf_parameter[1]) appropriately
-        self.relax_start = 'r'  # give special value 'r' in case we need to be adjusting the time headway
-        temp = dt/self.relax_parameters[1]
-        self.cf_parameters[1] = (self.relax_parameters[0] - self.max_relax*temp)/(1-temp)  # handle first
-        # relaxation value correctly (because it will be updated once before being used)
-
-    def update(self, timeind, dt):
-        super().update(timeind, dt)
-
-        if self.relax_start == 'r':
-            temp = dt/self.relax_parameters[1]
-            self.cf_parameters[1] += (self.max_relax-self.cf_parameters[1])*temp
-
 plist = [[40,1,1,3,10,1, 25], [60,1,1,3,10,1,5], [80,1,15,1,1,1,35], [70,2,10,2,2,2,15]]
 bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.101,75)]
-relax_lc_res_ska = training_ga(lc_list, bounds, meas, platooninfo, .1, SKA_IDM)
-relax_merge_res_ska = training_ga(merge_list, bounds, meas, platooninfo, .1, SKA_IDM)
+kwargs = {'vehicle_class': hm.SKA_IDM}
+relax_lc_res_ska = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
+relax_merge_res_ska = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
 
 with open('SKArelax.pkl', 'wb') as f:
     pickle.dump([relax_lc_res_ska, relax_merge_res_ska],f)
@@ -257,58 +157,10 @@ with open('SKArelax.pkl', 'wb') as f:
 """
 2 Parameter positive/negative relax IDM
 """
-class Relax2IDM(hc.CalibrationVehicle):
-    """Implements relaxation with 2 seperate parameters for positive/negative relaxation amounts."""
-    def initialize(self, parameters):
-        super().initialize(parameters)
-        self.cf_parameters[:-2]
-        self.relax_parameters = parameters[-2:]
-
-    def set_relax(self, relaxamounts, timeind, dt):
-        """2 parameter positive/negative relaxation."""
-        relaxamount_s, relaxamount_v = relaxamounts
-        # make headway relax
-        rp = self.relax_parameters[0] if relaxamount_s > 0 else self.relax_parameters[1]
-        relaxlen = math.ceil(rp/dt) - 1
-        tempdt = -dt/rp*relaxamount_s
-        temp = [relaxamount_s + tempdt*i for i in range(1,relaxlen+1)]
-        # make velocity relax
-        rp2 = self.relax_parameters[0] if relaxamount_v > 0 else self.relax_parameters[1]
-        relaxlen2 = math.ceil(rp2/dt) - 1
-        tempdt = -dt/rp2*relaxamount_v
-        temp2 = [relaxamount_v + tempdt*i for i in range(1,relaxlen2+1)]
-        if max(relaxlen, relaxlen2) == 0:
-            return
-        # pad relax if necessary
-        if relaxlen < relaxlen2:
-            temp.extend([0]*(relaxlen2-relaxlen))
-            relaxlen = relaxlen2
-        elif relaxlen2 < relaxlen:
-            temp2.extend([0]*(relaxlen-relaxlen2))
-        # rest of code is the same as relax_helper_vhd
-        curr = list(zip(temp, temp2))
-        if self.in_relax:  # add to existing relax
-            # find indexes with overlap - need to combine relax values for those
-            overlap_end = min(self.relax_end, timeind+relaxlen)
-            prevr_indoffset = timeind - self.relax_start+1
-            prevr = self.relax
-            overlap_len = max(overlap_end-timeind, 0)
-            for i in range(overlap_len):
-                curtime = prevr_indoffset+i
-                prevrelax, currelax = prevr[curtime], curr[i]
-                prevr[curtime] = (prevrelax[0]+currelax[0], prevrelax[1]+currelax[1])
-            prevr.extend(curr[overlap_len:])
-            self.relax_end = max(self.relax_end, timeind+relaxlen)
-        else:
-            self.in_relax = True
-            self.relax_start = timeind + 1  # add relax
-            self.relax = curr
-            self.relax_end = timeind + relaxlen
-
-
 bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.1,75),(.1,75)]
-relax_lc_res_2p = training_ga(lc_list, bounds, meas, platooninfo, .1, Relax2IDM)
-relax_merge_res_2p = training_ga(merge_list, bounds, meas, platooninfo, .1, Relax2IDM)
+kwargs = {'vehicle_class': hm.Relax2IDM}
+relax_lc_res_2p = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
+relax_merge_res_2p = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
 
 with open('2pIDM.pkl', 'wb') as f:
     pickle.dump([relax_lc_res_2p, relax_merge_res_2p],f)
@@ -316,49 +168,10 @@ with open('2pIDM.pkl', 'wb') as f:
 """
 2 parameter shape/time relax IDM
 """
-
-class RelaxShapeIDM(hc.CalibrationVehicle):
-    """Implements 2 parameter relaxation where the second parameter controls the shape."""
-    def initialize(self, parameters):
-        super().initialize(parameters)
-        self.cf_parameters[:-2]
-        self.relax_parameters = parameters[-2:]
-
-    def set_relax(self, relaxamounts, timeind, dt):
-        relaxamount_s, relaxamount_v = relaxamounts
-        # parametrized by class of monotonically decreasing second order polynomials
-        rp = self.relax_parameters[0]
-        p = self.relax_parameters[-1]
-        p1 = -p-1
-        tempdt = dt/rp
-        relaxlen = math.ceil(rp/dt) - 1
-        if relaxlen == 0:
-            return
-        temp = [relaxamount_s*(p*(i*tempdt)**2+p1*i*tempdt+1) for i in range(1,relaxlen+1)]
-        temp2 = [relaxamount_v*(p*(i*tempdt)**2+p1*i*tempdt+1) for i in range(1,relaxlen+1)]
-        # rest of code is the same as relax_helper_vhd
-        curr = list(zip(temp, temp2))
-        if self.in_relax:  # add to existing relax
-            # find indexes with overlap - need to combine relax values for those
-            overlap_end = min(self.relax_end, timeind+relaxlen)
-            prevr_indoffset = timeind - self.relax_start+1
-            prevr = self.relax
-            overlap_len = max(overlap_end-timeind, 0)
-            for i in range(overlap_len):
-                curtime = prevr_indoffset+i
-                prevrelax, currelax = prevr[curtime], curr[i]
-                prevr[curtime] = (prevrelax[0]+currelax[0], prevrelax[1]+currelax[1])
-            prevr.extend(curr[overlap_len:])
-            self.relax_end = max(self.relax_end, timeind+relaxlen)
-        else:
-            self.in_relax = True
-            self.relax_start = timeind + 1  # add relax
-            self.relax = curr
-            self.relax_end = timeind + relaxlen
-
 bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.1,75),(-1,1)]
-relax_lc_res_2ps = training_ga(lc_list, bounds, meas, platooninfo, .1, RelaxShapeIDM)
-relax_merge_res_2ps = training_ga(merge_list, bounds, meas, platooninfo, .1, RelaxShapeIDM)
+kwargs = {'vehicle_class': hm.RelaxShapeIDM}
+relax_lc_res_2ps = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
+relax_merge_res_2ps = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
 
 with open('2psIDM.pkl', 'wb') as f:
     pickle.dump([relax_lc_res_2ps, relax_merge_res_2ps],f)
@@ -368,70 +181,10 @@ with open('2psIDM.pkl', 'wb') as f:
 """
 Run 5: Newell with no accident free
 """
-class NewellCalibrationVehicle(hc.CalibrationVehicle):
-    """Implementation of Newell model in Differential form, example of 1st order ODE implementation."""
-    def cf_model(self, p, state):
-        """p = parameters, state = headway"""
-        return (state - p[1])/p[0]
-
-    def get_cf(self, hd, lead, curlane, timeind, dt, userelax):
-        if lead is None:
-            acc = curlane.call_downstream(self, timeind, dt)
-
-        else:
-            if self.in_relax:
-                currelax = self.relax[timeind - self.relax_start]
-                spd = self.cf_model(self.cf_parameters, hd+currelax)
-            else:
-                spd = self.cf_model(self.cf_parameters, hd)
-        return spd
-
-    def set_cf(self, timeind, dt):
-        self.speed = self.get_cf(self.hd, self.lead, self.lane, timeind, dt, self.in_relax)
-
-    def eqlfun(self, p, v):
-        return p[0]*v+p[1]
-
-    def set_relax(self, relaxamounts, timeind, dt):
-        rp = self.relax_parameters
-        if rp is None:
-            return
-        relaxamount_s, relaxamount_v = relaxamounts
-        hs.relax_helper(rp, relaxamount_s, self, timeind, dt)
-
-    def update(self, timeind, dt):
-        # bounds on speed must be applied for 1st order model
-        curspeed = self.speed
-        if curspeed < 0:
-            curspeed = 0
-        elif curspeed > self.maxspeed:
-            curspeed = self.maxspeed
-        # update state
-        self.pos += curspeed*dt
-        self.speed = curspeed
-        # update memory
-        self.posmem.append(self.pos)
-        self.speedmem.append(self.speed)
-        if self.in_relax:
-            if timeind == self.relax_end:
-                self.in_relax = False
-                self.relaxmem.append((self.relax_start, self.relax))
-
-        if self.in_leadveh:  # only difference is we update the LeadVehicle if applicable
-            self.leadveh.update(timeind+1)
-
-
-    def initialize(self, parameters):
-        super().initialize(parameters)  # before the first cf call, the speed is initialized as initspd.
-        # this handles the edge case for if a vehicle tries to access the speed before the first cf call.
-        # after the first cf call, in this case the speed will simply be the speed from the previous timestep
-        self.speedmem = []  # note that speedmem will be 1 len shorter than posmem for a 1st order model
-        self.maxspeed = parameters[2]
-
-
 bounds = [(.1,10),(0,100),(40,120),(.1,75)]
-relax_lc_res_newell = training_ga(lc_list, bounds, meas, platooninfo, .1, NewellCalibrationVehicle)
-relax_merge_res_newell = training_ga(merge_list, bounds, meas, platooninfo, .1, NewellCalibrationVehicle)
+kwargs = {'vehicle_class': hm.NewellCalibrationVehicle}
+relax_lc_res_newell = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
+relax_merge_res_newell = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
 
 with open('Newellrelax.pkl','wb') as f:
     pickle.dump([relax_lc_res_newell, relax_merge_res_newell], f)
@@ -440,24 +193,33 @@ with open('Newellrelax.pkl','wb') as f:
 """
 Run 6: Like Run 5, but with no relax
 """
-class NoRelaxNewell(NewellCalibrationVehicle):
+class NoRelaxNewell(hm.NewellCalibrationVehicle):
     def set_relax(self, *args):
         pass
 
     def initialize(self, parameters):
         super().initialize(parameters)
         self.cf_parameters = parameters
-        self.relax_parameters = None
 
 bounds = [(.1,10),(0,100),(40,120)]
-norelax_lc_res_newell = training_ga(lc_list, bounds, meas, platooninfo, .1, NoRelaxNewell)
-norelax_merge_res_newell = training_ga(merge_list, bounds, meas, platooninfo, .1, NoRelaxNewell)
-norelax_nolc_res_newell = training_ga(nolc_list, bounds, meas, platooninfo, .1, NoRelaxNewell)
+kwargs = {'vehicle_class': NoRelaxNewell}
+norelax_lc_res_newell = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs = kwargs)
+norelax_merge_res_newell = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs = kwargs)
+norelax_nolc_res_newell = training_ga(nolc_list, bounds, meas, platooninfo, .1, kwargs = kwargs)
 
 with open('Newellnorelax.pkl','wb') as f:
     pickle.dump([norelax_lc_res_newell, norelax_merge_res_newell, norelax_nolc_res_newell], f)
 
 
 #%%
+"""
+LL Relaxation Model
+"""
+mybounds = [(1,100),(1,30),(40,120),(1, 20)]
+kwargs = {'vehicle_class': hm.NewellLL, 'event_maker':hm.make_ll_lc_event, 'lc_event_fun':hm.ll_lc_event}
+relax_lc_res_ll = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
+relax_merge_res_ll = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
 
+with open('NewellLL.pkl', 'wb') as f:
+    pickle.dump([relax_lc_res_ll, relax_merge_res_ll], f)
 
