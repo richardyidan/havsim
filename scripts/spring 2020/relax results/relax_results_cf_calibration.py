@@ -222,3 +222,14 @@ relax_merge_res_ll = training_ga(merge_list, bounds, meas, platooninfo, .1, kwar
 with open('NewellLL.pkl', 'wb') as f:
     pickle.dump([relax_lc_res_ll, relax_merge_res_ll], f)
 
+#%%
+"""
+Exponential Relaxation
+"""
+bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
+kwargs = {'vehicle_class': hm.RelaxExpIDM}
+relax_lc_res_exp = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
+relax_merge_res_exp = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
+
+with open('ExpIDM.pkl', 'wb') as f:
+    pickle.dump([relax_lc_res_exp, relax_merge_res_exp], f)
