@@ -223,6 +223,54 @@ class Relax2IDM(hc.CalibrationVehicle):
             self.relax = curr
             self.relax_end = timeind + relaxlen
 
+class Relax2vhdIDM(hc.CalibrationVehicle):
+    """Implements relaxation with 2 seperate parameters for headway/velocity relaxation amounts."""
+    def initialize(self, parameters):
+        super().initialize(parameters)
+        self.cf_parameters[:-2]
+        self.relax_parameters = parameters[-2:]
+
+    def set_relax(self, relaxamounts, timeind, dt):
+        """2 parameter positive/negative relaxation."""
+        relaxamount_s, relaxamount_v = relaxamounts
+        # make headway relax
+        rp = self.relax_parameters[0]
+        relaxlen = math.ceil(rp/dt) - 1
+        tempdt = -dt/rp*relaxamount_s
+        temp = [relaxamount_s + tempdt*i for i in range(1,relaxlen+1)]
+        # make velocity relax
+        rp2 = self.relax_parameters[1]
+        relaxlen2 = math.ceil(rp2/dt) - 1
+        tempdt = -dt/rp2*relaxamount_v
+        temp2 = [relaxamount_v + tempdt*i for i in range(1,relaxlen2+1)]
+        if max(relaxlen, relaxlen2) == 0:
+            return
+        # pad relax if necessary
+        if relaxlen < relaxlen2:
+            temp.extend([0]*(relaxlen2-relaxlen))
+            relaxlen = relaxlen2
+        elif relaxlen2 < relaxlen:
+            temp2.extend([0]*(relaxlen-relaxlen2))
+        # rest of code is the same as relax_helper_vhd
+        curr = list(zip(temp, temp2))
+        if self.in_relax:  # add to existing relax
+            # find indexes with overlap - need to combine relax values for those
+            overlap_end = min(self.relax_end, timeind+relaxlen)
+            prevr_indoffset = timeind - self.relax_start+1
+            prevr = self.relax
+            overlap_len = max(overlap_end-timeind, 0)
+            for i in range(overlap_len):
+                curtime = prevr_indoffset+i
+                prevrelax, currelax = prevr[curtime], curr[i]
+                prevr[curtime] = (prevrelax[0]+currelax[0], prevrelax[1]+currelax[1])
+            prevr.extend(curr[overlap_len:])
+            self.relax_end = max(self.relax_end, timeind+relaxlen)
+        else:
+            self.in_relax = True
+            self.relax_start = timeind + 1  # add relax
+            self.relax = curr
+            self.relax_end = timeind + relaxlen
+
 
 class RelaxShapeIDM(hc.CalibrationVehicle):
     """Implements 2 parameter relaxation where the second parameter controls the shape."""

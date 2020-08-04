@@ -68,6 +68,30 @@ def training(plist, veh_id_list, bounds, meas, platooninfo, dt, vehicle_object, 
     return out
 
 
+class NoRelaxIDM(hc.CalibrationVehicle):
+    def set_relax(self, *args):
+        pass
+
+    def initialize(self, parameters):  # just need to set parameters correctly
+        super().initialize(parameters)
+        self.cf_parameters = parameters
+
+class NoRelaxOVM(hm.OVMCalibrationVehicle):
+    def set_relax(self, *args):
+        pass
+
+    def initialize(self, parameters):
+        super().initialize(parameters)
+        self.cf_parameters = parameters
+
+class NoRelaxNewell(hm.NewellCalibrationVehicle):
+    def set_relax(self, *args):
+        pass
+
+    def initialize(self, parameters):
+        super().initialize(parameters)
+        self.cf_parameters = parameters
+
 #%%  # updated, but not tested, after the 'refactored calibration + added calibration_models' commit
 """Used GA + ballistic update for paper results. Using euler update is probably better in terms of mse.
 Can use BFGS instead of GA, which is significantly faster, but can have problems with local minima."""
@@ -85,15 +109,6 @@ with open('IDMrelax.pkl','wb') as f:
 # """
 # Run 2: Like Run 1, but with relax disabled. (for all vehicles)
 # """
-# #subclass calibrationvehicle as necessary
-# class NoRelaxIDM(hc.CalibrationVehicle):
-#     def set_relax(self, *args):
-#         pass
-
-#     def initialize(self, parameters):  # just need to set parameters correctly
-#         super().initialize(parameters)
-#         self.cf_parameters = parameters
-
 # plist = [[40,1,1,3,10], [60,1,1,3,10], [80,1,15,1,1], [70,2,10,2,2]]
 # bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20)]
 # kwargs = {'vehicle_class': NoRelaxIDM}
@@ -121,14 +136,6 @@ with open('OVMrelax.pkl', 'wb') as f:
 # """
 # Run 4: Like Run 3, but with relax disabled. (for all vehicles)
 # """
-# class NoRelaxOVM(hm.OVMCalibrationVehicle):
-#     def set_relax(self, *args):
-#         pass
-
-#     def initialize(self, parameters):
-#         super().initialize(parameters)
-#         self.cf_parameters = parameters
-
 # plist = [[10*3.3,.086/3.3, 1.545, 2, .175], [20*3.3,.086/3.3/2, 1.545, .5, .175 ],
 #          [10*3.3,.086/3.3/2, .5, .5, .175 ], [25,.05, 1,3, 1]]
 # bounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3)]
@@ -192,14 +199,6 @@ with open('Newellrelax.pkl','wb') as f:
 """
 Run 6: Like Run 5, but with no relax
 """
-class NoRelaxNewell(hm.NewellCalibrationVehicle):
-    def set_relax(self, *args):
-        pass
-
-    def initialize(self, parameters):
-        super().initialize(parameters)
-        self.cf_parameters = parameters
-
 bounds = [(.1,10),(0,100),(40,120)]
 kwargs = {'vehicle_class': NoRelaxNewell}
 norelax_lc_res_newell = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs = kwargs)
@@ -233,3 +232,14 @@ relax_merge_res_exp = training_ga(merge_list, bounds, meas, platooninfo, .1, kwa
 
 with open('ExpIDM.pkl', 'wb') as f:
     pickle.dump([relax_lc_res_exp, relax_merge_res_exp], f)
+
+#%%
+"""
+"""
+bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.1,75),(.1,75)]
+kwargs = {'vehicle_class': hm.Relax2vhdIDM}
+relax_lc_res_2p = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
+relax_merge_res_2p = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
+
+with open('2pvhdIDM.pkl', 'wb') as f:
+    pickle.dump([relax_lc_res_2p, relax_merge_res_2p],f)
