@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 import havsim.simulation.calibration_models as hm
 import math
 
-use_model = 'LL'   # change to one of IDM, OVM, Newell
-platoonlist = [[lc_list[i]] for i in [216, 217, 218, 219, 220]]  # test vehicle to calibrate
+use_model = '2vhdIDM'   # change to one of IDM, OVM, Newell
+platoonlist = [[lc_list[i]] for i in [255]]  # test vehicle to calibrate
 use_method = 'GA' # GA or BFGS
 if __name__ == '__main__':
     for curplatoon in platoonlist:
@@ -37,6 +37,10 @@ if __name__ == '__main__':
             pguess =  [40,1,1,3,10,25,25]
             mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75), (.1, 75)]
             cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hm.Relax2IDM)
+        elif use_model == '2vhdIDM':
+            pguess =  [40,1,1,3,10,25,25]
+            mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75), (.1, 75)]
+            cal = hc.make_calibration(curplatoon, meas, platooninfo, .1, hm.Relax2vhdIDM)
         elif use_model == 'ShapeIDM':
             pguess =  [80,1,15,1,1,35, -.5] #[40,1,1,3,10,25,.5]
             mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75), (-1,1)]
