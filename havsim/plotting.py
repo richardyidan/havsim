@@ -928,15 +928,21 @@ def plotflows(meas, spacea, timea, agg, type='FD', FDagg=None, lane = None, meth
 
     for i in range(len(intervals)):
         time_sequence_for_line.append(intervals[i][0])
-    unzipped_q = []
-    for i in q:
-        unzipped_q += i
-    unzipped_k = []
-    for i in k:
-        unzipped_k += i
+    # unzipped_q = []
+    # for i in q:
+    #     unzipped_q += i
+    # unzipped_k = []
+    # for i in k:
+    #     unzipped_k += i
 
     if type == 'FD':
-        plt.scatter(unzipped_k, unzipped_q, c=time_sequence, cmap=cm.get_cmap('viridis'))
+        marker_list = ['o', 'x']
+        #different marker types
+        for count, curq in enumerate(q):
+            curmarker = marker_list[count]
+            curk = k[count]
+            plt.scatter(curk, curq, c=time_sequence_for_line, cmap=cm.get_cmap('viridis'), marker = curmarker)
+        # plt.scatter(unzipped_k, unzipped_q, c=time_sequence, cmap=cm.get_cmap('viridis'))
         plt.colorbar()
         plt.xlabel("density")
         plt.ylabel("flow")

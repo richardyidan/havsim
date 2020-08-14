@@ -337,7 +337,11 @@ def makerinfo(platoons, platooninfo, sim, leadinfo, relaxtype = 'both',mergertyp
                 #####relax constant calculation
                 newt_nstar = platooninfo[newlead][0]
                 oldt_nstar = platooninfo[oldlead][0]
-                olds = sim[oldlead][t_n+j-1-oldt_nstar,2] - sim[oldlead][0,6] - sim[i][t_n+j-1-t_nstar,2] #the time is t_n+j-1; this is the headway
+                try:
+                    olds = sim[oldlead][t_n+j-oldt_nstar,2] - sim[oldlead][0,6] - sim[i][t_n+j-t_nstar,2] #the time is t_n+j-1; this is the headway
+                except:
+                    olds = sim[oldlead][t_n+j-1-oldt_nstar,2] - sim[oldlead][0,6] - sim[i][t_n+j-t_nstar,2] + .1*sim[oldlead][t_n+j-1-oldt_nstar,3]
+
                 news = sim[newlead][t_n+j-newt_nstar,2] - sim[newlead][0,6] - sim[i][t_n+j-t_nstar,2] #the time is t_n+j
                 ########
 
