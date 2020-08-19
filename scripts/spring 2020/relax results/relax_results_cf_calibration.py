@@ -148,18 +148,18 @@ with open('OVMrelax.pkl', 'wb') as f:
 #     pickle.dump((norelax_lc_res_ovm, norelax_merge_res_ovm, norelax_nolc_res_ovm),f)
 
 
-# """
-# Run 7: Try existing Relaxation model due to Schakel, Knoop, van Arem (2012)
-# """
+"""
+Run 7: Try existing Relaxation model due to Schakel, Knoop, van Arem (2012)
+"""
 
-# plist = [[40,1,1,3,10,1, 25], [60,1,1,3,10,1,5], [80,1,15,1,1,1,35], [70,2,10,2,2,2,15]]
-# bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.101,75)]
-# kwargs = {'vehicle_class': hm.SKA_IDM}
-# relax_lc_res_ska = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
-# relax_merge_res_ska = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
+plist = [[40,1,1,3,10,1, 25], [60,1,1,3,10,1,5], [80,1,15,1,1,1,35], [70,2,10,2,2,2,15]]
+bounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,5),(.101,75)]
+kwargs = {'vehicle_class': hm.SKA_IDM}
+relax_lc_res_ska = training_ga(lc_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
+relax_merge_res_ska = training_ga(merge_list, bounds, meas, platooninfo, .1, kwargs= kwargs)
 
-# with open('SKArelax.pkl', 'wb') as f:
-#     pickle.dump([relax_lc_res_ska, relax_merge_res_ska],f)
+with open('SKArelax.pkl', 'wb') as f:
+    pickle.dump([relax_lc_res_ska, relax_merge_res_ska],f)
 
 """
 2 Parameter positive/negative relax IDM
