@@ -76,16 +76,16 @@ plt.plot(relax_t2, relax_v2, 'C1')
 
 plt.subplot(1,2,2)
 def baseline_2_order(t):
-    return -1.76*math.exp(-.4*t) + .66*math.exp(-.15*t)
+    return -1.632*math.exp(-.4*t) + .612*math.exp(-.15*t)
 pre_t = np.linspace(-5,0,npts)
 pre_v = (0,)*npts
 baseline_t = np.linspace(0,40,40*npts)
 baseline_a = [baseline_2_order(t) for t in baseline_t]
 def relax_2_order(t):
-    return .29333*math.exp(-.4*t)-.293332*math.exp(-.15*t)
+    return .272*math.exp(-.4*t)-.272*math.exp(-.15*t)
 
 def relax_2_order2(t):
-    return -118.046*math.exp(-.4*t) + 2.48973*math.exp(-.15*t)
+    return -109.461*math.exp(-.4*t) + 2.30866*math.exp(-.15*t)
 relax_t1 = np.linspace(0,15,15*npts)
 relax_v1 = [relax_2_order(t) for t in relax_t1]
 relax_t2 = np.linspace(15,40,25*npts)

@@ -43,7 +43,7 @@ mybounds = [(20,120),(.001,.1),(.1,2),(.1,5),(0,3), (.1,75)] #less conservative 
 
 
 # pguess =  [40,1,1,3,10,25] #IDM
-mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
+# mybounds = [(20,120),(.1,5),(.1,35),(.1,20),(.1,20),(.1,75)]
 
 #pguess =  [24,1,1,3,15] #IDM
 #mybounds = [(20,120),(.1,5),(.1,25),(.1,20),(.1,20)]
@@ -61,7 +61,7 @@ args = (True,6)
 #curplatoon = [[],995,998,1013,1023] #995 good for testing lane changing #1003 1014 was original pair we used for testing where 1014 was the follower
 #curplatoon = [[],581, 611]
 # curplatoon = [381.0, 391.0, 335.0, 326.0, 334.0]
-curplatoon = [767]
+curplatoon = [1602]
 #curplatoon = [335, 326]
 #curplatoon = platoonlist[17]
 n = len(curplatoon)
@@ -109,16 +109,19 @@ print(acc2)
 
 #############test calibration#####################
 
-# start = time.time()
+start = time.time()
 # bfgs = sc.fmin_l_bfgs_b(platoonobjfn_objder,p,None,(model, modeladjsys, modeladj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo,*args),0,bounds,maxfun=200)
-# end = time.time()
-# bfgstime = end-start
+GA = sc.differential_evolution(platoonobjfn_obj,mybounds,(model, modeladjsys, modeladj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo, *args))
+end = time.time()
+bfgstime = end-start
 
 # ### comparison purposes
 print('time for objective is '+str(objtime))
 t_nstar, t_n, T_nm1 = platooninfo[curplatoon[0]][:3]
-# print('time for calibration is '+str(bfgstime)+' with mse '+str((bfgs[1]/((T_nm1-t_n)*.1))))
+# print('time for calibration is '+str(bfgstime)+' with mse '+str((bfgs[1]/((T_nm1-t_n+1)*.1))))
+print('time for calibration is '+str(bfgstime)+' with mse '+str(GA['fun']/((T_nm1-t_n+1)*.1)))
 plt.plot(sim[curplatoon[0]][t_n-t_nstar:T_nm1+1-t_nstar,3])
+plt.plot(meas[curplatoon[0]][t_n-t_nstar:T_nm1+1-t_nstar,3])
 
 start = time.time()
 #sqp = SQP2(platoonobjfn_obj,platoonobjfn_objder, platoonobjfn_der,p,bounds,nmbacktrack,(OVM, OVMadjsys, OVMadj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo,False,5), maxit = 200, t=2, eps=5e-7)

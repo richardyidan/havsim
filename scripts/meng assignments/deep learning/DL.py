@@ -92,9 +92,9 @@ def normalization_input(xinput, maxheadway, maxvelocity, statemem):
 
 #
 #comment out and replace with path to pickle files on your computer
-path_reconngsim = '/Users/nathanbala/Desktop/meng_project/data/reconngsim.pkl'
+# path_reconngsim = '/Users/nathanbala/Desktop/meng_project/data/reconngsim.pkl'
 path_highd26 = '/Users/nathanbala/Desktop/meng_project/data/highd26.pkl'
-# path_reconngsim = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/reconngsim.pkl'
+path_reconngsim = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/reconngsim.pkl'
 # path_highd26 = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/highd26.pkl'
 
 # reconstructed ngsim data
@@ -108,7 +108,7 @@ meas, platooninfo = makeplatoonlist(data,1, False)
 
 
 #shows if we want to use our normal neural network (normal), predict an extra value(extra), or utilize an RNN (RNN)
-mode = "RNN"
+mode = "extra"
 
 #%% first step is to prepare training/test data
 #
@@ -135,7 +135,7 @@ for count, i in enumerate(meas.keys()):
 
     if T_nm1 - t_n ==0:
         continue
-    if len(platooninfo[i][4]) == 1:
+    if len(platooninfo[i][4]) > 1:
         continue
     lead = np.zeros((T_nm1 - t_n+1,3)) #columns are position, speed, length
     for j in leadinfo[0]:
@@ -452,7 +452,7 @@ for epoch in range(5):
 
 model.load_weights('extraq_diffarch')
 
-
+#%%
 
 sim = {}
 sim_info = {}
@@ -474,14 +474,51 @@ for count, i in enumerate(meas.keys()):
 
 
 
-with open('extraq_diffarch.pickle', 'wb') as handle:
-   pickle.dump(sim, handle, protocol=pickle.HIGHEST_PROTOCOL)
+# with open('extraq_diffarch.pickle', 'wb') as handle:
+#    pickle.dump(sim, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-with open('extraq_info_diffarch.pickle', 'wb') as handle:
-   pickle.dump(sim_info, handle, protocol=pickle.HIGHEST_PROTOCOL)
+# with open('extraq_info_diffarch.pickle', 'wb') as handle:
+#    pickle.dump(sim_info, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-# with open('sim_info_relax.pickle', 'rb') as handle:
-#     sim_info = pickle.load(handle)
-#
-# with open('sim_relax.pickle', 'rb') as handle:
-#     sim = pickle.load(handle)
+with open('sim_info_relax.pickle', 'rb') as handle:
+    sim_info = pickle.load(handle)
+
+with open('sim_relax.pickle', 'rb') as handle:
+    sim = pickle.load(handle)
+
+
+#%%
+# with open('extraq_diffarch/extraq_info_diffarch.pickle', 'rb') as f:  #26.03
+#     sim_info = pickle.load(f)
+
+# with open('LSTM_dense/LSTM_info_dense.pickle', 'rb') as f:  #25.51
+#     sim_info = pickle.load(f)
+
+# with open('LSTM_testing2/ngsim3_info_5LSTM2.pickle', 'rb') as f:  #23.82
+#     sim_info = pickle.load(f)
+
+# with open('ngsim3_5extra_val2/ngsim3_info_5extra_val2.pickle', 'rb') as f:  #23.25
+#     sim_info = pickle.load(f)
+
+# with open('ngsim3_5extravalRNN/ngsim3_info_5extravalRNN.pickle', 'rb') as f:  #26.68
+#     sim_info = pickle.load(f)
+
+# with open('ngsim3_7_test/ngsim3_info_7_test.pickle', 'rb') as f:  #28.87
+#     sim_info = pickle.load(f)
+
+# with open('ngsim5_nlc100/ngsim5_info_nlc100.pickle', 'rb') as f:  #34.93
+#     sim_info = pickle.load(f)
+
+
+print(sim_info['note'])
+out = []
+for veh in meas.keys():
+    if len(platooninfo[veh][4]) == 0:
+        continue
+    try:
+        out.append(float(sim_info[veh][0]))
+    except:
+        print('wrong dataset')
+        break
+print('average rmse is '+str(np.mean(out)))
+

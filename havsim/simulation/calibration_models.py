@@ -136,7 +136,7 @@ class SKA_IDM(hc.CalibrationVehicle):
         self.relax_start = 'r'  # give special value 'r' in case we need to be adjusting the time headway
         temp = dt/self.relax_parameters[1]
         self.cf_parameters[1] = (self.relax_parameters[0] - self.max_relax*temp)/(1-temp)  # handle first
-        if self.cf_parameters[1] > self.max_relax: # don't apply relaxation for larger changes
+        if self.relax_parameters[0] >= self.max_relax: # don't apply relaxation for larger changes
             self.cf_parameters[1] = self.max_relax
             self.relax_start = None
         # relaxation value correctly (because it will be updated once before being used)

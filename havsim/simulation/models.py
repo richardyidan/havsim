@@ -13,7 +13,7 @@ def IDM(p, state):
 
     Args:
         p: parameters - [max speed, comfortable time headway, jam spacing, comfortable acceleration,
-                         emergency acceleration]
+                         comfortable deceleration]
         state: list of [headway, self velocity, leader velocity]
 
     Returns:
