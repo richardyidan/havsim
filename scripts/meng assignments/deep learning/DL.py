@@ -90,25 +90,28 @@ def normalization_input(xinput, maxheadway, maxvelocity, statemem):
             xinput[:,statemem*2:statemem*3] = xinput[:,statemem*2:statemem*3]/maxheadway
     return xinput
 
-#
-#comment out and replace with path to pickle files on your computer
-# path_reconngsim = '/Users/nathanbala/Desktop/meng_project/data/reconngsim.pkl'
-path_highd26 = '/Users/nathanbala/Desktop/meng_project/data/highd26.pkl'
-path_reconngsim = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/reconngsim.pkl'
-# path_highd26 = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/highd26.pkl'
 
-# reconstructed ngsim data
-with open(path_reconngsim, 'rb') as f:
-    data = pickle.load(f)[0]
-# highd data
-# with open(path_highd26, 'rb') as f:
-#   data = pickle.load(f)[0]
+mode = "RNN"
+#%%
+# #
+# #comment out and replace with path to pickle files on your computer
+# # path_reconngsim = '/Users/nathanbala/Desktop/meng_project/data/reconngsim.pkl'
+# path_highd26 = '/Users/nathanbala/Desktop/meng_project/data/highd26.pkl'
+# path_reconngsim = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/reconngsim.pkl'
+# # path_highd26 = 'C:/Users/rlk268/OneDrive - Cornell University/important misc/pickle files/meng/highd26.pkl'
 
-meas, platooninfo = makeplatoonlist(data,1, False)
+# # reconstructed ngsim data
+# with open(path_reconngsim, 'rb') as f:
+#     data = pickle.load(f)[0]
+# # highd data
+# # with open(path_highd26, 'rb') as f:
+# #   data = pickle.load(f)[0]
+
+# meas, platooninfo = makeplatoonlist(data,1, False)
 
 
-#shows if we want to use our normal neural network (normal), predict an extra value(extra), or utilize an RNN (RNN)
-mode = "extra"
+# #shows if we want to use our normal neural network (normal), predict an extra value(extra), or utilize an RNN (RNN)
+
 
 #%% first step is to prepare training/test data
 #
@@ -231,11 +234,18 @@ class Model(tf.keras.Model):
         # x = self.hidden3(x)
         # fin = self.out(x)
         # return (fin)
-        if mode == "RNN":
+        
+        # if mode == "RNN":
+        #     x = self.lstm(x)
+        #     x = self.hidden4(x)
+        #     x = self.hidden5(x)
+        #     return self.out(x)
+        if mode == 'RNN':  # extra loss fn
             x = self.lstm(x)
             x = self.hidden4(x)
             x = self.hidden5(x)
-            return self.out(x)
+            flat = self.flatten(x)
+            return self.out(flat), self.out2(flat)
 
 
         if mode == "extra":
@@ -263,6 +273,17 @@ class Model(tf.keras.Model):
             return self.out(flat)
 
 model = Model()
+
+#disable gpu 
+try:
+    # Disable all GPUS
+    tf.config.set_visible_devices([], 'GPU')
+    visible_devices = tf.config.get_visible_devices()
+    for device in visible_devices:
+        assert device.device_type != 'GPU'
+except:
+    # Invalid device or cannot modify virtual devices once initialized.
+    pass
 
 #%% Set up training
 #x = input, y = output, yhat = labels (true values)
@@ -457,7 +478,8 @@ model.load_weights('extraq_diffarch')
 sim = {}
 sim_info = {}
 # RMSE calculationg
-for count, i in enumerate(meas.keys()):
+# for count, i in enumerate(meas.keys()):
+for count, i in enumerate([882]):
     print(i)
     pred_traj, acc_traj, rmse, vec_meas = predict_trajectory(model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, True)
 
@@ -472,7 +494,7 @@ for count, i in enumerate(meas.keys()):
     print(rmse)
 
 
-
+#%%
 
 # with open('extraq_diffarch.pickle', 'wb') as handle:
 #    pickle.dump(sim, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -497,8 +519,8 @@ with open('sim_relax.pickle', 'rb') as handle:
 # with open('LSTM_testing2/ngsim3_info_5LSTM2.pickle', 'rb') as f:  #23.82
 #     sim_info = pickle.load(f)
 
-# with open('ngsim3_5extra_val2/ngsim3_info_5extra_val2.pickle', 'rb') as f:  #23.25
-#     sim_info = pickle.load(f)
+with open('ngsim3_5extra_val2/ngsim3_info_5extra_val2.pickle', 'rb') as f:  #23.25
+    sim_info = pickle.load(f)
 
 # with open('ngsim3_5extravalRNN/ngsim3_info_5extravalRNN.pickle', 'rb') as f:  #26.68
 #     sim_info = pickle.load(f)
