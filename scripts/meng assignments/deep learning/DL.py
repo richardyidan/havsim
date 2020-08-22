@@ -14,7 +14,7 @@ from havsim.calibration.algs import makeplatoonlist
 import havsim
 import random
 
-def create_RNN_input(currx, vspeed=False):
+def create_RNN_input(currx, vspeed=True):
     rnn_input = []
     if vspeed == False:
         leadv = currx[:statemem]
@@ -35,7 +35,7 @@ def create_RNN_input(currx, vspeed=False):
 
 
 
-def create_input(statemem, j, lead, headway, curmeas, vspeed = False, predict="speed"):
+def create_input(statemem, j, lead, headway, curmeas, vspeed = True, predict="speed"):
     if vspeed == False:
         if j+1 < statemem:
             leadv = np.append(np.tile(lead[0,1],statemem-j-1),lead[:j+1,1])
@@ -91,7 +91,11 @@ def normalization_input(xinput, maxheadway, maxvelocity, statemem):
     return xinput
 
 
-mode = "RNN"
+mode = "extra"  # also can change - vspeed, statemem, learning rate, regularization
+#define how the state should look
+statemem = 5
+optimizer = tf.keras.optimizers.RMSprop(learning_rate=2e-5)
+batch_sz = 32
 #%%
 # #
 # #comment out and replace with path to pickle files on your computer
@@ -118,15 +122,14 @@ mode = "RNN"
 
 #out of all vehicles, we assign them randomly to either train or test
 train_or_test = np.random.rand(len(meas.keys()))
-train_or_test = train_or_test<.85 #15% of vehicles goes to test rest to train
+train_or_test = train_or_test<.99 #15% of vehicles goes to test rest to train
 
 #need to normalize the input data - speeds and headways
 #also need to get the headway from the data
 maxvelocity = 0
 #get headways for all vehicles
 maxheadway = 0
-#define how the state should look
-statemem = 5
+
 
 maxcurrvelocity = 0
 
@@ -201,10 +204,10 @@ xtest = normalization_input(xtest, maxheadway, maxvelocity, statemem)
 xtrain, ytrain, ytrain1, xtest, ytest, ytest1 = tf.convert_to_tensor(xtrain,tf.float32), tf.convert_to_tensor(ytrain,tf.float32), tf.convert_to_tensor(ytrain1,tf.float32), tf.convert_to_tensor(xtest,tf.float32), tf.convert_to_tensor(ytest,tf.float32), tf.convert_to_tensor(ytest1,tf.float32)
 
 train_ds = tf.data.Dataset.from_tensor_slices(
-        (xtrain,ytrain,ytrain1)).shuffle(100000).batch(32)
+        (xtrain,ytrain,ytrain1)).shuffle(100000).batch(batch_sz)
 
 test_ds = tf.data.Dataset.from_tensor_slices(
-        (xtest,ytest,ytest1)).shuffle(100000).batch(32)
+        (xtest,ytest,ytest1)).shuffle(100000).batch(batch_sz)
 #%%
 class Model(tf.keras.Model):
     def __init__(self):
@@ -212,11 +215,11 @@ class Model(tf.keras.Model):
         self.conv1 = kls.Conv1D(32, 3, activation='relu', input_shape=(5, 1))
         self.conv2 = kls.Conv1D(32, 3, activation='relu', input_shape=(5, 1))
         self.conv3 = kls.Conv1D(32, 3, activation='relu', input_shape=(5, 1))
-        self.hidden1 = kls.Dense(64, activation = 'relu', kernel_regularizer = tf.keras.regularizers.l2(l=.14))
+        self.hidden1 = kls.Dense(64, activation = 'relu', kernel_regularizer = tf.keras.regularizers.l2(l=.14)) #.14  #64
         self.hidden2 = kls.Dense(64,activation = 'relu', kernel_regularizer = tf.keras.regularizers.l2(l=.14))
         self.hidden3 = kls.Dense(64,activation = 'relu', kernel_regularizer = tf.keras.regularizers.l2(l=.14))
         self.batch = kls.BatchNormalization()
-        self.hidden4 = kls.Dense(32,activation = 'relu', kernel_regularizer = tf.keras.regularizers.l2(l=.14))
+        self.hidden4 = kls.Dense(32,activation = 'relu', kernel_regularizer = tf.keras.regularizers.l2(l=.14))  # 32
         self.hidden5 = kls.Dense(10,activation = 'relu', kernel_regularizer = tf.keras.regularizers.l2(l=.14))
         self.flatten = kls.Flatten()
         self.batch2 = kls.BatchNormalization()
@@ -224,7 +227,7 @@ class Model(tf.keras.Model):
         self.out2 = kls.Dense(2, activation='sigmoid')
         # self.out2 = kls.Dense(1)
 
-        self.lstm = kls.LSTM(32, input_shape=(10,3))
+        self.lstm = kls.LSTM(32, input_shape=(5,3))
 
     def call(self,x):
         # x = self.hidden1(x)
@@ -288,8 +291,6 @@ except:
 #%% Set up training
 #x = input, y = output, yhat = labels (true values)
 
-optimizer = tf.keras.optimizers.RMSprop(learning_rate=2e-5)
-
 loss_fn = tf.keras.losses.MeanSquaredError(name='train_test_loss')
 
 loss_fn_2 = tf.keras.losses.BinaryCrossentropy(name="train_test_loss1")
@@ -304,7 +305,7 @@ def mytestmetric(y,yhat):
 
 @tf.function
 def train_step(x,yhat, loss_fn, optimizer):
-    if mode == "extra":
+    if mode == "extra" or mode == 'RNN':
         with tf.GradientTape() as tape:
             y1, y2 = model(x)
             loss = loss_fn[0](y1,yhat[0])
@@ -323,10 +324,12 @@ def train_step(x,yhat, loss_fn, optimizer):
 def test(dataset, minacc, maxacc):
     mse = []
     for x, yhat, yhat1 in dataset:
-        y = model(x)
-        m = mytestmetric(y,yhat)
-        mse.append(m)
-    return (tf.math.reduce_mean(mse)**.5)*(maxacc-minacc)-minacc
+        y, y1 = model(x)
+        # m = mytestmetric(y,yhat)
+        loss = loss_fn(y,yhat)
+        # loss1 = loss_fn_2(y1, yhat1)
+        mse.append(loss)
+    return (tf.math.reduce_mean(mse))*(maxacc-minacc)-minacc
 
 
 
@@ -336,9 +339,9 @@ def create_output2(xtest, minoutput, maxoutput, maxvelocity, maxheadway, headway
 
     #vector to put into NN
     xtest = np.asarray([xtest], np.float32)
-    xtest = normalization_input(xtest, maxheadway, maxvelocity, 5)
+    xtest = normalization_input(xtest, maxheadway, maxvelocity, statemem)
     predicted = model(xtest)
-    if mode == "extra":
+    if mode == "extra" or mode == 'RNN':
         simulated_val = (predicted[0].numpy()[0][0]) * (maxoutput - minoutput) - minoutput
     else:
         simulated_val = (predicted.numpy()[0][0]) * (maxoutput - minoutput) - minoutput
@@ -371,9 +374,9 @@ def create_output2(xtest, minoutput, maxoutput, maxvelocity, maxheadway, headway
 
 
 
-def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutput, minaoutput, maxvelocity, maxheadway, v_speed):
+def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, v_speed):
     #how many samples we should look back
-    statemem = 5
+    # statemem = 10
 
 
 
@@ -412,7 +415,7 @@ def predict_trajectory(model, vehicle_id, input_meas, input_platooninfo, maxoutp
 
     x = curmeas[:,0]
     x_hat = (meas[vehicle_id][t_n-t_nstar:T_nm1+1-t_nstar,2])
-    error = (tf.sqrt(tf.losses.mean_squared_error(x, x_hat)))
+    error = tf.losses.mean_squared_error(x, x_hat)
 
 
     return x, x_hat, error, curmeas
@@ -437,7 +440,7 @@ def generate_random_keys(num, meas, platooninfo):
 # print('before training rmse on test dataset is '+str(tf.cast(m,tf.float32))+' rmse on train dataset is '+str(m2))
 
 #every 4 batches go ahead and check rmse?
-val_ids, nlc_len = generate_random_keys(100, meas, platooninfo)
+val_ids, nlc_len = generate_random_keys(50, meas, platooninfo)
 final_model = model
 previous_error = float("inf")
 break_loop = False
@@ -448,17 +451,20 @@ for epoch in range(5):
     for x, yhat, yhat1 in train_ds:
         i += 1
         if i % 250 == 0:
+            # validate using predicted trajectory 
             error_arr = []
             for vec_id in val_ids:
-                unused, unused, rmse, unused = predict_trajectory(model,vec_id ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, True)
-                error_arr.append(rmse)
+                unused, unused, mse, unused = predict_trajectory(model,vec_id ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, True)
+                error_arr.append(mse)
             curr_error = np.mean(error_arr)
+            # validate using test dataset
+            # curr_error = test(test_ds, minoutput, maxoutput)
             print(previous_error)
             print(curr_error)
             print(curr_error - previous_error)
             if curr_error <= previous_error:
                 previous_error = curr_error
-                model.save_weights('extraq_diffarch')
+                model.save_weights('test2')
             else:
                 break_loop = True
                 break
@@ -471,26 +477,35 @@ for epoch in range(5):
 
 
 
-model.load_weights('extraq_diffarch')
+model.load_weights('test2')
 
 #%%
 
 sim = {}
 sim_info = {}
 # RMSE calculationg
-# for count, i in enumerate(meas.keys()):
-for count, i in enumerate([882]):
+veh_list = meas.keys()
+merge_list = []
+lc_list = []
+nolc_list = []
+for veh in veh_list:
+    t_nstar, t_n = platooninfo[veh][0:2]
+    if t_n > t_nstar and meas[veh][t_n-t_nstar-1,7]==7 and meas[veh][t_n-t_nstar,7]==6:
+        merge_list.append(veh)
+    elif len(platooninfo[veh][4]) > 1:
+        lc_list.append(veh)
+    elif len(platooninfo[veh][4]) == 1:
+        nolc_list.append(veh)
+        
+for count, i in enumerate(nolc_list):
+# for count, i in enumerate([882]):
     print(i)
     pred_traj, acc_traj, rmse, vec_meas = predict_trajectory(model,i ,meas, platooninfo, maxoutput, minoutput, maxvelocity, maxheadway, True)
 
     if vec_meas is None:
         continue
     sim[i] = vec_meas
-    if len(platooninfo[i][4]) == 1:
-        lane_change = False
-    else:
-        lane_change = True
-    sim_info[i] = (rmse, lane_change)
+    sim_info[i] = rmse
     print(rmse)
 
 
