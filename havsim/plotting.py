@@ -1459,7 +1459,7 @@ def compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, dataset, veh_id
     headway = lead[start - t_n:, 2] - dataset[veh_id][start - t_nstar:, 2] - lead[start - t_n:, 6] + relax[start - t_n:]
     return headway
 
-def compute_headway2(veh, data, platooninfo, rp, h =.1):
+def compute_headway2(veh, data, platooninfo, rp = None, h =.1):
     #compute headways from data and platooninfo, possibly adding relaxation if desired
     #different format than compute_headway
 
