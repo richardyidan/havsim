@@ -34,7 +34,8 @@ def make_dataset(meas, platooninfo, h = .1):
         minacc, maxacc = min(minacc, min(vehacc)), max(maxacc, max(vehacc))
         maxheadway = max(max(headway), maxheadway)
         maxspeed = max(max(leadspeed), maxspeed)
-        training[veh] = [IC, [t1,t2], vehpos, leadpos, leadspeed]
+        training[veh] = {'IC':IC, 'times':[t1,t2], 'posmem':vehpos,
+                         'lead posmem':leadpos, 'lead speedmem':leadspeed}
 
     testing = {}
     for veh in test_veh:
@@ -47,7 +48,8 @@ def make_dataset(meas, platooninfo, h = .1):
         leadpos = headway + vehpos
         IC = [meas[veh][t1-t0,2], meas[veh][t1-t0,3]]
 
-        testing[veh] = [IC, [t1,t2], vehpos, leadpos, leadspeed]
+        testing[veh] = {'IC':IC, 'times':[t1,t2], 'posmem':vehpos,
+                        'lead posmem':leadpos, 'lead speedmem':leadspeed}
 
     return training, testing, maxheadway, maxspeed, minacc, maxacc
 
@@ -55,19 +57,79 @@ def make_dataset(meas, platooninfo, h = .1):
 class RNNCFModel(tf.keras.Model):
     def __init__(self, learning_rate = .001):
         super().__init__()
-        self.mask = tf.keras.layers.Masking(mask_value=0)
-        self.lstm_cell1 = tf.keras.layers.LSTMCell(20)
+        self.lstm_cell = tf.keras.layers.LSTMCell(20)
         self.dense1 = tf.keras.layers.Dense(1)
 
-        self.compile(optimizer = tf.keras.optimizers.Adam(learning_rate = learning_rate))
+        self.compile(optimizer = tf.keras.optimizers.Adam(learning_rate = learning_rate),
+                     loss = tf.keras.losses.MeanSquaredError())
 
     def call(self, x):
-        x = self.lstm_cell1(x)
+        lead_inputs, init_state, hidden_states = x
+        cur_lead_inputs = tf.unstack(lead_inputs, axis=)
+        x = self.lstm_cell(x)
         x = self.dense1(x)
         return x
 
-def training_loop(nveh = 20, nt = 5):
+def make_batch(ds, nveh = 20, nt = 5, lstm_units = 20):
+    """Create batch of data to send to model.
+
+    Args:
+        ds - dataset, from make_dataset
+        nveh - number of vehicles in batch
+        nt - number of timesteps in batch
+        lstm_units - number of LSTM units in model
+    Returns:
+        lead_inputs: nested python list with shape (nveh, nt, 2), giving the leader position and speed at
+            each timestep. Padded with zeros
+        true_traj: nested python list with shape (nveh, nt) giving the true vehicle position at each time.
+            Padded with zeros
+        loss_weights: nested python list with shape (nveh, nt) with either 1 or 0, used to weight each sample
+            of the loss function. If 0, it means the input at the corresponding index doesn't contribute
+            to the loss.
+        init_state: nested python list with shape (nveh, 2) giving the vehicle position and speed at the
+            starting timestep.
+        hidden_states: list of the two hidden states, each hidden state has shape of (nveh, lstm_units).
+            Initialized as all zeros for the first timestep.
+    """
     # select vehicles to put in the batch
+    vehlist = list(ds.keys())
+    np.random.shuffle(vehlist)
+    vehs = vehlist[:nveh]
+    # stores current time index, maximum time index (length - 1) for each vehicle
+    vehs_counter = {veh: (0, ds[veh]['IC'][1]-ds[veh]['IC'][0]) for veh in vehs}
+
+    lead_inputs = []
+    true_traj = []
+    loss_weights = []
+    for veh in vehs:
+        t0, tmax = vehs_counter[veh]
+        leadpos, leadspeed = ds[veh]['lead posmem'], ds[veh]['lead speedmem']
+        posmem = ds[veh]['posmem']
+        curlead = []
+        curtraj = []
+        curweights = []
+        for i in range(nt):
+            if t0+i < tmax:
+                curlead.append([leadpos[t0+i], leadspeed[t0+i]])
+                curtraj.append(posmem[t0+i])
+                curweights.append(1)
+            else:
+                curlead.append([0,0])
+                curtraj.append(0)
+                curweights.append(0)
+        lead_inputs.append(curlead)
+        true_traj.append(curtraj)
+
+    init_state = [ds[veh]['IC'] for veh in vehs]
+
+    hidden_states = [tf.zeros((nveh, lstm_units)),  tf.zeros((nveh, lstm_units))]
+
+    return lead_inputs, true_traj, loss_weights, init_state, hidden_states
+
+
+def training_loop(ds, nveh = 20, nt = 5, lstm_units = 20):
+
+    lead_inputs, true_traj, loss_weights, init_state, hidden_states = make_batch(ds, nveh, nt, lstm_units)
 
 
 
