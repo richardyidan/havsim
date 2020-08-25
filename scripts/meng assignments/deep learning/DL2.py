@@ -141,7 +141,7 @@ class RNNCFModel(tf.keras.Model):
             cur_pos = cur_pos + self.dt*cur_acc
             outputs.append(cur_pos)
 
-        outputs = tf.concat(outputs, -1)
+        outputs = tf.stack(outputs, 1)
         return outputs, cur_speed, hidden_states
 
 def make_batch(vehs, vehs_counter, ds, nt = 5, lstm_units = 20):
@@ -167,8 +167,11 @@ def make_batch(vehs, vehs_counter, ds, nt = 5, lstm_units = 20):
     lead_inputs = []
     true_traj = []
     loss_weights = []
-    for veh in vehs:
-        t, tmax = vehs_counter[veh]
+    for count, veh in enumerate(vehs):
+        try:
+            t, tmax = vehs_counter[count]
+        except:
+            print('hello')
         leadpos, leadspeed = ds[veh]['lead posmem'], ds[veh]['lead speedmem']
         posmem = ds[veh]['posmem']
         curlead = []
@@ -187,7 +190,16 @@ def make_batch(vehs, vehs_counter, ds, nt = 5, lstm_units = 20):
         true_traj.append(curtraj)
         loss_weights.append(curweights)
 
-    return lead_inputs, true_traj, loss_weights
+    return [tf.convert_to_tensor(lead_inputs, dtype = 'float32'),
+            tf.convert_to_tensor(true_traj, dtype = 'float32'),
+            tf.convert_to_tensor(loss_weights, dtype = 'float32')]
+
+
+def masked_MSE_loss(y_true, y_pred, mask_weights):
+    """Returns MSE over the entire batch, element-wise weighted with mask_weights."""
+    temp =  tf.math.multiply(tf.square(y_true-y_pred), mask_weights)
+    return tf.reduce_mean(temp)
+
 
 def train_step(x, y_true, sample_weight, model, loss_fn, optimizer):
     """Updates parameters for a single batch of examples.
@@ -207,13 +219,13 @@ def train_step(x, y_true, sample_weight, model, loss_fn, optimizer):
     """
     with tf.GradientTape() as tape:
         y_pred, cur_speeds, hidden_state = model(x)
-        loss = loss_fn(y_true, y_pred, sample_weight = sample_weight)
+        loss = loss_fn(y_true, y_pred, sample_weight)
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients,model.trainable_variables))
     return y_pred, cur_speeds, hidden_state, loss
 
 
-def training_loop(model, loss, optimizer, ds, nbatches = 10000, nveh = 20, nt = 5, lstm_units = 20):
+def training_loop(model, loss, optimizer, ds, nbatches = 10000, nveh = 32, nt = 10, lstm_units = 20):
     """Trains model by repeatedly calling train_step.
 
     Args:
@@ -234,15 +246,14 @@ def training_loop(model, loss, optimizer, ds, nbatches = 10000, nveh = 20, nt = 
     np.random.shuffle(vehlist)
     vehs = vehlist[:nveh].copy()
     # vehs_counter stores current time index, maximum time index (length - 1) for each vehicle
-    vehs_counter = {veh: (0, ds[veh]['times'][1]-ds[veh]['times'][0]) for veh in vehs}
+    # vehs_counter[i] corresponds to vehs[i]
+    vehs_counter = {count: [0, ds[veh]['times'][1]-ds[veh]['times'][0]] for count, veh in enumerate(vehs)}
     # make inputs for network
     cur_state = [ds[veh]['IC'] for veh in vehs]
     hidden_states = [tf.zeros((nveh, lstm_units)),  tf.zeros((nveh, lstm_units))]
+    cur_state  = tf.convert_to_tensor(cur_state, dtype='float32')
+    hidden_states = tf.convert_to_tensor(hidden_states, dtype='float32')
     lead_inputs, true_traj, loss_weights = make_batch(vehs, vehs_counter, ds, nt, lstm_units)
-    cur_state, hidden_states = tf.convert_to_tensor(cur_state), tf.convert_to_tensor(hidden_states)
-    lead_inputs, true_traj = tf.convert_to_tensor(lead_inputs), tf.convert_to_tensor(true_traj)
-    loss_weights = tf.convert_to_tensor(loss_weights)
-
 
     for i in range(nbatches):
         veh_states, cur_speeds, hidden_states, loss_value = train_step([lead_inputs, cur_state, hidden_states], true_traj,
@@ -251,13 +262,15 @@ def training_loop(model, loss, optimizer, ds, nbatches = 10000, nveh = 20, nt = 
             print('loss for '+str(i)+'th batch is '+str(loss_value))
 
         # check if any vehicles in batch have had their entire trajectory simulated
-        cur_state = tf.concat([veh_states[:,-1], cur_speeds], axis=1)
+        cur_state = tf.stack([veh_states[:,-1], cur_speeds], axis=1)
         need_new_vehs = []  # list of indices in batch we need to get a new vehicle for
         for count, veh in enumerate(vehs):
-            vehs_counter[veh][0] += nt
-            if vehs_counter[veh][0] >= vehs_counter[veh][1]:
+            try:
+                vehs_counter[count][0] += nt
+            except:
+                print('hello')
+            if vehs_counter[count][0] >= vehs_counter[count][1]:
                 need_new_vehs.append(count)
-                vehs_counter.pop(veh, None)
         # update vehicles in batch - update hidden_states and cur_state accordingly
         if len(need_new_vehs) > 0:
             np.random.shuffle(vehlist)
@@ -266,11 +279,12 @@ def training_loop(model, loss, optimizer, ds, nbatches = 10000, nveh = 20, nt = 
             for count, ind in enumerate(need_new_vehs):
                 new_veh = new_vehs[count]
                 vehs[ind] = new_veh
-                vehs_counter[new_veh] = (0, ds[veh]['times'][1]-ds[veh]['times'][0])
+                vehs_counter[ind] = [0, ds[new_veh]['times'][1]-ds[new_veh]['times'][0]]
                 cur_state_updates.append(ds[new_veh]['IC'])
-            cur_state_updates = tf.convert_to_tensor(cur_state_updates)
+            cur_state_updates = tf.convert_to_tensor(cur_state_updates, dtype = 'float32')
             hidden_state_updates = [[0 for j in range(lstm_units)] for k in need_new_vehs]
-            inds_to_update = tf.convert_to_tensor([[j] for j in need_new_vehs])
+            hidden_state_updates = tf.convert_to_tensor(hidden_state_updates, dtype = 'float32')
+            inds_to_update = tf.convert_to_tensor([[j] for j in need_new_vehs], dtype = 'int32')
 
             cur_state = tf.tensor_scatter_nd_update(cur_state, inds_to_update, cur_state_updates)
             h, c = hidden_states
@@ -287,12 +301,12 @@ def generate_trajectories():
 
 
 if __name__ == '__main__':
-    # training, testing, maxhd, maxv, mina, maxa = make_dataset(meas, platooninfo)
-    # model = RNNCFModel(maxhd, maxv, mina, maxa)
-    # loss = tf.keras.losses.MeanSquaredError()
-    # opt = tf.keras.optimizers.Adam(learning_rate = .001)
+    training, testing, maxhd, maxv, mina, maxa = make_dataset(meas, platooninfo)
+    model = RNNCFModel(maxhd, maxv, mina, maxa)
+    loss = masked_MSE_loss
+    opt = tf.keras.optimizers.Adam(learning_rate = .001)
 
-    training_loop(model, loss, opt, training, nbatches = 1000, nveh = 20, nt = 6, lstm_units = 20)
+    training_loop(model, loss, opt, training, nbatches = 10000, nveh = 32, nt = 50, lstm_units = 20)
 
 
 
