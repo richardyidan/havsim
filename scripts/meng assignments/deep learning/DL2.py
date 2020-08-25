@@ -8,6 +8,22 @@ import numpy as np
 from havsim.plotting import compute_headway2
 
 def make_dataset(meas, platooninfo, dt = .1):
+    """Makes dataset from meas and platooninfo
+
+    Args:
+        meas
+        platooninfo
+        dt: timestep
+    Returns:
+        training: dictionary of vehicles, values are a dictionary with keys
+            'IC' - (initial conditions) list of starting position/speed for vehicle
+            'times' - list of starting time, last time with observed leader
+            'posmem' - (1d,) numpy array of observed positions for vehicle, 0 index corresponds to times[0]
+            'lead posmem' - (1d,) numpy array of positions for leaders, 0 index corresponds to times[0].
+                length is subtracted from the lead position.
+            'lead speedmem' - (1d,) numpy array of speeds for leaders.
+        testing: dictionary of vehicles in a format like training
+    """
     # select training/testing vehicles
     nolc_list = []
     for veh in meas.keys():
@@ -55,7 +71,16 @@ def make_dataset(meas, platooninfo, dt = .1):
 
 
 class RNNCFModel(tf.keras.Model):
-    def __init__(self, maxhd, maxv, mina, maxa, learning_rate = .001, dt = .1):
+    def __init__(self, maxhd, maxv, mina, maxa, dt = .1):
+        """Inits RNN based CF model.
+
+        Args:
+            maxhd: max headway (for nomalization of inputs)
+            maxv: max velocity (for nomalization of inputs)
+            mina: minimum acceleration (for nomalization of outputs)
+            maxa: maximum acceleration (for nomalization of outputs)
+            dt: timestep
+        """
         super().__init__()
         # architecture
         self.lstm_cell = tf.keras.layers.LSTMCell(20)
@@ -68,11 +93,16 @@ class RNNCFModel(tf.keras.Model):
         self.maxa = maxa
         self.dt = dt
 
-        # optimizer and loss function
-        self.compile(optimizer = tf.keras.optimizers.Adam(learning_rate = learning_rate),
-                     loss = tf.keras.losses.MeanSquaredError())
-
     def call(self, inputs):
+        """Updates states for a batch of vehicles.
+
+        Args:
+            inputs: list of lead_inputs, init_state, hidden_states - see make_batch
+        Returns:
+            outputs: tensor of vehicle trajectories, shape of (number of vehicles, number of timesteps)
+            hidden_states: last hidden states for LSTM. Tuple of tensors, where each tensor has shape of
+                (number of vehicles, number of LSTM units)
+        """
         # prepare data for call
         lead_inputs, init_state, hidden_states = inputs
         lead_inputs = tf.unstack(lead_inputs, axis=1)  # unpacked over time dimension
@@ -98,16 +128,18 @@ class RNNCFModel(tf.keras.Model):
             outputs.append(cur_pos)
 
         outputs = tf.concat(outputs, -1)
-        return outputs
+        return outputs, hidden_states
 
-def make_batch(ds, nveh = 20, nt = 5, lstm_units = 20):
+def make_batch(vehs, vehs_counter, ds, nt = 5, lstm_units = 20):
     """Create batch of data to send to model.
 
     Args:
-        ds - dataset, from make_dataset
-        nveh - number of vehicles in batch
-        nt - number of timesteps in batch
-        lstm_units - number of LSTM units in model
+        vehs: list of vehicles in current batch
+        vehs_counter: dictionary where keys are vehicles, values are tuples of (current time index,
+            max time index)
+        ds: dataset, from make_dataset
+        nt: number of timesteps in batch
+        lstm_units: number of LSTM units in model
     Returns:
         lead_inputs: nested python list with shape (nveh, nt, 2), giving the leader position and speed at
             each timestep. Padded with zeros
@@ -121,27 +153,22 @@ def make_batch(ds, nveh = 20, nt = 5, lstm_units = 20):
         hidden_states: list of the two hidden states, each hidden state has shape of (nveh, lstm_units).
             Initialized as all zeros for the first timestep.
     """
-    # select vehicles to put in the batch
-    vehlist = list(ds.keys())
-    np.random.shuffle(vehlist)
-    vehs = vehlist[:nveh]
-    # stores current time index, maximum time index (length - 1) for each vehicle
-    vehs_counter = {veh: (0, ds[veh]['IC'][1]-ds[veh]['IC'][0]) for veh in vehs}
+    nveh = len(vehs)
 
     lead_inputs = []
     true_traj = []
     loss_weights = []
     for veh in vehs:
-        t0, tmax = vehs_counter[veh]
+        t, tmax = vehs_counter[veh]
         leadpos, leadspeed = ds[veh]['lead posmem'], ds[veh]['lead speedmem']
         posmem = ds[veh]['posmem']
         curlead = []
         curtraj = []
         curweights = []
         for i in range(nt):
-            if t0+i < tmax:
-                curlead.append([leadpos[t0+i], leadspeed[t0+i]])
-                curtraj.append(posmem[t0+i])
+            if t+i < tmax:
+                curlead.append([leadpos[t+i], leadspeed[t+i]])
+                curtraj.append(posmem[t+i])
                 curweights.append(1)
             else:
                 curlead.append([0,0])
@@ -150,18 +177,79 @@ def make_batch(ds, nveh = 20, nt = 5, lstm_units = 20):
         lead_inputs.append(curlead)
         true_traj.append(curtraj)
 
+    return lead_inputs, true_traj, loss_weights
+
+def train_step(x, y_true, sample_weight, model, loss_fn, optimizer):
+    """Updates parameters from a single batch of examples.
+
+    Args:
+        x: input to model
+        y_true: target for loss function
+        sample_weight" weight for loss function
+        model: tf.keras.Model
+        loss_fn: function takes in y_true, y_pred, sample_weight, and returns the loss
+        optimizer: tf.keras.optimizer
+    Returns:
+        y_pred: output from model
+        hidden_state: hidden_state for model
+    """
+    with tf.GradientTape() as tape:
+        y_pred, hidden_state = model(x)
+        loss = loss_fn(y_true, y_pred, sample_weight = sample_weight)
+    gradients = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(gradients,model.trainable_variables))
+    return y_pred, hidden_state
+
+
+def training_loop(model, loss, optimizer, ds, nveh = 20, nt = 5, lstm_units = 20):
+    """Trains model by repeatedly calling train_step.
+
+    Args:
+
+    """
+    # initialization
+    # select vehicles to put in the batch
+    vehlist = list(ds.keys())
+    np.random.shuffle(vehlist)
+    vehs = vehlist[:nveh].copy()
+    # vehs_counter stores current time index, maximum time index (length - 1) for each vehicle
+    vehs_counter = {veh: (0, ds[veh]['IC'][1]-ds[veh]['IC'][0]) for veh in vehs}
+    # make inputs for network
     init_state = [ds[veh]['IC'] for veh in vehs]
-
     hidden_states = [tf.zeros((nveh, lstm_units)),  tf.zeros((nveh, lstm_units))]
+    lead_inputs, true_traj, loss_weights = make_batch(vehs, vehs_counter, ds, nveh, nt, lstm_units)
 
-    return lead_inputs, true_traj, loss_weights, init_state, hidden_states
+    for i in range(nbatches):
+        veh_states, hidden_states = train_step([lead_inputs, init_state, hidden_states], true_traj,
+                                               loss_weights, model, loss, optimizer)
+
+        # check if any vehicles in batch have had their entire trajectory simulated
+        cur_state = veh_states[:,-1]
+        need_new_vehs = []
+        for count, veh in enumerate(vehs):
+            vehs_counter[veh][0] += nt
+            if vehs_counter[veh][0] >= vehs_counter[veh][1]:
+                need_new_vehs.append(count)
+        # update vehicles in batch
+        np.random.shuffle(vehlist)
+        new_vehs = vehlist[:len(need_new_vehs)]
+        for count, ind in enumerate(need_new_vehs):
+            vehs[ind] = new_vehs[count]
 
 
-def training_loop(ds, nveh = 20, nt = 5, lstm_units = 20):
-
-    lead_inputs, true_traj, loss_weights, init_state, hidden_states = make_batch(ds, nveh, nt, lstm_units)
 
 
+
+
+
+
+
+    model.train_on_batch([lead_inputs, init_state, hidden_states], y = true_traj, sample_weight = loss_weights)
+
+
+
+self.compile(optimizer = tf.keras.optimizers.Adam(learning_rate = learning_rate),
+                     loss = tf.keras.losses.MeanSquaredError())
 
 
 
