@@ -29,7 +29,8 @@ def make_dataset(meas, platooninfo, dt = .1):
         maxacc: maximum acceleration observed in training set
 
     """
-    # select training/testing vehicles
+    # select training/testing vehicles  # TODO really this function should just take in a vehicle list,
+    # the data, and return the dataset, and normalization if desired.
     nolc_list = []
     for veh in meas.keys():
         temp = nolc_list.append(veh) if len(platooninfo[veh][4]) == 1 else None
@@ -149,29 +150,25 @@ def make_batch(vehs, vehs_counter, ds, nt = 5, lstm_units = 20):
 
     Args:
         vehs: list of vehicles in current batch
-        vehs_counter: dictionary where keys are vehicles, values are tuples of (current time index,
+        vehs_counter: dictionary where keys are indexes, values are tuples of (current time index,
             max time index)
         ds: dataset, from make_dataset
         nt: number of timesteps in batch
         lstm_units: number of LSTM units in model
     Returns:
         lead_inputs: nested python list with shape (nveh, nt, 2), giving the leader position and speed at
-            each timestep. Padded with zeros
+            each timestep. Padded with zeros. nveh = len(vehs).
         true_traj: nested python list with shape (nveh, nt) giving the true vehicle position at each time.
             Padded with zeros
         loss_weights: nested python list with shape (nveh, nt) with either 1 or 0, used to weight each sample
             of the loss function. If 0, it means the input at the corresponding index doesn't contribute
             to the loss.
     """
-    nveh = len(vehs)
     lead_inputs = []
     true_traj = []
     loss_weights = []
     for count, veh in enumerate(vehs):
-        try:
-            t, tmax = vehs_counter[count]
-        except:
-            print('hello')
+        t, tmax = vehs_counter[count]
         leadpos, leadspeed = ds[veh]['lead posmem'], ds[veh]['lead speedmem']
         posmem = ds[veh]['posmem']
         curlead = []
@@ -218,6 +215,8 @@ def train_step(x, y_true, sample_weight, model, loss_fn, optimizer):
         loss:
     """
     with tf.GradientTape() as tape:
+        # would using model.predict_on_batch instead of model.call be faster to evaluate?
+        # the ..._on_batch methods use the model.distribute_strategy - see tf.keras source code
         y_pred, cur_speeds, hidden_state = model(x)
         loss = loss_fn(y_true, y_pred, sample_weight)
     gradients = tape.gradient(loss, model.trainable_variables)
@@ -256,8 +255,9 @@ def training_loop(model, loss, optimizer, ds, nbatches = 10000, nveh = 32, nt = 
     lead_inputs, true_traj, loss_weights = make_batch(vehs, vehs_counter, ds, nt, lstm_units)
 
     for i in range(nbatches):
-        veh_states, cur_speeds, hidden_states, loss_value = train_step([lead_inputs, cur_state, hidden_states], true_traj,
-                                               loss_weights, model, loss, optimizer)
+        veh_states, cur_speeds, hidden_states, loss_value = \
+            train_step([lead_inputs, cur_state, hidden_states], true_traj, loss_weights, model,
+                       loss, optimizer)
         if i % 10 == 0:
             print('loss for '+str(i)+'th batch is '+str(loss_value))
 
@@ -265,10 +265,7 @@ def training_loop(model, loss, optimizer, ds, nbatches = 10000, nveh = 32, nt = 
         cur_state = tf.stack([veh_states[:,-1], cur_speeds], axis=1)
         need_new_vehs = []  # list of indices in batch we need to get a new vehicle for
         for count, veh in enumerate(vehs):
-            try:
-                vehs_counter[count][0] += nt
-            except:
-                print('hello')
+            vehs_counter[count][0] += nt
             if vehs_counter[count][0] >= vehs_counter[count][1]:
                 need_new_vehs.append(count)
         # update vehicles in batch - update hidden_states and cur_state accordingly
@@ -295,9 +292,34 @@ def training_loop(model, loss, optimizer, ds, nbatches = 10000, nveh = 32, nt = 
         lead_inputs, true_traj, loss_weights = make_batch(vehs, vehs_counter, ds, nt, lstm_units)
 
 
-def generate_trajectories():
-    """Generate a batch of trajectories."""
-    pass
+def generate_trajectories(model, vehs, ds, lstm_units = 20, loss = None):
+    """Generate a batch of trajectories.
+
+    Args:
+        model: tf.keras.Model
+        vehs: list of vehicle IDs
+        ds: dataset from make_dataset
+        lstm_units: number of lstm_units in model
+    Returns:
+        y_pred: tensor of vehicle trajectories, shape of (number of vehicles, number of timesteps)
+        cur_speeds: tensor of current vehicle speeds, shape of (number of vehicles, 1)
+    """
+    # put all vehicles into a single batch, with the number of timesteps equal to the longest trajectory
+    nveh = len(vehs)
+    vehs_counter = {count: [0, ds[veh]['times'][1]-ds[veh]['times'][0]] for count, veh in enumerate(vehs)}
+    nt = max([i[1] for i in vehs_counter.values()])
+    cur_state = [ds[veh]['IC'] for veh in vehs]
+    hidden_states = [tf.zeros((nveh, lstm_units)),  tf.zeros((nveh, lstm_units))]
+    cur_state  = tf.convert_to_tensor(cur_state, dtype='float32')
+    hidden_states = tf.convert_to_tensor(hidden_states, dtype='float32')
+    lead_inputs, true_traj, loss_weights = make_batch(vehs, vehs_counter, ds, nt, lstm_units)
+
+    y_pred, cur_speeds, hidden_state = model([lead_inputs, cur_state, hidden_states])
+    if loss is not None:
+        out_loss = loss(true_traj, y_pred, loss_weights)
+        return y_pred, cur_speeds, out_loss
+    else:
+        return y_pred, cur_speeds
 
 
 if __name__ == '__main__':
@@ -306,7 +328,15 @@ if __name__ == '__main__':
     loss = masked_MSE_loss
     opt = tf.keras.optimizers.Adam(learning_rate = .001)
 
-    training_loop(model, loss, opt, training, nbatches = 10000, nveh = 32, nt = 50, lstm_units = 20)
+    training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 100, lstm_units = 20)
+    training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 200, lstm_units = 20)
+    training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 300, lstm_units = 20)
+    training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 500, lstm_units = 20)
+
+    model.save_weights('trained LSTM')
+
+    out = generate_trajectories(model, list(testing.keys()), testing, loss = loss)
+    out2 = generate_trajectories(model, list(training.keys()), training, loss = loss)
 
 
 
