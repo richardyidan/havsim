@@ -7,7 +7,7 @@ import havsim.calibration.helper as helper
 import numpy as np
 import pickle
 
-def analyze_res(res_list, veh_list, meas, platooninfo, dt, kwargs, mergeind = math.inf, times = 100, realistic = 2):
+def analyze_res(res_list, veh_list, meas, platooninfo, dt, kwargs, mergeind = math.inf, times = 100, realistic = 1.1):
     out = {'overall mse':None, 'mse near LC':None, 'mse for merges':None, 'mse for many LC':None, 'realistic acc':None, 'short lc':None}
     temp = [ga['fun']/(3.28084**2) for ga in res_list]
     out['overall mse'] = (np.mean(temp), np.median(temp), np.std(temp))
@@ -55,8 +55,8 @@ def analyze_res(res_list, veh_list, meas, platooninfo, dt, kwargs, mergeind = ma
 
         simacc = [(cursim[i+2] - 2*cursim[i+1] + cursim[i])/(dt**2) for i in range(len(cursim)-2)]
         measacc = [(curmeas[i+2] - 2*curmeas[i+1] + curmeas[i])/(dt**2) for i in range(len(curmeas)-2)]
-        upper = max(1.1*max(measacc), 4*3.28)
-        lower = min(-6*3.28, 1.1*min(measacc))
+        upper = max(realistic*max(measacc), 4*3.28)
+        lower = min(-6*3.28, realistic*min(measacc))
         temp1, temp2 = max(simacc), min(simacc)
         if temp1 < upper and temp2 > lower:
             real.append(1)

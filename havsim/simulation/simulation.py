@@ -963,7 +963,7 @@ def update_veh_lane(veh, oldlane, newlane, timeind, side=None):
     veh.lanemem.append((newlane, timeind))
 
 
-# ######
+######### lfol/rfol/llead/rlead explanation
 # explanation of why leader follower relationships are designed this way (i.e. why we have lfol/llead etc.)
 # in current logic, main cost per timestep is just one distance compute in update_lrfol
 # whenever there is a lane change, there are a fair number of extra updates we have to do to keep all

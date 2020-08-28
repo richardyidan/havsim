@@ -101,4 +101,4 @@ plt.ylabel('acceleration')
 plt.xlabel('time')
 
 
-
+#%%

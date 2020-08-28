@@ -218,7 +218,7 @@ def train_step(x, y_true, sample_weight, model, loss_fn, optimizer):
         # would using model.predict_on_batch instead of model.call be faster to evaluate?
         # the ..._on_batch methods use the model.distribute_strategy - see tf.keras source code
         y_pred, cur_speeds, hidden_state = model(x)
-        loss = loss_fn(y_true, y_pred, sample_weight)
+        loss = loss_fn(y_true, y_pred, sample_weight)  # would l2 reg. be applied to this? add model.losses?
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients,model.trainable_variables))
     return y_pred, cur_speeds, hidden_state, loss
@@ -334,6 +334,7 @@ if __name__ == '__main__':
     training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 500, lstm_units = 20)
 
     model.save_weights('trained LSTM')
+    #maxhd, maxv, mina, maxa = (845.00927900, 88.571525144, -46.5518387, 25.27559136)
 
     out = generate_trajectories(model, list(testing.keys()), testing, loss = loss)
     out2 = generate_trajectories(model, list(training.keys()), training, loss = loss)

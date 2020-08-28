@@ -318,7 +318,7 @@ def makeleadfolinfo(platoons, platooninfo, sim, *args, relaxtype = 'both', merge
     return leadinfo, folinfo, rinfo
 
 def makerinfo(platoons, platooninfo, sim, leadinfo, relaxtype = 'both',mergertype = 'avg', merge_from_lane = 7, merge_lane = 6):
-
+    """Rule for merger is not consistent with newer relaxation."""
     if relaxtype =='none':
         return [[] for i in platoons]
 
