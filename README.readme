@@ -1,15 +1,1 @@
-hav-sim (Human and Autonomous Vehicle SIMulation, calibration, and optimization) is a differentiable traffic simulator for the calibration and optimization of microscopic (agent-based) traffic simulations. 
-
-The two main use cases are 
-	-calibration and validation of some traffic model to vehicle trajectory data or aggregate network data
-	-solving for an optimal control strategy of autonomous vehicles which maximizes a metric (e.g. average travel time) for some given network and human driving behavior
-
-compared to other available software packages/traffic microsimulators, hav-sim has the following unique characteristics
-	-being able to take the gradient of traffic simulations makes it well suited for solving optimization problems.
-	-state of the art methodology for calibration and control uses convex optimization, deep learning, and reinforcement learning
-	
-Some other nice things about the package are as follows
-	-open source and modular design written all in python 
-	-easily implement your own models and algorithms or interface with existing python packages
-	-implements and benchmarks many recent models and algorithms
-	-detailed plotting and animation api to visualize datasets and results 
+havsim (Human and Autonomous Vehicle SIMulation, calibration, and optimization) is a differentiable traffic simulator for the calibration and optimization of microscopic (agent-based) traffic simulations. Build your simulation exactly how you want. Use the most advanced optimization algorithms to fit your models or find control strategies.
