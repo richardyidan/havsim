@@ -764,6 +764,32 @@ def fin_dif_wrapper(p,args, *eargs, eps = 1e-8, **kwargs):
         out[i] = objfun(curp,*args)
     return (out-obj)/eps
 
+
+def approx_hess(p, args, kwargs, eps = 1e-8, gradfn = fin_dif_wrapper, curgrad = None, **unused):
+    #input the current point p, function to calculate the gradient gradfn with call signature
+    #grad = gradfn(p,*args,*kwargs)
+    #and we will compute the hessian using a forward difference approximation.
+    #this will use n+1 gradient evaluations to calculate the hessian.
+    #you can pass in the current grad if you have it, this will save 1 gradient evaluation.
+    n = len(p)
+    hess = np.zeros((n,n))
+    if curgrad is None:
+        grad = gradfn(p,*args,*kwargs) #calculate gradient for the unperturbed parameters
+    else:
+        grad = curgrad
+#    grad = np.asarray(grad) #just pass in a np array not a list...if you want to pass in list then you need to convert to np array here.
+    for i in range(n):
+        pe = p.copy()
+        pe[i] += eps #perturbed parameters for parameter n
+        gradn = gradfn(pe,*args,**kwargs) #gradient for perturbed parameters
+#        gradn = np.asarray(gradn) #just pass in a np array not a list...if you want to pass in list then you need to convert to np array here.
+        hess[:,i] = gradn-grad #first column of the hessian without the 1/eps
+
+    hess = hess*(1/eps)
+    hess = .5*(hess + np.transpose(hess))
+    return hess
+
+
 def chain_metric(platoon, platooninfo, meas, k=.9, metrictype='lead'):
     #metric that defines how good a platoon is
     #refer to platoon formation pdf for exact definition
