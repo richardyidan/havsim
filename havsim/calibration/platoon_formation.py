@@ -7,7 +7,7 @@ import havsim.helper as helper
 import math
 import networkx as nx
 import copy
-import matplotlib.pyplot.plt as plt
+import matplotlib.pyplot as plt
 
 
 #TODO fix code style and documentation

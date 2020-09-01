@@ -7,8 +7,9 @@ Either single vehicles, or strings (platoons) of vehicles can be simulated.
 """
 
 import numpy as np
-from havsim.simulation.simulation import Vehicle, get_headway, relax_helper_vhd, relax_helper
-import havsim.calibration.helper as helper
+import havsim.simulation as hs
+from havsim.simulation.road_networks import get_headway
+from havsim import helper
 import math
 
 # TODO finish implementing calibration for platoons of vehicle
@@ -16,7 +17,7 @@ import math
     #removing vehicles and downstream boundary
 # TODO implement calibration for latitudinal models also
 
-class CalibrationVehicle(Vehicle):
+class CalibrationVehicle(hs.Vehicle):
     """Base CalibrationVehicle class for a second order ODE model.
 
     CalibrationVehicles implement rules to update their own positions only. There is currently no
@@ -108,7 +109,7 @@ class CalibrationVehicle(Vehicle):
         if rp is None:
             return
         relaxamount_s, relaxamount_v = relaxamounts
-        relax_helper_vhd(rp, relaxamount_s, relaxamount_v, self, timeind, dt)
+        hs.relaxation.relax_helper_vhd(rp, relaxamount_s, relaxamount_v, self, timeind, dt)
 
     def update(self, timeind, dt):
         """Update for longitudinal state. Updates LeadVehicle if applicable."""
