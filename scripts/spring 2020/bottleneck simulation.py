@@ -2,9 +2,10 @@
 """
 Bottleneck simulation
 """
-from havsim.simulation.simulation import Vehicle, Lane, downstream_wrapper, AnchorVehicle, Simulation
-from havsim.calibration.helper import boundaryspeeds, getentryflows
-from havsim.plotting import calculateflows, plot_format, platoonplot, plotvhd
+import havsim.simulation as hs
+from havsim.simulation.road_networks import downstream_wrapper, AnchorVehicle
+from havsim.helper import boundaryspeeds, getentryflows, calculateflows
+from havsim.plotting import plot_format, platoonplot, plotvhd
 import numpy as np
 import matplotlib.pyplot as plt
 from havsim.simulation.models import IDM_parameters
@@ -32,12 +33,12 @@ def onramp_newveh(self, vehid, *args):
     cf_p, lc_p  = IDM_parameters()
     kwargs = {'route':['main road', 'exit'], 'maxspeed': cf_p[0]-1e-6, 'relax_parameters':None,
               'shift_parameters': [-1.5, 1]}
-    self.newveh = Vehicle(vehid, self, cf_p, lc_p, **kwargs)
+    self.newveh = hs.Vehicle(vehid, self, cf_p, lc_p, **kwargs)
 
 def mainroad_newveh(self, vehid, *args):
     cf_p, lc_p  = IDM_parameters()
     kwargs = {'route':['exit'], 'maxspeed': cf_p[0]-1e-6, 'relax_parameters':None, 'shift_parameters': [-1.5, 1]}
-    self.newveh = Vehicle(vehid, self, cf_p, lc_p, **kwargs)
+    self.newveh = hs.Vehicle(vehid, self, cf_p, lc_p, **kwargs)
 #inflow amounts
 def onramp_inflow(timeind, *args):
     # return .06 + np.random.rand()/25
@@ -47,7 +48,7 @@ def mainroad_inflow(*args):
     return .48
 
 #outflow using speed series
-tempveh = Vehicle(-1, None, [30, 1.5, 2, 1.1, 1.5], None, maxspeed = 30-1e-6)
+tempveh = hs.Vehicle(-1, None, [30, 1.5, 2, 1.1, 1.5], None, maxspeed = 30-1e-6)
 outspeed = tempveh.inv_flow(.48, congested = False)
 inspeed, inhd = tempveh.inv_flow(.48, output_type = 'both', congested = True)
 inspeedramp, inhd = tempveh.inv_flow(.07, output_type = 'both', congested = True)
@@ -81,15 +82,15 @@ road = {'name': 'main road', 'len': mainroadlen, 'laneinds':2, 0: None, 1: None}
 road['connect to'] = {'exit': (mainroadlen, 'continue', (0,1), None, None)}
 onramp = {'name': 'on ramp', 'len': endmerge-startmerge+100, 'laneinds':1, 0: None}
 onramp['connect to'] = {'main road': ((startmerge,endmerge), 'merge', 0, 'l_lc', road)}
-lane0 = Lane(0,mainroadlen, road, 0, downstream = downstream1, increment_inflow = increment_inflow, get_inflow = get_inflow2, new_vehicle = mainroad_newveh)
-lane1 = Lane(0,mainroadlen, road, 1, downstream = downstream1, increment_inflow = increment_inflow, get_inflow = get_inflow2, new_vehicle = mainroad_newveh)
+lane0 = hs.Lane(0,mainroadlen, road, 0, downstream = downstream1, increment_inflow = increment_inflow, get_inflow = get_inflow2, new_vehicle = mainroad_newveh)
+lane1 = hs.Lane(0,mainroadlen, road, 1, downstream = downstream1, increment_inflow = increment_inflow, get_inflow = get_inflow2, new_vehicle = mainroad_newveh)
 road[0] = lane0
 road[1] = lane1
-lane2 = Lane(startmerge-100,endmerge,onramp,0, increment_inflow = increment_inflow_ramp, get_inflow = get_inflow1, new_vehicle = onramp_newveh)
+lane2 = hs.Lane(startmerge-100,endmerge,onramp,0, increment_inflow = increment_inflow_ramp, get_inflow = get_inflow1, new_vehicle = onramp_newveh)
 # downstream2 = {'method':'merge', 'merge_anchor_ind':0, 'target_lane': lane1, 'self_lane':lane2, 'stopping':'ballistic'}
 downstream2 = {'method': 'free merge', 'self_lane':lane2, 'stopping':'car following'}
 # downstream2 = {'method': 'free merge', 'time_series':mainroad_outflow, 'stopping':'ballistic', 'self_lane':lane2}
-lane2.call_downstream = downstream_wrapper(**downstream2).__get__(lane2, Lane)
+lane2.call_downstream = downstream_wrapper(**downstream2).__get__(lane2, hs.Lane)
 onramp[0] = lane2
 
 #road 1 connect left/right and roadlen
@@ -119,7 +120,7 @@ lane2.events = [{'event':'update lr', 'left':'add', 'left anchor':0, 'right': No
 #make simulation
 merge_lanes = [lane1, lane2]
 inflow_lanes = [lane0, lane1, lane2]
-simulation = Simulation(inflow_lanes, merge_lanes, dt = .25)
+simulation = hs.Simulation(inflow_lanes, merge_lanes, dt = .25)
 
 #call
 timesteps = 10000

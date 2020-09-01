@@ -2,9 +2,9 @@
 
 import math
 import havsim.simulation.models as hm
-import havsim.simulation.calibration as hc
-import havsim.simulation.simulation as hs
-import havsim.calibration.helper as helper
+import havsim.calibration.calibration as hc
+import havsim.simulation as hs
+from havsim import helper
 
 class OVMCalibrationVehicle(hc.CalibrationVehicle):
     """Optimal Velocity Model Implementation."""
@@ -44,7 +44,7 @@ class OVMCalibrationVehicle(hc.CalibrationVehicle):
         if rp is None:
             return
         relaxamount_s, relaxamount_v = relaxamounts
-        hs.relax_helper(rp, relaxamount_s, self, timeind, dt)
+        hs.relaxation.relax_helper(rp, relaxamount_s, self, timeind, dt)
 
     def initialize(self, parameters):
         super().initialize(parameters)
@@ -82,7 +82,7 @@ class NewellCalibrationVehicle(hc.CalibrationVehicle):
         if rp is None:
             return
         relaxamount_s, relaxamount_v = relaxamounts
-        hs.relax_helper(rp, relaxamount_s, self, timeind, dt)
+        hs.relaxation.relax_helper(rp, relaxamount_s, self, timeind, dt)
 
     def update(self, timeind, dt):
         # bounds on speed must be applied for 1st order model
