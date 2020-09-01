@@ -1,3 +1,4 @@
+"""Experimental/old implementation of a delay model."""
 from typing import List, Dict
 import heapq
 import random

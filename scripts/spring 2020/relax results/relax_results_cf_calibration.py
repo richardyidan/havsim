@@ -2,13 +2,13 @@
 """
 @author: rlk268@cornell.edu
 """
-import havsim.simulation.calibration as hc
+import havsim.calibration.calibration as hc
 import time
 import scipy.optimize as sc
 import matplotlib.pyplot as plt
 import math
 import pickle
-import havsim.simulation.calibration_models as hm
+import havsim.calibration.calibration_models as hm
 
 # load data
 try:

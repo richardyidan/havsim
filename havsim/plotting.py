@@ -7,348 +7,22 @@ where all the plotting functions go
 import numpy as np
 import copy
 import math
-# import bisect
 
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 import matplotlib.animation as animation
 from matplotlib import cm
-import pywt  # package for wavelet transforms in python
-from statistics import harmonic_mean  # harmonic mean function
+import pywt
+from statistics import harmonic_mean
 from matplotlib.widgets import PolygonSelector
-
 import palettable
 
-from .calibration import helper
-from .calibration.helper import sequential, checksequential
-from havsim.calibration.algs import sortveh
-from havsim.calibration.opt import r_constant
-
-
-def optimalvelocity(s, p):
-    V = p[0] * (np.tanh(p[1] * (s) - p[2] - p[4]) - np.tanh(-p[2]))
-    return V
-
-
-def optimalvelocityplot(p):
-    s = np.linspace(0, 200, 2000)
-    v = np.zeros(len(s))
-
-    for i in range(len(v)):
-        v[i] = optimalvelocity(s[i], p)
-
-    plt.figure()
-    plt.plot(s, v)
-    plt.xlabel('headway (ft)')
-    plt.ylabel('speed (ft/s)')
-    # plt.savefig('ovm3.png')
-    return
-
-
-def checksort(vehlist, meas, lane):
-    # very simple function plots trajectory in a line, allows you to debug the platoon order
-    fig = plt.figure()
-    for i in range(len(vehlist)):
-        cur = meas[vehlist[i]]
-        cur = cur[cur[:, 7] == lane]
-        plt.plot(cur[:, 1], cur[:, 2], picker=5)
-
-    def on_pick(event):
-        ax = event.artist.axes
-        curind = ax.lines.index(event.artist)  # artist index
-        plt.title('selected vehicle ' + str(vehlist[curind]) + ' which has order ' + str(curind))
-        plt.draw()
-
-    fig.canvas.callbacks.connect('pick_event', on_pick)
-    pass
-
-
-def optplot(out, meas, sim, followerchain, platoonlist, model, modeladj, modeladjsys, makeleadfolfun, platoonobjfn,
-            args,
-            speed=False, newfig=True, clr=['C0', 'C1'], fulltraj=True, lane=None,opacity = .4):  # plot platoon in space-time
-    # CURRENT DOCUMENTATION
-    # out - results from optimization algorithm
-    # meas - measurements in np array, rows are observations
-    # sim - simulation in same format as meas. can pass in None and we will get the simulation from out. otherwise we will assume sim is loaded in correctly
-    #
-    # in different colors.
-    # followerchain (platooninfo) - dictionary containing information on each vehicle ID
-    # platoonlist - input the list of platoons used in the optimization
-    # model
-    # modeladj
-    # modeladjsys
-    # makeleadfolfun
-    # platoonobjfn
-    # args
-
-    # speed = False - if True will plot the speed instead of position
-    # newfig = True - if True will create a new figure, otherwise it will use the current figure
-    # clr = 'C0', assuming Colors = False, clr will control what colors will be used. Default is ['C0','C1'] which are the default matplotlib colors
-    # fulltraj = True - assuming Colors = False, if True, will plot the entire trajectory, if False, will plot only the simulation
-    # lane = None - If passed in as a laneID, the parts of trajectories not in the lane ID given will be made opaque
-
-    # this is meant to examine the output from using an optimization algorithm - visualize results and see which vehicles
-
-    ind = 2
-
-    if sim is None:
-        sim = copy.deepcopy(meas)
-        sim = helper.obj_helper(out[0], model, modeladj, modeladjsys, meas, sim, followerchain, platoonlist,
-                                makeleadfolfun, platoonobjfn, args)
-
-    artist2veh = []  # artist2veh takes artist index and converts it to vehicle ID index (for followerlist)
-    veh2platoon = []  # takes veh ID index and converts to platoon index (for platoonlist)
-    platoonrmse = out[2]  # convert platoon index to platoon rmse
-    vehrmse = []  # converts veh ID index to rmse for vehicle
-
-    # vehrmse
-    for i in platoonlist:
-        obj = helper.SEobj_pervehicle(meas, sim, followerchain,
-                                      i)  # list of (individual) objective functions. This is needed for next step
-        for j in range(len(i)):  # convert each individual objective to individual rmse
-            temp = helper.convert_to_rmse(obj[j], followerchain, [i[j]])
-            vehrmse.append(temp)
-
-    #    indcounter = np.asarray([],dtype = int64) #keeps track of which artists correspond to which vehicle
-    if speed:
-        ind = 3
-    if platoonlist != []:
-        followerchain = helper.platoononly(followerchain, platoonlist)
-    followerlist = list(followerchain.keys())  # list of vehicle ID
-
-    for count, i in enumerate(platoonlist):
-        for j in i:
-            veh2platoon.append(count)
-
-    if newfig:
-        fig = plt.figure()
-
-    counter = 0
-    for i in followerlist:  # iterate over each vehicle
-        veh = meas[i]
-        t_nstar, t_n, T_nm1, T_n = followerchain[i][0:4]  # note followerchain and platooninfo have same
-
-        if fulltraj:  # entire trajectory including pre simulation and shifted end
-            start = 0
-            end = T_n - t_nstar
-        else:  # only show trajectory which is simulated
-            start = t_n - t_nstar
-            end = T_nm1 - t_nstar
-        veh = veh[start:end, :]
-        x = veh[:, 1]
-        y = veh[:, ind]
-
-        if lane is not None:
-
-            # LCind is a list of indices where the lane the vehicle is in changes. Note that it includes the first and last index.
-            LCind = np.diff(veh[:, 7])
-            LCind = np.nonzero(LCind)[0] + 1
-            LCind = list(LCind)
-            LCind.insert(0, 0);
-            LCind.append(len(veh[:, 7]) + 1)
-
-            for j in range(len(LCind) - 1):
-                kwargs = {}
-                if meas[i][LCind[j], 7] != lane:
-                    kwargs = {'linestyle': '--', 'alpha': opacity}  # dashed line .4 opacity (60% see through)
-                plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[0], picker=5, **kwargs)
-                artist2veh.append(
-                    counter)  # artist2veh takes artist index and converts it to vehicle ID index (for followerlist)
-
-
-
-        else:
-            plt.plot(x, y, clr[0])
-            artist2veh.append(counter)
-        counter += 1
-
-    if sim is not None:
-        counter = 0
-        for i in followerlist:  # iterate over each vehicle
-            veh = sim[i]
-            t_nstar, t_n, T_nm1, T_n = followerchain[i][0:4]  # note followerchain and platooninfo have same
-
-            if fulltraj:  # entire trajectory including pre simulation and shifted end
-                start = 0
-                end = T_n - t_nstar
-            else:  # only show trajectory which is simulated
-                start = t_n - t_nstar
-                end = T_nm1 - t_nstar
-            veh = veh[start:end, :]
-            x = veh[:, 1]
-            y = veh[:, ind]
-
-            if lane is not None:
-
-                # LCind is a list of indices where the lane the vehicle is in changes. Note that it includes the first and last index.
-                LCind = np.diff(veh[:, 7])
-                LCind = np.nonzero(LCind)[0] + 1
-                LCind = list(LCind)
-                LCind.insert(0, 0);
-                LCind.append(len(veh[:, 7]))
-
-                for j in range(len(LCind) - 1):
-                    kwargs = {}
-                    if sim[i][LCind[j], 7] != lane:
-                        kwargs = {'linestyle': '--', 'alpha': opacity}  # dashed line .4 opacity (60% see through)
-                    plt.plot(x[LCind[j]:LCind[j + 1]], y[LCind[j]:LCind[j + 1]], clr[1], picker=5, **kwargs)
-                    artist2veh.append(counter)
-            else:
-                plt.plot(x, y, clr[1])
-                artist2veh.append(counter)
-            counter += 1
-
-    #        plt.plot(x2,y2)
-    #        plt.plot(x3,y3)
-
-    plt.xlabel('time (frameID )')
-    plt.ylabel('space (ft)')
-    if speed:
-        plt.ylabel('speed (ft/s)')
-    #    plt.show()
-    #    plt.savefig('platoonspacetime.png')
-
-    find_artists = []
-    nartists = len(artist2veh)
-    halfn = int(nartists / 2)
-
-    def on_pick(event):
-        nonlocal find_artists
-        ax = event.artist.axes
-        curind = ax.lines.index(event.artist)  # artist index
-
-        if event.mouseevent.button == 1:  # left click selects vehicle
-            # deselect old vehicle
-            for j in find_artists:
-                if j < nartists / 2:
-                    ax.lines[j].set_color('C0')
-                else:
-                    ax.lines[j].set_color('C1')
-
-            # select new vehicle
-            vehind = artist2veh[curind]  # convert from artist to vehicle index
-            platoonind = veh2platoon[vehind]
-            find_artists = np.asarray(artist2veh)
-            find_artists = np.nonzero(find_artists == vehind)[
-                0]  # all artist indices which are associated with vehicle
-            #            nartists = len(ax.lines)
-
-            for j in find_artists:
-                if j < nartists / 2:  # part of measurements because in first half
-                    ax.lines[j].set_color('C2')
-                else:
-                    ax.lines[j].set_color('C3')
-            plt.title('Vehicle ID ' + str(followerlist[vehind]) + ' has RMSE ' + str(
-                round(vehrmse[vehind], 2)) + ' in platoon ' + str(platoonlist[platoonind]) + ' with RMSE ' + str(
-                round(platoonrmse[platoonind], 2)))
-            plt.draw()
-
-        if event.mouseevent.button == 3:  # right click selects platoon
-            #            print(find_artists)
-            # deselect old vehicle
-            for j in find_artists:
-                if j < nartists / 2:
-                    ax.lines[j].set_color('C0')
-                else:
-                    ax.lines[j].set_color('C1')
-
-            # select new vehicle
-            vehind = artist2veh[curind]  # convert from artist to vehicle index
-            platoonind = veh2platoon[vehind]  # get platoonindex
-            #            print(platoonind)
-
-            platoonindlist = []  # we will get a list of the vehicle indices for all vehicles in the platoon
-            countvehs = 0  # we first find how many vehicles come before the platoon
-            for i in range(platoonind):
-                countvehs += len(platoonlist[i][1:])
-            for i in range(len(platoonlist[platoonind][1:])):
-                platoonindlist.append(countvehs + i)
-
-            find_artists = []  # now find all artists which are associated with platoon
-            for count, i in enumerate(ax.lines):  # get artist index
-                if artist2veh[
-                    count] in platoonindlist:  # convert artist index to vehicle index, check if vehicle index is included in platoon, if it is we keep track of it
-                    find_artists.append(count)
-
-            #            print(find_artists)
-            # select new vehicles
-            for j in find_artists:
-                if j < nartists / 2:  # part of measurements because in first half
-                    ax.lines[j].set_color('C2')
-                else:
-                    ax.lines[j].set_color('C3')
-            plt.title('Vehicle ID ' + str(followerlist[vehind]) + ' has RMSE ' + str(
-                round(vehrmse[vehind], 2)) + ' in platoon ' + str(platoonlist[platoonind]) +
-                      ' with RMSE ' + str(round(platoonrmse[platoonind], 2)))
-            plt.draw()
-
-        return
-
-    toggle1 = 1
-
-    def key_press(event):
-        nonlocal toggle1
-        # toggle out of lane trajectories  for all vehicles
-        if event.key in ['T', 't']:
-            first = True
-            visbool = None
-            ax = event.inaxes  # get axes
-            #            print(ax)
-            #            print(ax.lines)
-            for i in ax.lines:
-                if i.get_alpha() != None:  # line has alpha then we do something
-                    if first:  # for first line, we need to check whether it is currently turned on or off
-                        visbool = i.get_visible()  # get visibility
-                        visbool = not visbool  # set visbility to opposite
-                        first = False  # after doing this check we don't need to do it again
-                    i.set_visible(visbool)  # set desired visbility
-            plt.draw()
-
-        # toggle out of lane trajectories for current selected vehicle/platoon
-        if event.key in ['U', 'u']:
-            first = True
-            visbool = None
-            ax = event.inaxes  # get axes
-            #            print(ax)
-            #            print(ax.lines)
-            for z in find_artists:
-                i = ax.lines[z]
-                if i.get_alpha() != None:  # line has alpha then we do something
-                    if first:  # for first line, we need to check whether it is currently turned on or off
-                        visbool = i.get_visible()  # get visibility
-                        visbool = not visbool  # set visbility to opposite
-                        first = False  # after doing this check we don't need to do it again
-                    i.set_visible(visbool)  # set desired visbility
-            plt.draw()
-
-        # toggle between showing sim, meas, and both
-        if event.key in ['Y', 'y']:
-            ax = event.inaxes
-            curtoggle = toggle1 % 3
-            if curtoggle == 1:
-                for j in range(0, halfn):
-                    ax.lines[j].set_visible(0)
-                for j in range(halfn, nartists):
-                    ax.lines[j].set_visible(1)
-            if curtoggle == 2:
-                for j in range(0, halfn):
-                    ax.lines[j].set_visible(1)
-                for j in range(halfn, nartists):
-                    ax.lines[j].set_visible(0)
-            if curtoggle == 0:
-                for j in range(nartists):
-                    ax.lines[j].set_visible(1)
-            toggle1 += 1
-            plt.draw()
-
-        return
-
-    fig.canvas.callbacks.connect('pick_event', on_pick)
-    fig.canvas.callbacks.connect('key_press_event', key_press)
-    return
+import havsim.helper as helper
+import havsim.calibration as hc
 
 
 def plotColorLines(X, Y, SPEED, speed_limit, colormap = 'speeds', ind = 0):
+    """X and Y are x/y data to plot, SPEED gives the color for each data pair."""
 
     #helper for platoonplot
     axs = plt.gca()
@@ -429,7 +103,7 @@ def plot_format(all_vehicles, laneinds):
         # times for platooninfo
         lanedata = curmeas[:,[1,4]]
         lanedata = lanedata[lanedata[:,1] != 0]
-        unused, indjumps = checksequential(lanedata)
+        unused, indjumps = helper.checksequential(lanedata)
         if np.all(indjumps == [0,0]):
             time1 = starttime
             time2 = starttime
@@ -444,90 +118,6 @@ def plot_format(all_vehicles, laneinds):
     return meas, platooninfo
 
 
-def plotformat(sim, auxinfo, roadinfo, starttimeind = 0, endtimeind = 3000, density = 2, indlist = [], specialind = 21):
-    # deprecated, as this was for the original simulation code
-    #get output from simulation into a format we can plot using plotting functions
-    #output format is pretty inefficient in terms of memory usage - all plotting functions use this format though
-
-    #starttimeind = first time to be plotted
-    #endtimeind = last time to be plotted
-
-    #density = k plots every kth vehicle, indlist = [keys] plots keys only.
-    #specialind does not do anything
-    #it handles the circular road by creating the wrap around as new vehicles.
-
-    L = roadinfo[0]
-    platooninfo = {} #need platooninfo 0 - 4 : observation times
-    meas = {} #need columns 1, 2,3, 7
-    idcount = 0
-    speciallist = []
-
-    if indlist == []:
-        uselist = list(sim.keys())[::density]
-    else:
-        uselist = indlist
-    for i in uselist:
-        cur = sim[i]
-
-#        if i == specialind:
-#            speciallist.append(idcount)
-
-        #initialize output for current vehicle
-        curtime = 0
-        prevx = -1
-        tlist = []
-        xlist = []
-        vlist = []
-        platooninfo[idcount] = [curtime, curtime, None, None]
-        for counter, j in enumerate(cur): #for each vehicle
-            if counter < starttimeind:
-                continue
-
-            if j[0] < prevx: #if distance decreases its because we wrapped around - store measurements in new vehicle
-
-                endtime = counter #get end time and update platooninfo
-                platooninfo[idcount][2:] = [endtime-1,endtime-1]
-                #update meas
-                meas[idcount] = np.zeros((endtime-curtime,8))
-                meas[idcount][:,1] = tlist
-                meas[idcount][:,2] = xlist
-                meas[idcount][:,3] = vlist
-                #lane just set always to 1
-                meas[idcount][:,7] = 1
-
-                #reset iteration
-                idcount += 1
-                curtime = endtime
-                prevx = j[0]
-                tlist = [curtime]
-                xlist = [j[0]]
-                vlist = [j[1]]
-                platooninfo[idcount] = [curtime, curtime, None, None]
-                continue
-
-            tlist.append(counter)
-            xlist.append(j[0])
-            vlist.append(j[1])
-            prevx = j[0]
-
-            if counter >= endtimeind:
-                break
-
-        #also need to finish current once for loop ends
-        endtime = counter #get end time and update platooninfo
-        platooninfo[idcount][2:] = [endtime,endtime]
-        #update meas
-        meas[idcount] = np.zeros((endtime-curtime+1,8))
-        meas[idcount][:,1] = tlist
-        meas[idcount][:,2] = xlist
-        meas[idcount][:,3] = vlist
-        #lane just set always to 1
-        meas[idcount][:,7] = 1
-        #update iteration
-        idcount += 1
-
-
-    return meas, platooninfo
 
 def platoonplot(meas, sim, platooninfo, platoon=[], newfig=True, clr=['C0', 'C1'],
                 fulltraj=True, lane=None, opacity=.4, colorcode=True, speed_limit=[], timerange=[None, None]):  # plot platoon in space-time
@@ -767,111 +357,6 @@ def generate_changetimes(veh, col_index):
     return ind
 
 
-def calculateflows(meas, spacea, timea, agg, lane = None, method = 'area', h = .1):
-    #meas = measurements, in usual format (dictionary where keys are vehicle IDs, values are numpy arrays
- 	#spacea - reads as ``space A'' (where A is the region where the macroscopic quantities are being calculated).
-        #list of lists, each nested list is a length 2 list which ... represents the starting and ending location on road.
-        #So if len(spacea) >1 there will be multiple regions on the road which we are tracking e.g. spacea = [[200,400],[800,1000]],
-        #calculate the flows in regions 200 to 400 and 800 to 1000 in meas.
- 	#timea - reads as ``time A'', should be a list of the times (in the local time of thedata).
-        #E.g. timea = [1000,3000] calculate times between 1000 and 3000.
- 	#agg - aggregation length, float number which is the length of each aggregation interval.
-        #E.g. agg = 300 each measurement of the macroscopic quantities is over 300 time units in the data,
-        #so in NGSim where each time is a frameID with length .1s, we are aggregating every 30 seconds.
-    #h specifies unit conversion - i.e. if 1 index in data = .1 of units you want, h = .1
-        #e.g. ngsim has .1 seconds between measurements, so h = .1 yields units of seconds for time. no conversion for space units
-    #area method (from laval paper), or flow method (count flow into space region, calculate space mean speed, get density from flow/speed)
-        #area method is better
-
-    #for each space region, value is a list of floats of the value at the correpsonding time interval
-    q = [[] for i in spacea]
-    k = [[] for i in spacea]
-
-    starttime = [i[0,1] for i in meas.values()]
-    starttime = int(min(starttime)) #first time index in data
-
-    spacealist = []
-    for i in spacea:
-        spacealist.extend(i)
-    # spacemin = min(spacealist)
-    # spacemax = max(spacealist)
-    # timemin = min(timea)
-    # timemax = max(timea)
-
-    intervals = []  #tuples of time intervals
-    start = timea[0]
-    end = timea[1]
-    temp1 = start
-    temp2 = start + agg
-    while temp2 < end:
-        intervals.append((temp1, temp2))
-        temp1 = temp2
-        temp2 += agg
-    intervals.append((temp1, end))
-
-
-    regions = [[([], []) for j in intervals] for i in spacea]
-    #regions are indexed by space, then time. values are list of (position traveled, time elapsed) (list of float, list of float)
-
-    flows = [[0 for j in intervals] for i in spacea] #used if method = 'flow', indexed by space, then time, int of how many vehicles enter region
-    for vehid in meas:
-        alldata = meas[vehid]
-
-        #if lane is given we need to find the segments of data inside the lane
-        if lane is not None:
-            alldata = alldata[alldata[:,7]==lane] #boolean mask selects data inside lane
-            inds = helper.sequential(alldata) #returns indexes where there are jumps
-            indlist = []
-            for i in range(len(inds)-1):
-                indlist.append([inds[i], inds[i+1]])
-        else: #otherwise can just use everything
-            indlist = [[0,len(alldata)]]
-
-        for i in indlist:
-            data = alldata[i[0]:i[1]] #select only current region of data - #sequential data for a single vehicle in correct lane if applicable
-            if len(data) == 0:
-                continue
-#            region_contained = []
-#            region_data = {}  # key: tid, sid
-
-            for i in range(len(intervals)):
-                start =  int(max(0, intervals[i][0] + starttime - data[0,1])) #indices for slicing data
-                end = int(max(0, intervals[i][1] + starttime - data[0,1])) #its ok if end goes over for slicing - if both zero means no data in current interval
-
-                if start == end:
-                    continue
-                curdata = data[start:end]
-
-                for j in range(len(spacea)):
-                    minspace, maxspace = spacea[j][0], spacea[j][1]
-                    curspacedata = curdata[np.all([curdata[:,2] > minspace, curdata[:,2] < maxspace], axis = 0)]
-                    if len(curspacedata) == 0:
-                        continue
-                    regions[j][i][0].append(curspacedata[-1,2] - curspacedata[0,2])
-                    regions[j][i][1].append((curspacedata[-1,1] - curspacedata[0,1])*h)
-                    if method == 'flow':
-                        firstpos, lastpos = curdata[0,2], curdata[-1,2]
-                        if firstpos < spacea[j][0] and lastpos > spacea[j][0]:
-                            flows[j][i] += 1
-
-    if method == 'area':
-        for i in range(len(spacea)):
-            for j in range(len(intervals)):
-                area = (spacea[i][1] - spacea[i][0]) * (intervals[j][1] - intervals[j][0])
-                q[i].append(sum(regions[i][j][0]) / area)
-                k[i].append(sum(regions[i][j][1]) / area)
-    elif method == 'flow':
-        for i in range(len(spacea)):
-            for j in range(len(intervals)):
-                q[i].append(flows[i][j] / (h*(intervals[j][1] - intervals[j][0])))
-                try:
-                    k[i].append(sum(regions[i][j][0]) / sum(regions[i][j][1]))
-                except:
-                    k[i].append(0) #division by zero when region is empty
-
-    return q, k
-
-
 def plotflows(meas, spacea, timea, agg, type='FD', FDagg=None, lane = None, method = 'area', h = .1):
     """
 	aggregates microscopic data into macroscopic quantities based on Edie's generalized definitions of traffic variables
@@ -914,7 +399,7 @@ def plotflows(meas, spacea, timea, agg, type='FD', FDagg=None, lane = None, meth
         temp2 += agg
     intervals.append((temp1, end))
 
-    q, k = calculateflows(meas, spacea, timea, agg, lane = lane, method = method, h = h)
+    q, k = helper.calculateflows(meas, spacea, timea, agg, lane = lane, method = method, h = h)
     time_sequence = []
     time_sequence_for_line = []
 
@@ -958,77 +443,6 @@ def plotflows(meas, spacea, timea, agg, type='FD', FDagg=None, lane = None, meth
 
     return
 
-
-def plotdist(meas1, sim1, platooninfo1, my_id, fulltraj=False, delay=0, h=.1):
-    # this is just for a single vehicle
-    # this function plots the distance for measurement and simulation, given platooninfo
-    # can do either the whole trajectory or just the simulated part
-    # will use the current figure so if you want it in its own figure need to initialize a figure beforehand
-    # can do either delay or no delay
-    meas = meas1[my_id]
-    sim = sim1[my_id]
-    platooninfo = platooninfo1[my_id]
-
-    if not fulltraj:
-        t_nstar, t_n, T_nm1, T_n = platooninfo[0:4]
-        if delay != 0:
-            offset = math.ceil(delay / h)
-            offsetend = math.floor(delay / h)
-            if T_nm1 + offsetend >= T_n:
-                end = T_n
-            else:
-                end = T_nm1 + offsetend
-            start = t_n + offset
-        else:
-            start = t_n
-            end = T_nm1
-        meas = meas[start - t_nstar:end - t_nstar + 1, :]
-        sim = sim[start - t_nstar:end - t_nstar + 1, :]
-
-    #    plt.figure()
-    plt.xlabel('time (.1 seconds)')
-    plt.ylabel('space (feet)')
-    plt.plot(meas[:, 1], meas[:, 2], 'k', sim[:, 1], sim[:, 2], 'r')
-    plt.legend(['Measurements', 'Simulation after calibration'])
-    plt.title('Space-Time plot for vehicle ' + str(my_id))
-
-    return
-
-
-def plotspeed(meas1, sim1, platooninfo1, my_id, fulltraj=False, delay=0, h=.1, newfig=True):
-    # this is just for a single vehicle
-    # this function plots the distance for measurement and simulation, given platooninfo
-    # can do either the whole trajectory or just the simulated part
-    # can do either delay or no delay
-    meas = meas1[my_id]
-    sim = sim1[my_id]
-    platooninfo = platooninfo1[my_id]
-
-    if not fulltraj:
-        t_nstar, t_n, T_nm1, T_n = platooninfo[0:4]
-        if delay != 0:
-            offset = math.ceil(delay / h)
-            offsetend = math.floor(delay / h)
-            if T_nm1 + offsetend >= T_n:
-                end = T_n
-            else:
-                end = T_nm1 + offsetend
-            start = t_n + offset
-        else:
-            start = t_n
-            end = T_nm1
-        meas = meas[start - t_nstar:end - t_nstar + 1, :]
-        sim = sim[start - t_nstar:end - t_nstar + 1, :]
-
-    if newfig:
-        plt.figure()
-    plt.xlabel('time (.1 seconds)')
-    plt.ylabel('speed (feet/second)')
-    plt.plot(meas[:, 1], meas[:, 3], 'k', sim[:, 1], sim[:, 3], 'r')
-    plt.legend(['Measurements', 'Simulation after calibration'])
-    plt.title('Speed-Time plot for vehicle ' + str(my_id))
-
-    return
 
 def plotvhd(meas, sim, platooninfo, vehicle_id, draw_arrow=False, arrow_interval=10, effective_headway=False, rp=None, h=.1,
             datalen=9, timerange=[None, None], lane=None, delay=0, newfig=True, plot_color_line=False):
@@ -1098,7 +512,7 @@ def process_one_vehicle(ax, meas, sim, platooninfo, my_id, timerange, lane, plot
     start, end = compute_validate_time(timerange, t_n, T_nm1, h, delay)
 
     frames = [t_n, T_nm1]
-    relax, unused = r_constant(rinfo[0], frames, T_n, rp, False, h)  # get the relaxation amounts for the current vehicle; these depend on the parameter curp[-1] only.
+    relax, unused = helper.r_constant(rinfo[0], frames, T_n, rp, False, h)  # get the relaxation amounts for the current vehicle; these depend on the parameter curp[-1] only.
     meas_label = str(my_id)
 
     headway = None
@@ -1120,6 +534,7 @@ def process_one_vehicle(ax, meas, sim, platooninfo, my_id, timerange, lane, plot
                                             lane, plot_color_line, leadinfo, start, end, meas_label, meas_color, count = count)
     artist_list.extend(ret_list)
     return artist_list
+
 
 def plot_one_vehicle(x_coordinates, y_coordinates, timestamps, lane_numbers, target_lane, plot_color_line, leadinfo, start, end, label, color, opacity=.4, count = 0):
     # If there is at least a leader change,
@@ -1466,7 +881,7 @@ def compute_headway2(veh, data, platooninfo, rp = None, h =.1):
     relaxtype = 'both' if rp is not None else 'none'
     leadinfo, unused, rinfo = helper.makeleadfolinfo([veh], platooninfo, data, relaxtype = relaxtype)
     t_nstar, t_n, T_nm1, T_n = platooninfo[veh][:4]
-    relax, unused = r_constant(rinfo[0], [t_n, T_nm1], T_n, rp, False, h)
+    relax, unused = helper.r_constant(rinfo[0], [t_n, T_nm1], T_n, rp, False, h)
 
     lead = np.zeros((T_nm1 + 1 - t_n, 9))  # initialize the lead vehicle trajectory
     for j in leadinfo[0]:
@@ -1476,9 +891,6 @@ def compute_headway2(veh, data, platooninfo, rp = None, h =.1):
     headway = lead[:, 2] - data[veh][t_n - t_nstar:T_nm1 - t_nstar+1, 2] - lead[:, 6] + relax[:T_nm1+1-t_n]
 
     return headway
-
-
-
 
 
 def compute_line_data(headway, i, lentail, dataset, veh_id, time):
@@ -1605,51 +1017,12 @@ def animatetraj(meas, followerchain, platoon=[], usetime=[], presim=True, postsi
 
     return out
 
-####################################
-
-
-def wtplot(meas, platooninfo, ID):
-    testveh = ID
-
-    test = meas[testveh][:, 3]
-
-    #    X = np.arange(150,250)
-    X = np.arange(15, 100)
-    # X = np.array([64])
-    out, out2 = pywt.cwt(test, X, 'mexh', sampling_period=.1)
-    Y = meas[testveh][:, 1]
-    X, Y, = np.meshgrid(X, Y);
-    X = np.transpose(X);
-    Y = np.transpose(Y)
-
-    plt.close('all')
-    fig = plt.figure()
-    ax = fig.gca(projection='3d')
-    ax.plot_surface(X, Y, np.abs(out), cmap=cm.coolwarm)
-    ax.view_init(azim=0, elev=90)
-
-    # plt.figure()
-    # plt.imshow(out,cmap = cm.coolwarm)
-    plt.figure(figsize=(11, 5))
-    plt.subplot(1, 2, 1)
-    plotspeed(meas, meas, platooninfo, testveh, fulltraj=True)
-
-    energy = np.sum(np.abs(out), axis=0)
-    plt.subplot(1, 2, 2)
-    plt.plot(meas[testveh][:, 1], energy)
-    plt.show()
-
-    return
-
 
 def wt(series, scale):
     out, out2 = pywt.cwt(series, scale, 'mexh')
     energy = np.sum(np.abs(out), 0)
     return energy
 
-
-# example of executing above code
-# wtplot(meas,platooninfo, 100) #example of output;
 
 def plotspacetime(meas, platooninfo, timeint = 50, xint = 70, lane=1, use_avg='mean'):
     # meas - keys are vehicles, values are numpy arrays where rows are observations
@@ -1831,7 +1204,7 @@ def selectoscillation(meas, platooninfo, timeint = 50, xint = 70, lane=1, use_av
                     #plot vehicle and add to plottedvehlist
                     plottedvehlist.add(vehid)
                     temp = meas[vehid]
-                    indjumps = sequential(temp)
+                    indjumps = helper.sequential(temp)
                     for i in range(len(indjumps) - 1):
                         plotx, ploty = temp[indjumps[i]:indjumps[i + 1], 1], temp[indjumps[i]:indjumps[i + 1], 2]
                         newline = plt.plot(plotx, ploty, 'C0', scalex=False, scaley=False)
@@ -1897,7 +1270,7 @@ def selectoscillation(meas, platooninfo, timeint = 50, xint = 70, lane=1, use_av
 
         if event.key in ['N', 'n']:
             #sort vehicles to form all vehicles which can be shown
-            all_veh_list = sortveh(lane, meas, vehlist)
+            all_veh_list = hc.sortveh(lane, meas, vehlist)
 
             #form platoonlists for start,end vertices for all regions in vertlist
             platoonlist = list(range(len(vertlist)*2))
@@ -1953,20 +1326,11 @@ def selectoscillation(meas, platooninfo, timeint = 50, xint = 70, lane=1, use_av
 
     return
 
-#########################################
-
-# def get_all_vehicles_for_lane(meas, platooninfo, lane, start, end):
-#     veh_list = []
-#     for veh_id in meas:
-#         if lane in np.unique(meas[veh_id][:, 7]):
-#             if platooninfo[veh_id][2] < start or platooninfo[veh_id][1] > end:
-#                 continue
-#             veh_list.append(veh_id)
-
-#     return veh_list
-
 
 def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonlist=None, ind=0, out = [[]]):
+    # TODO - refactor this into a more general version where you can pass your plot_ax functions so you can
+    # have an interactive plot for whatever you want. Put the current functionality into its own function
+
     # meas - data in dictionary format
     # platooninfo - for meas
     # lane - lane for data shown. Must be specified
@@ -1984,15 +1348,6 @@ def selectvehID(meas, platooninfo, lane, all_veh_list, vertlist = None, platoonl
     # plot with 4 subplots, shows the space-time, speed-time, std. dev of speed, wavelet series of vehicles.
     # interactive plot can add vehicles before/after, select specific vehicles etc.
 
-
-    #old initialization
-    # # Get time limit based on vertlist
-    # timestamps = []
-    # for i in range(4):
-    #     timestamps.append(vertlist[0][i][0])
-    # # Sort the list of vehicles based on the given lane
-    # all_veh_list = get_all_vehicles_for_lane(meas, platooninfo, lane, min(timestamps), max(timestamps))
-    # all_veh_list = sortveh3(vehlist, lane, meas, platooninfo)
 
     #initialize vehicles shown
     if platoonlist != None:

@@ -8,7 +8,7 @@ import numpy as np
 from havsim.plotting import compute_headway2
 
 def make_dataset(meas, platooninfo, dt = .1):
-    """Makes dataset from meas and platooninfo
+    """Makes dataset from meas and platooninfo.
 
     Args:
         meas
@@ -105,12 +105,12 @@ class RNNCFModel(tf.keras.Model):
 
         Args:
             inputs: list of lead_inputs, cur_state, hidden_states.
-                lead_inputs - nested python list with shape (nveh, nt, 2), giving the leader position and speed at
+                lead_inputs - tensor with shape (nveh, nt, 2), giving the leader position and speed at
                     each timestep.
-                cur_state -  nested python list with shape (nveh, 2) giving the vehicle position and speed at the
+                cur_state -  tensor with shape (nveh, 2) giving the vehicle position and speed at the
                     starting timestep.
-                hidden_states - list of the two hidden states, each hidden state has shape of (nveh, lstm_units).
-                    Initialized as all zeros for the first timestep.
+                hidden_states - list of the two hidden states, each hidden state is a tensor with shape
+                    of (nveh, lstm_units). Initialized as all zeros for the first timestep.
         Returns:
             outputs: tensor of vehicle trajectories, shape of (number of vehicles, number of timesteps)
             curspeed: tensor of current vehicle speeds, shape of (number of vehicles, 1)
