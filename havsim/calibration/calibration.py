@@ -1,9 +1,9 @@
 """Refactors the functionality of the calibration.opt module.
 
-The simulation module does an entire micro simulation. The calibration module is supposed to either
-calibrate only the longitudinal, or only the latitudinal model. This allows direct comparison with the
-data on a microscopic level. Either single vehicles, or strings (platoons) of vehicles can be
-simulated.
+The simulation module does an entire micro simulation. The calibration module supports simulations where
+the lane changing times and vehicle orders fixed apriori to match trajecotry data. This allows direct
+comparison with the trajectory data, removing the need to only calibrate to the macroscopic, aggreagted data.
+Either single vehicles, or strings (platoons) of vehicles can be simulated.
 """
 
 import numpy as np
@@ -14,7 +14,7 @@ import math
 # TODO finish implementing calibration for platoons of vehicle
     #handle assigning parameters for multiple vehicles
     #removing vehicles and downstream boundary
-# TODO implement calibration for latitudinal models only
+# TODO implement calibration for latitudinal models also
 
 class CalibrationVehicle(Vehicle):
     """Base CalibrationVehicle class for a second order ODE model.
@@ -460,6 +460,7 @@ def make_lc_event(vehicles, id2obj, meas, platooninfo, dt, addevent_list, lceven
 def add_event(event, vehicles, timeind, dt, lc_event):
     """Adds a vehicle to the simulation and applies the first lead change event.
 
+    Add events occur when a vehicle is added to the Calibration.
     Add events are a tuple of
         start (float) - time index of the event
         'add' (str) - identifies event as an add event
@@ -480,6 +481,8 @@ def add_event(event, vehicles, timeind, dt, lc_event):
 def lc_event(event, timeind, dt):
     """Applies lead change event, updating a CalibrationVehicle's leader.
 
+    Lead chang eevents occur when a CalibrationVehicle's leader changes. In a Calibration, it is
+    assumed that vehicles have fixed lc times and fixed vehicle orders.
     Lead change events are a tuple of
         start (float) - time index of the event
         'lc' (str) - identifies event as a lane change event
