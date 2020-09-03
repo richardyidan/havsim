@@ -107,6 +107,8 @@ def analyze_res_NN(res_list, meas, platooninfo, dt, mergeind = math.inf, times =
     return out, out2
 
 #%%
+out = deep_learning.generate_trajectories(model, list(testing.keys()), testing, loss=deep_learning.weighted_masked_MSE_loss)
+out2 = deep_learning.generate_trajectories(model, list(training.keys()), training, loss=deep_learning.weighted_masked_MSE_loss)
 
 res_list = make_into_analyze_res_format(out, list(testing.keys()), testing)
 test_out = analyze_res_NN(res_list, meas, platooninfo, .1)

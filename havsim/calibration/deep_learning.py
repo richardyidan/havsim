@@ -2,6 +2,7 @@
 import tensorflow as tf
 import numpy as np
 from havsim import helper
+import math
 
 
 def make_dataset(meas, platooninfo, veh_list, dt=.1):
@@ -42,7 +43,7 @@ def make_dataset(meas, platooninfo, veh_list, dt=.1):
         vehpos = meas[veh][t1-t0:, 2]
         vehspd = meas[veh][t1-t0:, 3]
         IC = [meas[veh][t1-t0, 2], meas[veh][t1-t0, 3]]
-        headway = leadpos - vehpos
+        headway = leadpos - vehpos[:t2+1-t1]
 
         # normalization + add item to datset
         vehacc = [(vehpos[i+2] - 2*vehpos[i+1] + vehpos[i])/(dt**2) for i in range(len(vehpos)-2)]
@@ -225,7 +226,8 @@ def train_step(x, y_true, sample_weight, model, loss_fn, optimizer):
     return y_pred, cur_speeds, hidden_state, loss
 
 
-def training_loop(model, loss, optimizer, ds, nbatches=10000, nveh=32, nt=10):
+def training_loop(model, loss, optimizer, ds, nbatches=10000, nveh=32, nt=10, m=100,
+                  early_stopping_loss=None):
     """Trains model by repeatedly calling train_step.
 
     Args:
@@ -236,6 +238,11 @@ def training_loop(model, loss, optimizer, ds, nbatches=10000, nveh=32, nt=10):
         nbatches: number of batches to run
         nveh: number of vehicles in each batch
         nt: number of timesteps per vehicle in each batch
+        m: number of batches per print out. If using early stopping, the early_stopping_loss is evaluated
+            every m batches.
+        early_stopping_loss: if None, we return the loss from train_step every m batches. If not None, it is
+            a function which takes in model, returns a loss value. If the loss increases, we stop the
+            training, and load the best weights.
     Returns:
         None.
     """
@@ -253,14 +260,32 @@ def training_loop(model, loss, optimizer, ds, nbatches=10000, nveh=32, nt=10):
     cur_state = tf.convert_to_tensor(cur_state, dtype='float32')
     hidden_states = tf.convert_to_tensor(hidden_states, dtype='float32')
     lead_inputs, true_traj, loss_weights = make_batch(vehs, vehs_counter, ds, nt)
+    prev_loss = math.inf
+    early_stop_counter = 0
 
     for i in range(nbatches):
+        # call train_step
         veh_states, cur_speeds, hidden_states, loss_value = \
             train_step([lead_inputs, cur_state, hidden_states], true_traj, loss_weights, model,
                        loss, optimizer)
-        if i % 10 == 0:
+
+        # print out and early stopping
+        if i % m == 0:
+            if early_stopping_loss is not None:
+                loss_value = early_stopping_loss(model)
+                if loss_value > prev_loss:
+                    early_stop_counter += 1
+                    if early_stop_counter >= 10:  # can change 10
+                        print('loss for '+str(i)+'th batch is '+str(loss_value))
+                        model.load_weights('prev_weights')
+                        break
+                else:
+                    model.save_weights('prev_weights')
+                    prev_loss = loss_value
+                    early_stop_counter = 0
             print('loss for '+str(i)+'th batch is '+str(loss_value))
 
+        # update iteration
         cur_state = tf.stack([veh_states[:, -1], cur_speeds], axis=1)  # current state for vehicles in batch
         # check if any vehicles in batch have had their entire trajectory simulated
         need_new_vehs = []  # list of indices in batch we need to get a new vehicle for

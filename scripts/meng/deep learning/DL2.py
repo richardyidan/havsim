@@ -29,11 +29,32 @@ loss = deep_learning.masked_MSE_loss
 opt = tf.keras.optimizers.Adam(learning_rate = .001)
 
 #%% train and save results
-deep_learning.training_loop(model, loss, opt, training, nbatches = 2000, nveh = 32, nt = 50)
-deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 100)
-deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 200)
-deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 300)
-deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 500)
+early_stopping = False
+# no early stopping -
+if not early_stopping:
+    deep_learning.training_loop(model, loss, opt, training, nbatches = 10000, nveh = 32, nt = 50)
+    deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 100)
+    deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 200)
+    deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 300)
+    deep_learning.training_loop(model, loss, opt, training, nbatches = 2000, nveh = 32, nt = 500)
+
+# early stopping -
+if early_stopping:
+    def early_stopping_loss(model):
+        return deep_learning.generate_trajectories(model, list(testing.keys()), testing,
+                                                   loss=deep_learning.weighted_masked_MSE_loss)[-1]
+    deep_learning.training_loop(model, loss, opt, training, nbatches=10000, nveh=32, nt=50, m=100,
+                                early_stopping_loss=early_stopping_loss)
+    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=100, m=50,
+                                early_stopping_loss=early_stopping_loss)
+    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=200, m=25,
+                                early_stopping_loss=early_stopping_loss)
+    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=300, m=15,
+                                early_stopping_loss=early_stopping_loss)
+    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=500, m=10,
+                                early_stopping_loss=early_stopping_loss)
+
+
 
 model.save_weights('trained LSTM')
 with open('model_aux_info.pkl', 'wb') as f:
