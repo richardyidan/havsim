@@ -46,7 +46,7 @@ def get_lead_data(veh, meas, platooninfo, rp=None, dt=.1):
 
 
 def get_fixed_relaxation(veh, meas, platooninfo, rp, dt=.1):
-    """Gets relaxation amounts determined apriori using makerinfo and r_constant for parameter rp."""
+    """Gets headway relaxation amounts determined apriori using makerinfo and r_constant for parameter rp."""
     t0, t1, t2, t3 = platooninfo[veh][:4]
     leadinfo = makeleadinfo([veh], platooninfo, meas)
     rinfo = makerinfo([veh], platooninfo, meas, leadinfo, relaxtype='both', mergertype=None)

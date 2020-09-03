@@ -133,7 +133,7 @@ class RNNCFModel(tf.keras.Model):
         return outputs, cur_speed, hidden_states
 
 
-def make_batch(vehs, vehs_counter, ds, nt=5, lstm_units=20):
+def make_batch(vehs, vehs_counter, ds, nt=5, rp=None, relax_args = None):
     """Create batch of data to send to model.
 
     Args:
@@ -142,7 +142,9 @@ def make_batch(vehs, vehs_counter, ds, nt=5, lstm_units=20):
             max time index)
         ds: dataset, from make_dataset
         nt: number of timesteps in batch
-        lstm_units: number of LSTM units in model
+        rp: if not None, we apply relaxation using helper.get_fixed_relaxation with parameter rp.
+        relax_args: if rp is not None, pass in a tuple of (meas, platooninfo, dt) so the relaxation
+            can be calculated
 
     Returns:
         lead_inputs: nested python list with shape (nveh, nt, 2), giving the leader position and speed at
@@ -159,6 +161,10 @@ def make_batch(vehs, vehs_counter, ds, nt=5, lstm_units=20):
     for count, veh in enumerate(vehs):
         t, tmax = vehs_counter[count]
         leadpos, leadspeed = ds[veh]['lead posmem'], ds[veh]['lead speedmem']
+        if rp is not None:
+            meas, platooninfo, dt = relax_args
+            relax = helper.get_fixed_relaxation(veh, meas, platooninfo, rp, dt=dt)
+            leadpos = leadpos + relax
         posmem = ds[veh]['posmem']
         curlead = []
         curtraj = []
@@ -185,6 +191,12 @@ def masked_MSE_loss(y_true, y_pred, mask_weights):
     """Returns MSE over the entire batch, element-wise weighted with mask_weights."""
     temp = tf.math.multiply(tf.square(y_true-y_pred), mask_weights)
     return tf.reduce_mean(temp)
+
+
+def weighted_masked_MSE_loss(y_true, y_pred, mask_weights):
+    """Returns MSE over the entire batch, element-wise weighted with mask_weights."""
+    temp = tf.math.multiply(tf.square(y_true-y_pred), mask_weights)
+    return tf.reduce_sum(temp)/tf.reduce_sum(mask_weights)
 
 
 def train_step(x, y_true, sample_weight, model, loss_fn, optimizer):
@@ -240,7 +252,7 @@ def training_loop(model, loss, optimizer, ds, nbatches=10000, nveh=32, nt=10):
     hidden_states = [tf.zeros((nveh, model.lstm_units)),  tf.zeros((nveh, model.lstm_units))]
     cur_state = tf.convert_to_tensor(cur_state, dtype='float32')
     hidden_states = tf.convert_to_tensor(hidden_states, dtype='float32')
-    lead_inputs, true_traj, loss_weights = make_batch(vehs, vehs_counter, ds, nt, model.lstm_units)
+    lead_inputs, true_traj, loss_weights = make_batch(vehs, vehs_counter, ds, nt)
 
     for i in range(nbatches):
         veh_states, cur_speeds, hidden_states, loss_value = \
@@ -278,10 +290,10 @@ def training_loop(model, loss, optimizer, ds, nbatches=10000, nveh=32, nt=10):
             c = tf.tensor_scatter_nd_update(c, inds_to_update, hidden_state_updates)
             hidden_states = [h, c]
 
-        lead_inputs, true_traj, loss_weights = make_batch(vehs, vehs_counter, ds, nt, model.lstm_units)
+        lead_inputs, true_traj, loss_weights = make_batch(vehs, vehs_counter, ds, nt)
 
 
-def generate_trajectories(model, vehs, ds, loss=None):
+def generate_trajectories(model, vehs, ds, loss=None, kwargs={}):
     """Generate a batch of trajectories.
 
     Args:
@@ -289,6 +301,7 @@ def generate_trajectories(model, vehs, ds, loss=None):
         vehs: list of vehicle IDs
         ds: dataset from make_dataset
         loss: if not None, we will call loss function and return the loss
+        kwargs: dictionary of keyword arguments to pass to make_batch
     Returns:
         y_pred: tensor of vehicle trajectories, shape of (number of vehicles, number of timesteps)
         cur_speeds: tensor of current vehicle speeds, shape of (number of vehicles, 1)
@@ -301,7 +314,7 @@ def generate_trajectories(model, vehs, ds, loss=None):
     hidden_states = [tf.zeros((nveh, model.lstm_units)),  tf.zeros((nveh, model.lstm_units))]
     cur_state = tf.convert_to_tensor(cur_state, dtype='float32')
     hidden_states = tf.convert_to_tensor(hidden_states, dtype='float32')
-    lead_inputs, true_traj, loss_weights = make_batch(vehs, vehs_counter, ds, nt, model.lstm_units)
+    lead_inputs, true_traj, loss_weights = make_batch(vehs, vehs_counter, ds, nt, **kwargs)
 
     y_pred, cur_speeds, hidden_state = model([lead_inputs, cur_state, hidden_states])
     if loss is not None:

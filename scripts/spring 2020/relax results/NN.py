@@ -18,11 +18,6 @@
 # out = generate_trajectories(model, list(testing.keys()), testing, loss = loss)
 # out2 = generate_trajectories(model, list(training.keys()), training, loss = loss)
 
-#%%
-
-res_list = make_into_analyze_res_format(out, list(testing.keys()), testing)
-test_out = analyze_res_NN(res_list, meas, platooninfo, .1)
-
 
 #%%
 import havsim.calibration.helper as helper
@@ -110,3 +105,8 @@ def analyze_res_NN(res_list, meas, platooninfo, dt, mergeind = math.inf, times =
     out['short lc'] = (np.mean(shortlc), np.median(shortlc), np.std(shortlc))
     print(out)
     return out, out2
+
+#%%
+
+res_list = make_into_analyze_res_format(out, list(testing.keys()), testing)
+test_out = analyze_res_NN(res_list, meas, platooninfo, .1)
