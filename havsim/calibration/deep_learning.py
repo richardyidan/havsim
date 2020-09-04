@@ -55,6 +55,7 @@ def make_dataset(meas, platooninfo, veh_list, dt=.1):
 
     return ds, (maxheadway, maxspeed, minacc, maxacc)
 
+
 class RNNCFModel(tf.keras.Model):
     """Simple RNN based CF model."""
 
@@ -126,15 +127,15 @@ class RNNCFModel(tf.keras.Model):
             # update vehicle states
             x = tf.squeeze(x, axis=1)
             cur_acc = (self.maxa-self.mina)*x + self.mina
+            cur_pos = cur_pos + self.dt*cur_speed
             cur_speed = cur_speed + self.dt*cur_acc
-            cur_pos = cur_pos + self.dt*cur_acc
             outputs.append(cur_pos)
 
         outputs = tf.stack(outputs, 1)
         return outputs, cur_speed, hidden_states
 
 
-def make_batch(vehs, vehs_counter, ds, nt=5, rp=None, relax_args = None):
+def make_batch(vehs, vehs_counter, ds, nt=5, rp=None, relax_args=None):
     """Create batch of data to send to model.
 
     Args:
@@ -195,7 +196,7 @@ def masked_MSE_loss(y_true, y_pred, mask_weights):
 
 
 def weighted_masked_MSE_loss(y_true, y_pred, mask_weights):
-    """Returns MSE over the entire batch, element-wise weighted with mask_weights."""
+    """Returns masked_MSE over the entire batch, but we don't include 0 weight losses in the average."""
     temp = tf.math.multiply(tf.square(y_true-y_pred), mask_weights)
     return tf.reduce_sum(temp)/tf.reduce_sum(mask_weights)
 
@@ -226,7 +227,7 @@ def train_step(x, y_true, sample_weight, model, loss_fn, optimizer):
     return y_pred, cur_speeds, hidden_state, loss
 
 
-def training_loop(model, loss, optimizer, ds, nbatches=10000, nveh=32, nt=10, m=100,
+def training_loop(model, loss, optimizer, ds, nbatches=10000, nveh=32, nt=10, m=100, n=20,
                   early_stopping_loss=None):
     """Trains model by repeatedly calling train_step.
 
@@ -240,6 +241,7 @@ def training_loop(model, loss, optimizer, ds, nbatches=10000, nveh=32, nt=10, m=
         nt: number of timesteps per vehicle in each batch
         m: number of batches per print out. If using early stopping, the early_stopping_loss is evaluated
             every m batches.
+        n: if using early stopping, number of batches that the testing loss can increase before stopping.
         early_stopping_loss: if None, we return the loss from train_step every m batches. If not None, it is
             a function which takes in model, returns a loss value. If the loss increases, we stop the
             training, and load the best weights.
@@ -275,12 +277,12 @@ def training_loop(model, loss, optimizer, ds, nbatches=10000, nveh=32, nt=10, m=
                 loss_value = early_stopping_loss(model)
                 if loss_value > prev_loss:
                     early_stop_counter += 1
-                    if early_stop_counter >= 10:  # can change 10
+                    if early_stop_counter >= n:
                         print('loss for '+str(i)+'th batch is '+str(loss_value))
-                        model.load_weights('prev_weights')
+                        model.load_weights('/saved lstm weights/prev_weights')  # folder must exist
                         break
                 else:
-                    model.save_weights('prev_weights')
+                    model.save_weights('/saved lstm weights/prev_weights')
                     prev_loss = loss_value
                     early_stop_counter = 0
             print('loss for '+str(i)+'th batch is '+str(loss_value))

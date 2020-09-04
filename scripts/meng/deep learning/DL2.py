@@ -26,7 +26,7 @@ testing, unused = deep_learning.make_dataset(meas, platooninfo, test_veh)
 
 model = deep_learning.RNNCFModel(maxhd, maxv, mina, maxa)
 loss = deep_learning.masked_MSE_loss
-opt = tf.keras.optimizers.Adam(learning_rate = .001)
+opt = tf.keras.optimizers.Adam(learning_rate = .0003)
 
 #%% train and save results
 early_stopping = False
@@ -43,21 +43,21 @@ if early_stopping:
     def early_stopping_loss(model):
         return deep_learning.generate_trajectories(model, list(testing.keys()), testing,
                                                    loss=deep_learning.weighted_masked_MSE_loss)[-1]
-    deep_learning.training_loop(model, loss, opt, training, nbatches=10000, nveh=32, nt=50, m=100,
+    deep_learning.training_loop(model, loss, opt, training, nbatches=10000, nveh=32, nt=50, m=100, n=20,
                                 early_stopping_loss=early_stopping_loss)
-    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=100, m=50,
+    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=100, m=50, n=20,
                                 early_stopping_loss=early_stopping_loss)
-    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=200, m=25,
+    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=200, m=40, n=20,
                                 early_stopping_loss=early_stopping_loss)
-    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=300, m=15,
+    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=300, m=30, n=20,
                                 early_stopping_loss=early_stopping_loss)
-    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=500, m=10,
+    deep_learning.training_loop(model, loss, opt, training, nbatches=2000, nveh=32, nt=500, m=20, n=20,
                                 early_stopping_loss=early_stopping_loss)
 
 
 
-model.save_weights('trained LSTM')
-with open('model_aux_info.pkl', 'wb') as f:
+model.save_weights('/saved lstm weights/trained LSTM')
+with open('/saved lstm weights/model_aux_info.pkl', 'wb') as f:
      norm = (maxhd, maxv, mina, maxa)
      model_used = 'havsim.calibration.deep_learning.RNNCFModel'
      kwargs = 'lstm_units=20'

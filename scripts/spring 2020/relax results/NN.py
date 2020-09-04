@@ -1,44 +1,59 @@
 
-"""
-@author: rlk268@cornell.edu
-"""
-#%%
-# training, testing, maxhd, maxv, mina, maxa = make_dataset(meas, platooninfo)
-# model = RNNCFModel(maxhd, maxv, mina, maxa)
-# loss = masked_MSE_loss
-# opt = tf.keras.optimizers.Adam(learning_rate = .001)
-
-# training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 100, lstm_units = 20)
-# training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 200, lstm_units = 20)
-# training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 300, lstm_units = 20)
-# training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 500, lstm_units = 20)
-
-# model.save_weights('trained LSTM')
-# #%%
-# out = generate_trajectories(model, list(testing.keys()), testing, loss = loss)
-# out2 = generate_trajectories(model, list(training.keys()), training, loss = loss)
-
-
-#%%
-import havsim.calibration.helper as helper
-import math
+from havsim.calibration import deep_learning
+import pickle
 import numpy as np
+import tensorflow as tf
+from havsim import helper
+import math
 
-def make_into_analyze_res_format(out, vehlist, ds, dt = .1):
+try:
+    with open('C:/Users/rlk268/OneDrive - Cornell University/havsim/data/recon-ngsim.pkl', 'rb') as f:
+        meas, platooninfo = pickle.load(f) #load data
+except:
+    with open('/home/rlk268/havsim/data/recon-ngsim.pkl', 'rb') as f:
+        meas, platooninfo = pickle.load(f) #load data
+
+#%% generate training data and initialize model/optimizer
+
+nolc_list = []
+for veh in meas.keys():
+    temp = nolc_list.append(veh) if len(platooninfo[veh][4]) == 1 else None
+np.random.shuffle(nolc_list)
+train_veh = nolc_list[:-100]
+test_veh = nolc_list[-100:]
+
+training, norm = deep_learning.make_dataset(meas, platooninfo, train_veh)
+maxhd, maxv, mina, maxa = norm
+testing, unused = deep_learning.make_dataset(meas, platooninfo, test_veh)
+
+model = deep_learning.RNNCFModel(maxhd, maxv, mina, maxa)
+loss = deep_learning.masked_MSE_loss
+opt = tf.keras.optimizers.Adam(learning_rate = .001)
+
+#%% train and save results
+# the weights are also saved in havsim/scripts/meng/deep learning/saved lstm weights
+early_stopping = False
+# no early stopping -
+if not early_stopping:
+    deep_learning.training_loop(model, loss, opt, training, nbatches = 10000, nveh = 32, nt = 50)
+    deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 100)
+    deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 200)
+    deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 300)
+    deep_learning.training_loop(model, loss, opt, training, nbatches = 2000, nveh = 32, nt = 500)
+
+
+#%%
+
+def make_into_analyze_res_format(out, vehlist, ds, platooninfo, dt = .1):
     # want dictionary with values as a dict with keys 'posmem' 'speedmem'
     res_list = {}
     for count, veh in enumerate(vehlist):
-        traj_len = ds[veh]['times'][1] - ds[veh]['times'][0]+1
+        traj_len = platooninfo[veh][2] - platooninfo[veh][1]+1
         res_list[veh] = {'posmem':None, 'speedmem':None}
-        temp = list(out[0][count,:traj_len])
+        temp = list(out[0][count,:traj_len].numpy())
         res_list[veh]['posmem'] = temp
-
-        try:
-            res_list[veh]['speedmem'] = [(temp[i+1] - temp[i])/(dt) for i in range(traj_len-1)]
-        except:
-            print('hello')
-        res_list[veh]['speedmem'].append(float(out[1][count]))
-
+        res_list[veh]['speedmem'] = [(temp[i+1] - temp[i])/(dt) for i in range(traj_len-1)]
+        res_list[veh]['speedmem'].append(out[1][count].numpy())
     return res_list
 
 
@@ -106,9 +121,36 @@ def analyze_res_NN(res_list, meas, platooninfo, dt, mergeind = math.inf, times =
     print(out)
     return out, out2
 
-#%%
-out = deep_learning.generate_trajectories(model, list(testing.keys()), testing, loss=deep_learning.weighted_masked_MSE_loss)
-out2 = deep_learning.generate_trajectories(model, list(training.keys()), training, loss=deep_learning.weighted_masked_MSE_loss)
+#%%  # analyze results
+veh_list = meas.keys()
+merge_list = []
+lc_list = []
+nolc_list = []
+for veh in veh_list:
+    t_nstar, t_n = platooninfo[veh][0:2]
+    if t_n > t_nstar and meas[veh][t_n-t_nstar-1,7]==7 and meas[veh][t_n-t_nstar,7]==6:
+        merge_list.append(veh)
+    elif len(platooninfo[veh][4]) > 1:
+        lc_list.append(veh)
+    elif len(platooninfo[veh][4]) == 1:
+        nolc_list.append(veh)
 
-res_list = make_into_analyze_res_format(out, list(testing.keys()), testing)
-test_out = analyze_res_NN(res_list, meas, platooninfo, .1)
+nolc_ds, unused = deep_learning.make_dataset(meas, platooninfo, nolc_list)
+merge_ind = len(lc_list)
+lc_list.extend(merge_list)
+lc_ds, unused = deep_learning.make_dataset(meas, platooninfo, lc_list)
+
+nolc_res = deep_learning.generate_trajectories(model, list(nolc_ds.keys()), nolc_ds)
+lc_nor_res = deep_learning.generate_trajectories(model, list(lc_ds.keys()), lc_ds)
+
+nolc_res_list = make_into_analyze_res_format(nolc_res,  list(nolc_ds.keys()), nolc_ds, platooninfo)
+out1 = analyze_res_NN(nolc_res_list, meas, platooninfo, .1)
+
+lc_res_list = make_into_analyze_res_format(lc_nor_res, list(lc_ds.keys()), lc_ds, platooninfo)
+out2 = analyze_res_NN(lc_res_list, meas, platooninfo, .1, mergeind = merge_ind)
+
+#%% results for applying relaxation to model
+kwargs = {rp:15, other_one: 'stuff'}
+# use scipy.minimize_scalar
+
+
