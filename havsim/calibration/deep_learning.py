@@ -71,8 +71,12 @@ class RNNCFModel(tf.keras.Model):
         """
         super().__init__()
         # architecture
-        self.lstm_cell = tf.keras.layers.LSTMCell(lstm_units)
+        self.lstm_cell = tf.keras.layers.LSTMCell(lstm_units, dropout=.3,
+                                                  kernel_regularizer=tf.keras.regularizers.l2(l=.02),
+                                                  recurrent_regularizer=tf.keras.regularizers.l2(l=.02))
         self.dense1 = tf.keras.layers.Dense(1)
+        self.dense2 = tf.keras.layers.Dense(10, activation='relu',
+                                            kernel_regularizer=tf.keras.regularizers.l2(l=.02))
 
         # normalization constants
         self.maxhd = maxhd
@@ -84,7 +88,7 @@ class RNNCFModel(tf.keras.Model):
         self.dt = dt
         self.lstm_units = lstm_units
 
-    def call(self, inputs):
+    def call(self, inputs, training=False):
         """Updates states for a batch of vehicles.
 
         Args:
@@ -95,6 +99,8 @@ class RNNCFModel(tf.keras.Model):
                     starting timestep.
                 hidden_states - list of the two hidden states, each hidden state is a tensor with shape
                     of (nveh, lstm_units). Initialized as all zeros for the first timestep.
+            training: Whether to run in training or inference mode. Need to pass training=True if training
+                with dropout.
 
         Returns:
             outputs: tensor of vehicle positions, shape of (number of vehicles, number of timesteps). Note
@@ -121,7 +127,9 @@ class RNNCFModel(tf.keras.Model):
             cur_inputs = tf.stack([curhd, norm_veh_speed, cur_lead_speed], axis=1)
 
             # call to model
-            x, hidden_states = self.lstm_cell(cur_inputs, hidden_states)
+            self.lstm_cell.reset_dropout_mask()
+            x, hidden_states = self.lstm_cell(cur_inputs, hidden_states, training)
+            x = self.dense2(x)
             x = self.dense1(x)  # output of the model is current acceleration for the batch
 
             # update vehicle states
@@ -201,6 +209,7 @@ def weighted_masked_MSE_loss(y_true, y_pred, mask_weights):
     return tf.reduce_sum(temp)/tf.reduce_sum(mask_weights)
 
 
+@tf.function
 def train_step(x, y_true, sample_weight, model, loss_fn, optimizer):
     """Updates parameters for a single batch of examples.
 
@@ -220,8 +229,8 @@ def train_step(x, y_true, sample_weight, model, loss_fn, optimizer):
     with tf.GradientTape() as tape:
         # would using model.predict_on_batch instead of model.call be faster to evaluate?
         # the ..._on_batch methods use the model.distribute_strategy - see tf.keras source code
-        y_pred, cur_speeds, hidden_state = model(x)
-        loss = loss_fn(y_true, y_pred, sample_weight)  # would l2 reg. be applied to this? add model.losses?
+        y_pred, cur_speeds, hidden_state = model(x, training=True)
+        loss = loss_fn(y_true, y_pred, sample_weight) + sum(model.losses)
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
     return y_pred, cur_speeds, hidden_state, loss
@@ -279,10 +288,10 @@ def training_loop(model, loss, optimizer, ds, nbatches=10000, nveh=32, nt=10, m=
                     early_stop_counter += 1
                     if early_stop_counter >= n:
                         print('loss for '+str(i)+'th batch is '+str(loss_value))
-                        model.load_weights('/saved lstm weights/prev_weights')  # folder must exist
+                        model.load_weights('prev_weights')  # folder must exist
                         break
                 else:
-                    model.save_weights('/saved lstm weights/prev_weights')
+                    model.save_weights('prev_weights')
                     prev_loss = loss_value
                     early_stop_counter = 0
             print('loss for '+str(i)+'th batch is '+str(loss_value))

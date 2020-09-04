@@ -3,6 +3,7 @@ from havsim.calibration import deep_learning
 import pickle
 import numpy as np
 import tensorflow as tf
+import math
 
 try:
     with open('C:/Users/rlk268/OneDrive - Cornell University/havsim/data/recon-ngsim.pkl', 'rb') as f:
@@ -10,6 +11,17 @@ try:
 except:
     with open('/home/rlk268/havsim/data/recon-ngsim.pkl', 'rb') as f:
         meas, platooninfo = pickle.load(f) #load data
+
+# disable gpu
+try:
+    # Disable all GPUS
+    tf.config.set_visible_devices([], 'GPU')
+    visible_devices = tf.config.get_visible_devices()
+    for device in visible_devices:
+        assert device.device_type != 'GPU'
+except:
+    # Invalid device or cannot modify virtual devices once initialized.
+    pass
 
 #%% generate training data and initialize model/optimizer
 
@@ -24,12 +36,13 @@ training, norm = deep_learning.make_dataset(meas, platooninfo, train_veh)
 maxhd, maxv, mina, maxa = norm
 testing, unused = deep_learning.make_dataset(meas, platooninfo, test_veh)
 
-model = deep_learning.RNNCFModel(maxhd, maxv, mina, maxa)
+model = deep_learning.RNNCFModel(maxhd, maxv, 0, 1, lstm_units=60)
 loss = deep_learning.masked_MSE_loss
-opt = tf.keras.optimizers.Adam(learning_rate = .0003)
+opt = tf.keras.optimizers.Adam(learning_rate = .0008)
 
 #%% train and save results
 early_stopping = False
+
 # no early stopping -
 if not early_stopping:
     deep_learning.training_loop(model, loss, opt, training, nbatches = 10000, nveh = 32, nt = 50)
@@ -42,28 +55,29 @@ if not early_stopping:
 if early_stopping:
     def early_stopping_loss(model):
         return deep_learning.generate_trajectories(model, list(testing.keys()), testing,
-                                                   loss=deep_learning.weighted_masked_MSE_loss)[-1]
+                                                    loss=deep_learning.weighted_masked_MSE_loss)[-1]
     deep_learning.training_loop(model, loss, opt, training, nbatches=10000, nveh=32, nt=50, m=100, n=20,
                                 early_stopping_loss=early_stopping_loss)
-    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=100, m=50, n=20,
+    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=100, m=50, n=10,
                                 early_stopping_loss=early_stopping_loss)
-    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=200, m=40, n=20,
+    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=200, m=40, n=10,
                                 early_stopping_loss=early_stopping_loss)
-    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=300, m=30, n=20,
+    deep_learning.training_loop(model, loss, opt, training, nbatches=1000, nveh=32, nt=300, m=30, n=10,
                                 early_stopping_loss=early_stopping_loss)
-    deep_learning.training_loop(model, loss, opt, training, nbatches=2000, nveh=32, nt=500, m=20, n=20,
+    deep_learning.training_loop(model, loss, opt, training, nbatches=2000, nveh=32, nt=500, m=20, n=10,
                                 early_stopping_loss=early_stopping_loss)
 
 
 
-model.save_weights('/saved lstm weights/trained LSTM')
-with open('/saved lstm weights/model_aux_info.pkl', 'wb') as f:
-     norm = (maxhd, maxv, mina, maxa)
-     model_used = 'havsim.calibration.deep_learning.RNNCFModel'
-     kwargs = 'lstm_units=20'
-     aux_info = 'normalization was '+str(norm)+'\nmodel used was '+str(model_used)+'\nkwargs were '+str(kwargs)
-     pickle.dump(aux_info, f)
+# model.save_weights('trained LSTM')
+# with open('model_aux_info.pkl', 'wb') as f:
+#       norm = (maxhd, maxv, mina, maxa)
+#       model_used = 'havsim.calibration.deep_learning.RNNCFModel'
+#       kwargs = 'lstm_units=20'
+#       aux_info = 'normalization was '+str(norm)+'\nmodel used was '+str(model_used)+'\nkwargs were '+str(kwargs)
+#       pickle.dump(aux_info, f)
 
+model.load_weights('trained LSTM')
 
 #%% test by generating entire trajectories
 out = deep_learning.generate_trajectories(model, list(testing.keys()), testing, loss=deep_learning.weighted_masked_MSE_loss)
