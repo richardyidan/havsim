@@ -26,20 +26,17 @@ training, norm = deep_learning.make_dataset(meas, platooninfo, train_veh)
 maxhd, maxv, mina, maxa = norm
 testing, unused = deep_learning.make_dataset(meas, platooninfo, test_veh)
 
-model = deep_learning.RNNCFModel(maxhd, maxv, mina, maxa)
+model = deep_learning.RNNCFModel(maxhd, maxv, 0, 1, lstm_units=60)
 loss = deep_learning.masked_MSE_loss
-opt = tf.keras.optimizers.Adam(learning_rate = .001)
+opt = tf.keras.optimizers.Adam(learning_rate = .0008)
 
-#%% train and save results
+#%% code for training
 # the weights are also saved in havsim/scripts/meng/deep learning/saved lstm weights
-early_stopping = False
-# no early stopping -
-if not early_stopping:
-    deep_learning.training_loop(model, loss, opt, training, nbatches = 10000, nveh = 32, nt = 50)
-    deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 100)
-    deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 200)
-    deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 300)
-    deep_learning.training_loop(model, loss, opt, training, nbatches = 2000, nveh = 32, nt = 500)
+deep_learning.training_loop(model, loss, opt, training, nbatches = 10000, nveh = 32, nt = 50)
+deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 100)
+deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 200)
+deep_learning.training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 300)
+deep_learning.training_loop(model, loss, opt, training, nbatches = 2000, nveh = 32, nt = 500)
 
 
 #%%
@@ -58,9 +55,7 @@ def make_into_analyze_res_format(out, vehlist, ds, platooninfo, dt = .1):
 
 
 def analyze_res_NN(res_list, meas, platooninfo, dt, mergeind = math.inf, times = 100, realistic = 1.1):
-    out = {'overall mse':None, 'mse near LC':None, 'mse for merges':None, 'mse for many LC':None, 'realistic acc':None, 'short lc':None}
-    temp = [ga['fun']/(3.28084**2) for ga in res_list]
-    out['overall mse'] = (np.mean(temp), np.median(temp), np.std(temp))
+    out = {'mse':None, 'mse near LC':None, 'mse for merges':None, 'mse for many LC':None, 'realistic acc':None, 'short lc':None}
 
     mse = []
     nearlc = []
@@ -141,16 +136,20 @@ lc_list.extend(merge_list)
 lc_ds, unused = deep_learning.make_dataset(meas, platooninfo, lc_list)
 
 nolc_res = deep_learning.generate_trajectories(model, list(nolc_ds.keys()), nolc_ds)
-lc_nor_res = deep_learning.generate_trajectories(model, list(lc_ds.keys()), lc_ds)
-
 nolc_res_list = make_into_analyze_res_format(nolc_res,  list(nolc_ds.keys()), nolc_ds, platooninfo)
 out1 = analyze_res_NN(nolc_res_list, meas, platooninfo, .1)
 
+
+lc_nor_res = deep_learning.generate_trajectories(model, list(lc_ds.keys()), lc_ds)
 lc_res_list = make_into_analyze_res_format(lc_nor_res, list(lc_ds.keys()), lc_ds, platooninfo)
 out2 = analyze_res_NN(lc_res_list, meas, platooninfo, .1, mergeind = merge_ind)
 
 #%% results for applying relaxation to model
-kwargs = {rp:15, other_one: 'stuff'}
+kwargs = {'rp':10, 'relax_args':(meas, platooninfo, .1)}
+lc_res = deep_learning.generate_trajectories(model, list(lc_ds.keys()), lc_ds, kwargs=kwargs)
+lc_res_list = make_into_analyze_res_format(lc_res, list(lc_ds.keys()), lc_ds, platooninfo)
+out3 = analyze_res_NN(lc_res_list, meas, platooninfo, .1, mergeind = merge_ind)
+
 # use scipy.minimize_scalar
 
 

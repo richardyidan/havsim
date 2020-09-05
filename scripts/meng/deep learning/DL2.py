@@ -12,7 +12,6 @@ except:
     with open('/home/rlk268/havsim/data/recon-ngsim.pkl', 'rb') as f:
         meas, platooninfo = pickle.load(f) #load data
 
-# disable gpu
 try:
     # Disable all GPUS
     tf.config.set_visible_devices([], 'GPU')
@@ -26,11 +25,15 @@ except:
 #%% generate training data and initialize model/optimizer
 
 nolc_list = []
+# # train on no lc vehicles only
+# for veh in meas.keys():
+#     temp = nolc_list.append(veh) if len(platooninfo[veh][4]) == 1 else None
+# train on all vehicles
 for veh in meas.keys():
-    temp = nolc_list.append(veh) if len(platooninfo[veh][4]) == 1 else None
+    temp = nolc_list.append(veh) if len(platooninfo[veh][4]) > 0 else None
 np.random.shuffle(nolc_list)
-train_veh = nolc_list[:-100]
-test_veh = nolc_list[-100:]
+train_veh = nolc_list[:-300]
+test_veh = nolc_list[-300:]
 
 training, norm = deep_learning.make_dataset(meas, platooninfo, train_veh)
 maxhd, maxv, mina, maxa = norm
@@ -69,15 +72,9 @@ if early_stopping:
 
 
 
-# model.save_weights('trained LSTM')
-# with open('model_aux_info.pkl', 'wb') as f:
-#       norm = (maxhd, maxv, mina, maxa)
-#       model_used = 'havsim.calibration.deep_learning.RNNCFModel'
-#       kwargs = 'lstm_units=20'
-#       aux_info = 'normalization was '+str(norm)+'\nmodel used was '+str(model_used)+'\nkwargs were '+str(kwargs)
-#       pickle.dump(aux_info, f)
+# model.save_weights('trained LSTM no relax')
 
-model.load_weights('trained LSTM')
+# model.load_weights('trained LSTM')
 
 #%% test by generating entire trajectories
 out = deep_learning.generate_trajectories(model, list(testing.keys()), testing, loss=deep_learning.weighted_masked_MSE_loss)
