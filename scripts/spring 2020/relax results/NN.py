@@ -41,16 +41,18 @@ deep_learning.training_loop(model, loss, opt, training, nbatches = 2000, nveh = 
 
 #%%
 
-def make_into_analyze_res_format(out, vehlist, ds, platooninfo, dt = .1):
+def make_into_analyze_res_format(out, vehlist, meas, platooninfo, dt = .1):
     # want dictionary with values as a dict with keys 'posmem' 'speedmem'
     res_list = {}
     for count, veh in enumerate(vehlist):
+        t0, t1 = platooninfo[veh][0], platooninfo[veh][1]
         traj_len = platooninfo[veh][2] - platooninfo[veh][1]+1
         res_list[veh] = {'posmem':None, 'speedmem':None}
-        temp = list(out[0][count,:traj_len].numpy())
-        res_list[veh]['posmem'] = temp
+        temp = list(out[0][count,:traj_len].numpy())  # note that output does not include the initial condition
+        res_list[veh]['posmem'] = temp[:-1]
+        res_list[veh]['posmem'].insert(0, meas[veh][t1-t0,2])
         res_list[veh]['speedmem'] = [(temp[i+1] - temp[i])/(dt) for i in range(traj_len-1)]
-        res_list[veh]['speedmem'].append(out[1][count].numpy())
+        res_list[veh]['speedmem'].insert(0, meas[veh][t1-t0,3])
     return res_list
 
 
@@ -129,27 +131,32 @@ for veh in veh_list:
         lc_list.append(veh)
     elif len(platooninfo[veh][4]) == 1:
         nolc_list.append(veh)
-
-nolc_ds, unused = deep_learning.make_dataset(meas, platooninfo, nolc_list)
 merge_ind = len(lc_list)
 lc_list.extend(merge_list)
+
+#%%
+nolc_ds, unused = deep_learning.make_dataset(meas, platooninfo, nolc_list)
 lc_ds, unused = deep_learning.make_dataset(meas, platooninfo, lc_list)
 
 nolc_res = deep_learning.generate_trajectories(model, list(nolc_ds.keys()), nolc_ds)
-nolc_res_list = make_into_analyze_res_format(nolc_res,  list(nolc_ds.keys()), nolc_ds, platooninfo)
-out1 = analyze_res_NN(nolc_res_list, meas, platooninfo, .1)
+nolc_nor_res_list = make_into_analyze_res_format(nolc_res,  list(nolc_ds.keys()), meas, platooninfo)
+out1 = analyze_res_NN(nolc_nor_res_list, meas, platooninfo, .1)
 
 
 lc_nor_res = deep_learning.generate_trajectories(model, list(lc_ds.keys()), lc_ds)
-lc_res_list = make_into_analyze_res_format(lc_nor_res, list(lc_ds.keys()), lc_ds, platooninfo)
-out2 = analyze_res_NN(lc_res_list, meas, platooninfo, .1, mergeind = merge_ind)
+lc_res_list = make_into_analyze_res_format(lc_nor_res, list(lc_ds.keys()), meas, platooninfo)
+out2 = analyze_res_NN(lc_nor_res_list, meas, platooninfo, .1, mergeind = merge_ind)
 
 #%% results for applying relaxation to model
-kwargs = {'rp':10, 'relax_args':(meas, platooninfo, .1)}
-lc_res = deep_learning.generate_trajectories(model, list(lc_ds.keys()), lc_ds, kwargs=kwargs)
-lc_res_list = make_into_analyze_res_format(lc_res, list(lc_ds.keys()), lc_ds, platooninfo)
-out3 = analyze_res_NN(lc_res_list, meas, platooninfo, .1, mergeind = merge_ind)
+nolc_ds, unused = make_dataset(meas, platooninfo, nolc_list)  # need to use the modified model from DL2_relax = trained LSTM with relax
+lc_ds, unused = make_dataset(meas, platooninfo, lc_list)
 
-# use scipy.minimize_scalar
+nolc_res = generate_trajectories(model, list(nolc_ds.keys()), nolc_ds)
+nolc_res_list = make_into_analyze_res_format(nolc_res,  list(nolc_ds.keys()), meas, platooninfo)
+out3 = analyze_res_NN(nolc_r_res_list, meas, platooninfo, .1)
+
+lc_nor_res = generate_trajectories(model, list(lc_ds.keys()), lc_ds)
+lc_res_list = make_into_analyze_res_format(lc_nor_res, list(lc_ds.keys()), meas, platooninfo)
+out4 = analyze_res_NN(lc_r_res_list, meas, platooninfo, .1, mergeind = merge_ind)
 
 

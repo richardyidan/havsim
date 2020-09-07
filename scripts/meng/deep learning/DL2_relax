@@ -396,11 +396,11 @@ def generate_trajectories(model, vehs, ds, loss=None, kwargs={}):
 
 veh_list = []
 for i in meas.keys():
-    if len(platooninfo[i][4])>0:
+    if len(platooninfo[i][4])>1:  # >0
         veh_list.append(i)
 np.random.shuffle(veh_list)
-train_veh = veh_list[:-300]
-test_veh = veh_list[-300:]
+train_veh = veh_list[:-150]  # 300
+test_veh = veh_list[-150:]
 
 training, norm = make_dataset(meas, platooninfo, train_veh, rp=12)
 maxhd, maxv, mina, maxa = norm
@@ -415,7 +415,7 @@ training_loop(model, loss, opt, training, nbatches = 10000, nveh = 32, nt = 50)
 training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 100)
 training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 200)
 training_loop(model, loss, opt, training, nbatches = 1000, nveh = 32, nt = 300)
-training_loop(model, loss, opt, training, nbatches = 2000, nveh = 32, nt = 500)
+training_loop(model, loss, opt, training, nbatches = 1500, nveh = 32, nt = 500)
 
 def early_stopping_loss(model):
         return generate_trajectories(model, list(testing.keys()), testing,

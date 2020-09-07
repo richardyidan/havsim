@@ -77,11 +77,11 @@ if early_stopping:
 # model.load_weights('trained LSTM')
 
 #%% test by generating entire trajectories
-out = deep_learning.generate_trajectories(model, list(testing.keys()), testing, loss=deep_learning.weighted_masked_MSE_loss)
-out2 = deep_learning.generate_trajectories(model, list(training.keys()), training, loss=deep_learning.weighted_masked_MSE_loss)
+test = deep_learning.generate_trajectories(model, list(testing.keys()), testing, loss=deep_learning.weighted_masked_MSE_loss)
+test2 = deep_learning.generate_trajectories(model, list(training.keys()), training, loss=deep_learning.weighted_masked_MSE_loss)
 
-print(' testing loss was '+str(out[-1]))
-print(' training loss was '+str(out2[-1]))
+print(' testing loss was '+str(test[-1]))
+print(' training loss was '+str(test2[-1]))
 
 
 
