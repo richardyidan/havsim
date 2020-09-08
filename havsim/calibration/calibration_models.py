@@ -538,3 +538,31 @@ def ll_lc_event(event, timeind, dt):
         curveh.set_relax(max(relaxamount,.01), timeind, dt)
 
     hc.update_lead(curveh, newlead, leadlen, timeind)  # update leader
+
+
+class NoRelaxIDM(hc.CalibrationVehicle):
+    def set_relax(self, *args):
+        pass
+
+    def initialize(self, parameters):  # just need to set parameters correctly
+        super().initialize(parameters)
+        self.cf_parameters = parameters
+
+
+class NoRelaxOVM(OVMCalibrationVehicle):
+    def set_relax(self, *args):
+        pass
+
+    def initialize(self, parameters):
+        super().initialize(parameters)
+        self.cf_parameters = parameters
+
+
+class NoRelaxNewell(NewellCalibrationVehicle):
+    def set_relax(self, *args):
+        pass
+
+    def initialize(self, parameters):
+        super().initialize(parameters)
+        self.cf_parameters = parameters
+        

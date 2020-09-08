@@ -352,6 +352,8 @@ def make_calibration(vehicles, meas, platooninfo, dt, vehicle_class = None, cali
         event_maker: specify a function to create custom (lc) events
         lc_event_fun: specify function which handles custom lc events
     """
+    # TODO - to make this consistent with deep_learning, y should be over the times t_n+1 - min(T_nm1+1, T_n)
+    # and also this should use the helper function get_lead_data
     if vehicle_class is None:
         vehicle_class = CalibrationVehicle
     if calibration_class is None:
@@ -424,7 +426,7 @@ def make_lc_event(vehicles, id2obj, meas, platooninfo, dt, addevent_list, lceven
             leadt_nstar = platooninfo[curlead][0]
             # even though the change occurs at time start, we want to calculate the relaxation using
             # the differences in headway at time start - 1. This leads to 4 combinations, first, whether
-            # the vehicle is simulated or not, and second, whether the vehicle is available at start-1
+            # the new leader is simulated or not, and second, whether the new lead is available at start-1
             if curlead in vehicles:  # curlead is simulated (in the same calibration object)
                 if start-1 < leadt_nstar:  # handle edge case where t_nstar = start
                     leadstate = (meas[curlead][0,2]-meas[curlead][0,3]*dt,
@@ -442,8 +444,7 @@ def make_lc_event(vehicles, id2obj, meas, platooninfo, dt, addevent_list, lceven
 
             if count == 0:  # add event adds vehicle to simulation
                 t_nstar, t_n = platooninfo[veh][0:2]
-                # if t_n > t_nstar and meas[veh][t_n-t_nstar-1,7]==7 and meas[veh][t_n-t_nstar,7]==6:
-                if t_n > t_nstar:
+                if t_n > t_nstar:  # apply merger rule
                     userelax = True
                 else:
                     userelax = False
@@ -482,7 +483,7 @@ def add_event(event, vehicles, timeind, dt, lc_event):
 def lc_event(event, timeind, dt):
     """Applies lead change event, updating a CalibrationVehicle's leader.
 
-    Lead chang eevents occur when a CalibrationVehicle's leader changes. In a Calibration, it is
+    Lead change events occur when a CalibrationVehicle's leader changes. In a Calibration, it is
     assumed that vehicles have fixed lc times and fixed vehicle orders.
     Lead change events are a tuple of
         start (float) - time index of the event

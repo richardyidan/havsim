@@ -514,6 +514,7 @@ def process_one_vehicle(ax, meas, sim, platooninfo, my_id, timerange, lane, plot
     frames = [t_n, T_nm1]
     relax, unused = helper.r_constant(rinfo[0], frames, T_n, rp, False, h)  # get the relaxation amounts for the current vehicle; these depend on the parameter curp[-1] only.
     meas_label = str(my_id)
+    meas_color = next(ax._get_lines.prop_cycler)['color']
 
     headway = None
     if sim is not None:
@@ -527,7 +528,6 @@ def process_one_vehicle(ax, meas, sim, platooninfo, my_id, timerange, lane, plot
         artist_list.extend(ret_list)
 
     trueheadway = compute_headway(t_nstar, t_n, T_n, datalen, leadinfo, start, meas, my_id, relax)
-    meas_color = next(ax._get_lines.prop_cycler)['color']
     ret_list = plot_one_vehicle(trueheadway[:end + 1 - start], meas[my_id][start - t_nstar:end + 1 - t_nstar, 3],
                                             meas[my_id][start - t_nstar:end + 1 - t_nstar, 1],
                                             meas[my_id][start - t_nstar:end + 1 - t_nstar, 7],

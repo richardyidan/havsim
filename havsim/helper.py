@@ -10,6 +10,50 @@ from collections import defaultdict
 # TODO - fix code style and documentation
 # TODO - want to update format for meas/platooninfo - have a single consolidated data structure with
 # no redundant information
+
+def get_lead_data(veh, meas, platooninfo, rp=None, dt=.1):
+    """Returns lead vehicle trajectory and possibly relaxation
+
+    Args:
+        veh: vehicle to obtain leader for
+        meas: from makeplatooninfo
+        platooninfo: from makeplatooninfo
+        rp: if not None, return the relaxation amounts calculated from the measurments, not including mergers,
+            with a relaxation parameter of rp. The relaxation is calculated using r_constant and makerinfo,
+            which will give slightly different results than havsim.simulation.relaxation
+
+    Returns:
+        leadpos: (times,) numpy array of lead position - lead length (may refer to multiple vehicles)
+        leadspeed: (times,) numpy array of lead speed (may refer to multiple vehicles)
+        relax: (if rp is not None) (times,1) numpy array of relaxation amounts
+    """
+    t0, t1, t2, t3 = platooninfo[veh][:4]
+    leadinfo = makeleadinfo([veh], platooninfo, meas)
+
+    lead = np.zeros((t2-t1+1,3))
+    for j in leadinfo[0]:
+        curlead, start, stop = j
+        lead_t0 = platooninfo[curlead][0]
+        lead[start-t1:stop+1-t1, :] = meas[curlead][start-lead_t0:stop+1-lead_t0, [2, 3, 6]]
+
+    if rp is not None:
+        rinfo = makerinfo([veh], platooninfo, meas, leadinfo, relaxtype='both', mergertype=None)
+        relax, unused = r_constant(rinfo[0], [t1, t2], t3, rp, adj=False, h=dt)
+
+        return lead[:,0] - lead[:,2], lead[:,1], relax[:t2-t1+1]
+
+    return lead[:,0] - lead[:,2], lead[:,1]
+
+
+def get_fixed_relaxation(veh, meas, platooninfo, rp, dt=.1):
+    """Gets headway relaxation amounts determined apriori using makerinfo and r_constant for parameter rp."""
+    t0, t1, t2, t3 = platooninfo[veh][:4]
+    leadinfo = makeleadinfo([veh], platooninfo, meas)
+    rinfo = makerinfo([veh], platooninfo, meas, leadinfo, relaxtype='both', mergertype=None)
+    relax, unused = r_constant(rinfo[0], [t1, t2], t3, rp, adj=False, h=dt)
+    return relax[:t2-t1+1]
+
+
 def makeplatooninfo(dataset, simlen = 50):
 #	This looks at the entire dataset, and makes a platooninfo entry for every single vehicle. The platooninfo tells us during which times we calibrate a vehicle. It also contains
 #the vehicles intial conditions, as well as the vehicles leaders, and any followers the vehicle has. note that we modify the folowers it has during the time
