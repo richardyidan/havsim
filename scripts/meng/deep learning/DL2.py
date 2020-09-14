@@ -25,12 +25,12 @@ except:
 #%% generate training data and initialize model/optimizer
 
 nolc_list = []
-# # train on no lc vehicles only
-# for veh in meas.keys():
-#     temp = nolc_list.append(veh) if len(platooninfo[veh][4]) == 1 else None
-# train on all vehicles
+# train on no lc vehicles only  # good
 for veh in meas.keys():
-    temp = nolc_list.append(veh) if len(platooninfo[veh][4]) > 0 else None
+    temp = nolc_list.append(veh) if len(platooninfo[veh][4]) == 1 else None
+# train on all vehicles  # bad
+# for veh in meas.keys():
+#     temp = nolc_list.append(veh) if len(platooninfo[veh][4]) > 0 else None
 np.random.shuffle(nolc_list)
 train_veh = nolc_list[:-300]
 test_veh = nolc_list[-300:]
