@@ -528,10 +528,6 @@ def set_route_events(veh):
     Returns:
         None. Modifies veh attributes in place (route_events, cur_route, possibly applies route events).
     """
-    # for testing purposes for infinite road only#########
-    # if veh.route == []:
-    #     return
-    # ######
 
     # get new route events if they are stored in memory already
     newlane = veh.lane

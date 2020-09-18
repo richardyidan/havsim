@@ -23,6 +23,9 @@ except:
     pass
 
 #%% modify deep_learning code to incorporate relaxation
+"""
+only minor changes to make_dataset, RNNCFModel.call, make_batch to support an extra input - the relaxation amounts
+"""
 
 def make_dataset(meas, platooninfo, veh_list, rp=15, dt=.1):
     """Makes dataset from meas and platooninfo.
@@ -70,7 +73,7 @@ def make_dataset(meas, platooninfo, veh_list, rp=15, dt=.1):
         for lc in rinfo[0]:
             time, relax_amount = lc
             lc_input[time-t1] = relax_amount
-        
+
         vehpos = meas[veh][t1-t0:, 2]
         vehspd = meas[veh][t1-t0:, 3]
         IC = [meas[veh][t1-t0, 2], meas[veh][t1-t0, 3]]
@@ -422,9 +425,9 @@ def early_stopping_loss(model):
                                      loss=weighted_masked_MSE_loss)[-1]
 training_loop(model, loss, opt, training, nbatches=2000, nveh=32, nt=500, m=100, n=5,
                                 early_stopping_loss=early_stopping_loss)
-    
-    
-    
+
+
+
 #%%
 test = generate_trajectories(model, list(testing.keys()), testing, loss=weighted_masked_MSE_loss)
 test2 = generate_trajectories(model, list(training.keys()), training, loss=weighted_masked_MSE_loss)
