@@ -240,7 +240,7 @@ class Calibration:
         """
         # reset all vehicles, and assign their parameters
         for veh in self.all_vehicles:
-            veh.initialize(parameters)
+            veh.initialize(parameters)  # TODO need some method to assign parameters to vehicles
 
         # initialize events, add the first vehicle(s), initialize vehicles headways/LeadVehicles
         self.vehicles = set()
@@ -486,7 +486,7 @@ def add_event(event, vehicles, timeind, dt, lc_event):
     vehicles.add(curveh)
     lc_event(lcevent, timeind, dt)
 
-
+# TODO need to add new lane to event
 def lc_event(event, timeind, dt):
     """Applies lead change event, updating a CalibrationVehicle's leader.
 
@@ -532,6 +532,19 @@ def lc_event(event, timeind, dt):
         curveh.set_relax(relaxamounts, timeind, dt)
 
     update_lead(curveh, newlead, leadlen, timeind)  # update leader
+    # curveh.lane = Lane
+
+
+def remove_vehicles(vehicles, endpos):
+    """See if vehicle needs to be removed from simulation"""
+    remove_list = []
+    for veh in vehicles:
+        if veh.pos > endpos:
+            remove_list.append(veh)
+            if veh.fol is not None:
+                veh.fol.lead = None
+    # pop from vehicles
+    return remove_list
 
 
 def update_lead(curveh, newlead, leadlen, timeind):
@@ -546,6 +559,7 @@ def update_lead(curveh, newlead, leadlen, timeind):
     """
     if leadlen is None:  # newlead is simulated
         curveh.lead = newlead
+        newlead.fol = curveh
         curveh.leadmem.append([newlead, timeind+1])
         curveh.in_leadveh = False
     else:  # LeadVehicle
