@@ -120,7 +120,7 @@ class CalibrationVehicle(hs.Vehicle):
 
     def loss(self):
         """Calculates loss."""
-        return sum(np.square(np.array(self.posmem) - self.y))/len(self.posmem)
+        return sum(np.square(np.array(self.posmem) - self.y[:len(self.posmem)]))/len(self.posmem)
 
     def initialize(self, parameters):
         """Resets memory, applies initial conditions, and sets the parameters for the next simulation."""
@@ -161,6 +161,10 @@ class LeadVehicle:
 
     def update(self, timeind, *args):
         """Update position/speed."""
+        #index out of error because the vech simulation is only to a certain point?
+        print("hi")
+        print(len(self.leadstatemem))
+        print(timeind - self.inittime)
         self.pos, self.speed = self.leadstatemem[timeind - self.inittime]
 
     def set_len(self, length):
@@ -206,15 +210,18 @@ class Calibration:
         else:
             self.lc_event = lc_event_fun
 
+
         self.starttime = add_events[-1][0]
         self.endtime = endtime
         self.dt = dt
+
 
 
     def step(self):
         """Logic for a single simulation step. Main logics are in update_calibration."""
         for veh in self.vehicles:
             veh.set_cf(self.timeind, self.dt)
+
 
         self.addtime, self.lctime = update_calibration(self.vehicles, self.add_events, self.lc_events,
                                                        self.addtime, self.lctime, self.timeind, self.dt,
@@ -370,10 +377,11 @@ def make_calibration(vehicles, meas, platooninfo, dt, vehicle_class = None, cali
     id2obj = {}
     if type(vehicles) == list:
         vehicles = set(vehicles)
-
+    total_endtime = float('inf')
     for veh in vehicles:
         # make lead memory - a list of position/speed tuples for any leaders which are not simulated
         leads = set(platooninfo[veh][4])
+        #they are being simulated so need to get rid of this?
         needleads = leads.difference(vehicles)
         if len(needleads) > 0:
             leadstatemem = []
@@ -396,9 +404,9 @@ def make_calibration(vehicles, meas, platooninfo, dt, vehicle_class = None, cali
 
         # get initial values, y for veh
         t_nstar, inittime, endtime = platooninfo[veh][0:3]
+        total_endtime = min(endtime, total_endtime)
         initlead, initpos, initspd, length = meas[veh][inittime-t_nstar,[4,2,3,6]]
         y = meas[veh][inittime-t_nstar:endtime+1-t_nstar,2]
-
         # create vehicle object
         newveh = vehicle_class(veh, y, initpos, initspd, inittime, leadstatemem, leadinittime,
                                     length=length)
@@ -411,9 +419,8 @@ def make_calibration(vehicles, meas, platooninfo, dt, vehicle_class = None, cali
 
     addevent_list.sort(key = lambda x: x[0], reverse = True)  # sort events in time
     lcevent_list.sort(key = lambda x: x[0], reverse = True)
-
     # make calibration object
-    return calibration_class(vehicle_list, addevent_list, lcevent_list, dt, endtime=endtime,
+    return calibration_class(vehicle_list, addevent_list, lcevent_list, dt, endtime=total_endtime,
                              lc_event_fun = lc_event_fun)
 
 
