@@ -113,7 +113,8 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
           userelax_cur=True, userelax_new=False, use_coop=True, use_tact=True):
     """Minimizing total braking during lane change (MOBIL) lane changing decision model.
 
-    parameters: 0 - safety criteria (maximum deceleration allowed after LC, more negative = less strict),
+    parameters:
+        0 - safety criteria (maximum deceleration allowed after LC, more negative = less strict),
         1 - safety criteria for maximum deceleration allowed, when velocity is 0
         2 - incentive criteria (>0, larger = more strict. smaller = discretionary changes more likely),
         3 - politeness (taking other vehicles into account, 0 = ignore other vehicles, ~.1-.2 = realistic),
@@ -205,9 +206,11 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
     # tactical states
 
     # safety criteria formulations
-    # safe = p[0]   # default value of safety
+    # default value of safety -
+    # safe = p[0] (or use the maximum safety, p[1])
+    # safety changes with relative velocity (implemented in treiber, kesting' traffic-simulation.de) -
     # safe = veh.speed/veh.maxspeed
-    # safe = safe*p[0] + (1-safe)*p[1]  # safety changes with relative velocity
+    # safe = safe*p[0] + (1-safe)*p[1]
     if lctype == 'discretionary':  # different safeties for discretionary/mandatory
         safe = p[0]
     else:
