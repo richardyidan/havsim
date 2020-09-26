@@ -209,12 +209,12 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
     # default value of safety -
     # safe = p[0] (or use the maximum safety, p[1])
     # safety changes with relative velocity (implemented in treiber, kesting' traffic-simulation.de) -
-    # safe = veh.speed/veh.maxspeed
-    # safe = safe*p[0] + (1-safe)*p[1]
-    if lctype == 'discretionary':  # different safeties for discretionary/mandatory
-        safe = p[0]
-    else:
-        safe = p[1]
+    safe = veh.speed/veh.maxspeed
+    safe = safe*p[0] + (1-safe)*p[1]
+    # if lctype == 'discretionary':  # different safeties for discretionary/mandatory
+    #     safe = p[0]
+    # else:
+    #     safe = p[1]
 
     # safeguards for negative headway (necessary for IDM)
     if newhd is not None and newhd < 0:
