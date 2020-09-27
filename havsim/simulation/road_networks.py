@@ -189,13 +189,16 @@ def get_inflow_wrapper(time_series, args, inflow_type='flow'):
 
             'congested' - This is meant to add a vehicle with ~0 acceleration as soon as it is possible to do
             so. This is similar to 'speed', but instead of getting speed from time_series, we get it from
-            the anchor's lead vehicle. This may help remove artifacts from the upstream boundary
+            the anchor's lead vehicle. This may help remove artifacts from the downstream boundary
             condition caused by simulations with different Vehicle parameters.
             Requires get_eql method of the Vehicle.
+            
+            'arrivals' - We sample from some distribution to generate the next (continuous) arrival time.
+            When we pass that time in the simulation (time index >= next arrival time), we add 1 flow.
 
     Returns:
         get_inflow method for a Lane. Takes in (timeind) and returns instantaneous flow, vehicle speed,
-        at that time. If we return None for the speed, increment_inflow will invert the flow to obtain speed.
+        at that time. If we return None for the speed, increment_inflow will obtain the speed.
     """
     # give flow series - simple
     if inflow_type == 'flow':
@@ -290,7 +293,8 @@ def eql_inflow_congested(curlane, inflow, *args, c=.8, check_gap=True, **kwargs)
 
     Args:
         curlane: Lane with upstream boundary condition, which will possibly have a vehicle added.
-        inflow: current instantaneous flow.
+        inflow: current instantaneous flow. Note that the 'arrivals' method for get_inflow does not
+            return the instantaneous flow, and therefore cannot be naively used in this formulation.
         c: Constant, should be less than or equal to 1. Lower is less strict - Treiber, Kesting suggest .8
         check_gap: If False, we don't check the Treiber, Kesting condition, so we don't have to invert
             the flow. We always just add the vehicle. Gets speed from headway.
@@ -329,11 +333,13 @@ def eql_inflow_free(curlane, inflow, *args, **kwargs):
     return curlane.start, spd, hd
 
 
-def eql_speed(curlane, *args, c=.8, **kwargs):
+def eql_speed(curlane, *args, c=.8, minspeed=0, **kwargs):
     """Like eql_inflow, but get equilibrium headway from leader's speed instead of inverting flow."""
+    # also possible to get speed from the headway instead of using the leader's speed
     lead = curlane.anchor.lead
     hd = get_headway(curlane.anchor, lead)
     spd = lead.speed
+    spd = max(minspeed, spd)  # can safeguard speed
 
     se = curlane.newveh.get_eql(spd, input_type='v')
 
@@ -439,12 +445,12 @@ def speed_inflow(curlane, inflow, timeind, dt, speed_series=None, accel_bound=-2
     return curlane.start, spd, hd
 
 
-def increment_inflow_wrapper(method='ceql', speed_series=None, accel_bound=-.5, check_gap=True, shift=1, c=.8,
-                             p=[1, 2]):
-    """Defines increment_inflow method for Lane. keyword args control behavior of increment_inflow.
+def increment_inflow_wrapper(method='ceql', kwargs={}):
+    """Defines increment_inflow method for Lane.
 
     The increment_inflow method has two parts to it. First, it is responsible for determining when to add
-    vehicles to the simulation. It does this by updating an attribute inflow_buffer. When inflow_buffer >= 1,
+    vehicles to the simulation. It does this by calling the Lane.get_inflow method every timestep, which
+    returns the flow amount that timestep, which updates the attribute inflow_buffer. When inflow_buffer >= 1,
     it attempts to add a vehicle to the simulation. There are extra conditions required to add a vehicle,
     which are controlled by the 'method' keyword arg.
     Once it has been determined a new vehicle can be added, this function is also responsible for calling
@@ -453,13 +459,10 @@ def increment_inflow_wrapper(method='ceql', speed_series=None, accel_bound=-.5, 
 
     Args:
         method: One of 'ceql' (eql_inflow_congested), 'feql' (eql_inflow_free), 'seql' (eql_speed),
-            'shifted' (shifted_speed_inflow), 'newell', or 'speed' (speed_inflow) - refer to those functions
-        speed_series: for speed_inflow method
-        accel_bound: for speed_inflow and shifted_speed_inflow methods
-        check_gap: for eql_inflow_congested method
-        shift: for shifted_speed_inflow method
-        c: for eql_inflow_congested method
-        p: for newell_inflow method
+            'shifted' (shifted_speed_inflow), 'newell', or 'speed' (speed_inflow) - refer to those functions.
+            We suggest using 'seql' method as it seems to provide the most consistent results and works in
+            both congested/uncongested conditions, including the transition between those.
+        kwargs: dictionary of keyword arguments for the method chosen.
 
     Returns:
         increment_inflow method -
@@ -489,16 +492,20 @@ def increment_inflow_wrapper(method='ceql', speed_series=None, accel_bound=-.5, 
         self.inflow_buffer += inflow * dt
 
         if self.inflow_buffer >= 1:
+            
             if self.anchor.lead is None:  # rule for adding vehicles when road is empty
-                if spd is None:
-                    if speed_series is not None:
-                        spd = speed_series(timeind)
-                    else:
-                        spd = self.newveh.inv_flow(inflow, congested=True)
+            # old rule
+            #     if spd is None:
+            #         if speed_series is not None:
+            #             spd = speed_series(timeind)
+            #         else:
+            #             spd = self.newveh.inv_flow(inflow, congested=True)
+            
+            # new rule
+                spd = self.newveh.maxspeed*.9
                 out = (self.start, spd, None)
             else:  # normal rule for adding vehicles
-                out = method_fun(self, inflow, timeind, dt, c=c, check_gap=check_gap, accel_bound=accel_bound,
-                                 shift=shift, p=p, speed_series=speed_series)
+                out = method_fun(self, inflow, timeind, dt, **kwargs)
 
             if out is None:
                 return vehid

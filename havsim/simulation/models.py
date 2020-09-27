@@ -7,9 +7,9 @@ import numpy as np
 def IDM(p, state):
     """Intelligent Driver Model (IDM), second order ODE.
 
-    Note that if the headway is negative, model will begin accelerating; therefore if collisions occur,
-    very bad things can potentially happen. If velocity is negative, model will begin decelerating; so if
-    negative speeds occur, very bad things will happen.
+    Note that if the headway is negative, model will begin accelerating; If velocity is negative, 
+    model will begin decelerating. Therefore you must take care to avoid any collisions or negative speeds
+    in the simulation.
 
     Args:
         p: parameters - [max speed, comfortable time headway, jam spacing, comfortable acceleration,
