@@ -181,7 +181,7 @@ def set_lc_helper(veh, chk_lc=1, get_fol=True):
     """
     # first determine what situation we are in and which sides we need to check
     l_lc, r_lc = veh.l_lc, veh.r_lc
-    if l_lc is None:
+    if l_lc is None:  # TODO keep the lside, rside, chk_cond in memory instead of always updating them
         if r_lc is None:
             return False, None
         elif r_lc == 'discretionary':
@@ -660,6 +660,10 @@ class Vehicle:
         if call_model:
             models.mobil(self, lc_actions, *args, timeind, dt)
         return
+    
+    def reset_lc_state(self):
+        """After a lc is completed successfully, reset the lc model state (e.g. reset cooperation)"""
+        self.lc_side = self.coop_veh = self.lc_urgency = None
 
     def acc_bounds(self, acc):
         """Apply acceleration bounds."""

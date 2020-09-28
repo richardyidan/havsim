@@ -677,7 +677,7 @@ class Lane:
     # logics to create routes?
     # Also combine lane events and route events into a single sorted list. This would let you check only 1
     # position per timestep instead of two. Can store the next value to check as well, to avoid the indexing
-    # operations.
+    # operations. (note: if a lane and route event have the same position, update the lane event first)
     # Also need a better (easier) way to allow boundary conditions to be defined, and in a more modular way
     # E.g. of good design - create road network by specifying types of roads (e.g. road, on/off ramp, merge)
     # add boundary conditions to road network.
