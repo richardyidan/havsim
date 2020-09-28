@@ -58,7 +58,7 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
         relaxvehs.append(veh.fol)
 
         # update leader follower relationships, lane/road
-        update_lane_routes.update_change(lc_actions, veh, timeind)  # this is the only thing
+        update_lane_routes.update_veh_after_lc(lc_actions, veh, timeind)  # this is the only thing
         # which can't be done in parralel
 
         relaxvehs.append(veh)
@@ -89,7 +89,7 @@ def update_net(vehicles, lc_actions, inflow_lanes, merge_lanes, vehid, timeind, 
     for veh in vehicles:
         # check vehicle's lane events and route events, acting if necessary
         update_lane_routes.update_lane_events(veh, timeind, remove_vehicles)
-        update_lane_routes.update_route(veh)
+        update_lane_routes.update_route_events(veh)
     # remove vehicles which leave
     for veh in remove_vehicles:
         vehicles.remove(veh)
