@@ -695,11 +695,17 @@ class Vehicle:
 
     def __eq__(self, other):
         """Used for comparing two vehicles with ==."""
-        return self.vehid == other.vehid
+        if other != None:
+            return self.vehid == other.vehid
+        else:
+            return False
 
     def __ne__(self, other):
         """Used for comparing two vehicles with !=."""
-        return not self.vehid == other.vehid
+        if other != None:
+            return not self.vehid == other.vehid
+        else:
+            return True
 
     def __repr__(self):
         """Display for vehicle in interactive console."""

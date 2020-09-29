@@ -74,7 +74,9 @@ def downstream_wrapper(method='speed', time_series=None, congested=True, merge_s
     # options - time_series
     if method == 'speed':  # specify a function which takes in time and returns the speed
         def call_downstream(self, veh, timeind, dt):
-            speed = time_series(timeind)
+            #why does it think that time_series is a list? Shouldnt it be a function
+            #speed = time_series(timeind)
+            speed = time_series[0][timeind]
             return veh.acc_bounds((speed - veh.speed)/dt)
         return call_downstream
 
@@ -652,7 +654,7 @@ class Lane:
         """
         self.laneind = laneind
         self.road = road
-        self.roadname = road['name']
+        self.roadname = road['name'] if road != None else None
         # starting position/end (float)
         self.start = start
         self.end = end
