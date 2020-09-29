@@ -232,9 +232,9 @@ def set_lc_helper(veh, chk_lc=1, get_fol=True):
     # if get_fol option is given to wrapper, it means model requires the follower's quantities as well
     if get_fol:
         fol, lead = veh.fol, veh.lead
-        if fol.cf_parameters is None:
-            newfolhd = None
-        elif lead is None:
+        # if fol.cf_parameters is None:
+        #     newfolhd = None
+        if lead is None:
             newfolhd = None
         else:
             newfolhd = get_headway(fol, lead)
@@ -262,14 +262,10 @@ def get_new_hd(lcsidefol, veh, lcsidelane):
         newlcsidehd = None
     else:
         newlcsidehd = get_headway(veh, lcsidelead)
-        # if newlcsidehd < 0:
-            # newlcsidehd = 1e-6
-    if lcsidefol.cf_parameters is None:
-        newlcsidefolhd = None
-    else:
-        newlcsidefolhd = get_headway(lcsidefol, veh)
-        # if newlcsidefolhd < 0:
-            # newlcsidefolhd = 1e-6
+    # if lcsidefol.cf_parameters is None:
+    #     newlcsidefolhd = None
+    # else:
+    newlcsidefolhd = get_headway(lcsidefol, veh)
 
     return newlcsidefolhd, newlcsidehd
 
@@ -591,7 +587,7 @@ class Vehicle:
 
     def get_flow(self, x, leadlen=None, input_type='v'):
         """Input a speed or headway, and output the flow based on the equilibrium solution.
-        
+
         This will automatically apply bounds to the headway/speed based on the maxspeed and hdbounds
         attributes. Also, note that it is possible to get the maximum possible flow and corresponding
         equilibrium solution - call inv_flow with an unattainable flow and it will return the speed/headway
@@ -660,7 +656,7 @@ class Vehicle:
         if call_model:
             models.mobil(self, lc_actions, *args, timeind, dt)
         return
-    
+
     def reset_lc_state(self):
         """After a lc is completed successfully, reset the lc model state (e.g. reset cooperation)"""
         self.lc_side = self.coop_veh = self.lc_urgency = None
