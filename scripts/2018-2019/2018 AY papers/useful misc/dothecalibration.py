@@ -121,11 +121,24 @@ bfgstime = end-start
 
 # ### comparison purposes
 print('time for objective is '+str(objtime))
-t_nstar, t_n, T_nm1 = platooninfo[curplatoon[0]][:3]
-print('time for calibration is '+str(bfgstime)+' with mse '+str((bfgs[1]/((T_nm1-t_n+1)*.1))))
+mysum = 0
+for i in range(len(curplatoon)):
+    t_nstar, t_n, T_nm1 = platooninfo[curplatoon[i]][:3]
+    mysum += (T_nm1-t_n+1)*.1
+print('time for calibration is '+str(bfgstime)+' with mse '+str((bfgs[1]/(mysum))))
 # print('time for calibration is '+str(bfgstime)+' with mse '+str(GA['fun']/((T_nm1-t_n+1)*.1)))
-plt.plot(sim[curplatoon[0]][t_n-t_nstar:T_nm1+1-t_nstar,3])
-plt.plot(meas[curplatoon[0]][t_n-t_nstar:T_nm1+1-t_nstar,3])
+for i in range(len(curplatoon)):
+    t_nstar, t_n, T_nm1 = platooninfo[curplatoon[i]][:3]
+    plt.plot(list(range(t_n, T_nm1+1)), sim[curplatoon[i]][t_n-t_nstar:T_nm1+1-t_nstar,2], 'C1')
+    plt.plot(list(range(t_n, T_nm1+1)), meas[curplatoon[i]][t_n-t_nstar:T_nm1+1-t_nstar,2], 'C0')
+plt.legend(['simulation', 'measurements'])
+plt.ylabel('position')
+plt.figure()
+plt.plot(sim[curplatoon[-1]][t_n-t_nstar:T_nm1+1-t_nstar,3], 'C1')
+plt.plot(meas[curplatoon[-1]][t_n-t_nstar:T_nm1+1-t_nstar,3], 'C0')
+plt.ylabel('speed')
+plt.legend(['simulation', 'measurements'])
+
 
 start = time.time()
 #sqp = SQP2(platoonobjfn_obj,platoonobjfn_objder, platoonobjfn_der,p,bounds,nmbacktrack,(OVM, OVMadjsys, OVMadj, meas, sim, platooninfo, curplatoon, leadinfo, folinfo,rinfo,False,5), maxit = 200, t=2, eps=5e-7)
