@@ -181,7 +181,7 @@ def set_lc_helper(veh, chk_lc=1, get_fol=True):
     """
     # first determine what situation we are in and which sides we need to check
     l_lc, r_lc = veh.l_lc, veh.r_lc
-    if l_lc is None:
+    if l_lc is None:  # TODO keep the lside, rside, chk_cond in memory instead of always updating them
         if r_lc is None:
             return False, None
         elif r_lc == 'discretionary':
@@ -385,10 +385,14 @@ class Vehicle:
             relax_parameters: float parameter for relaxation; if None, no relaxation
             shift_parameters: list of float parameters for the tactical/cooperative model. shift_parameters
                 control how a vehicle can modify its acceleration in order to facilitate lane changing.
+                By default, gives the deceleration/acceleration amounts which are added to the car following
+                acceleration when the tactical/cooperative model is activated.
+                can modify the car following acceleration
             coop_parameters: float between (0, 1) which gives the base probability of the vehicle
                 cooperating with a vehicle wanting to change lanes
             route: list of road names (str) which defines the route for the vehicle.
-            route_parameters: parameters for the route model (list of floats).
+            route_parameters: parameters for the route model (list of floats). See make_cur_route for
+                explanation of the default route model.
             accbounds: tuple of bounds for acceleration.
             maxspeed: maximum allowed speed.
             hdbounds: tuple of bounds for headway.
@@ -423,7 +427,7 @@ class Vehicle:
         self.eql_type = eql_type
 
         # cooperative/tactical model
-        self.shift_parameters = [2, .4] if shift_parameters is None else shift_parameters
+        self.shift_parameters = [-3, 1.5] if shift_parameters is None else shift_parameters
         self.coop_parameters = coop_parameters
         self.lc_side = None
         self.lc_urgency = None
@@ -528,9 +532,9 @@ class Vehicle:
         else:
             if self.in_relax:
                 # accident free formulation of relaxation
-                # ttc = hd / (self.speed - lead.speed)
-                # if ttc < 1.5 and ttc > 0:
-                if False:  # disable accident free
+                ttc = hd / (self.speed - lead.speed)
+                if ttc < 1.5 and ttc > 0:
+                # if False:  # disable accident free
                     temp = (ttc/1.5)**2
                     currelax, currelax_v = self.relax[timeind-self.relax_start]  # hd + v relax
                     currelax, currelax_v = currelax*temp, currelax_v*temp
@@ -587,11 +591,16 @@ class Vehicle:
 
     def get_flow(self, x, leadlen=None, input_type='v'):
         """Input a speed or headway, and output the flow based on the equilibrium solution.
+        
+        This will automatically apply bounds to the headway/speed based on the maxspeed and hdbounds
+        attributes. Also, note that it is possible to get the maximum possible flow and corresponding
+        equilibrium solution - call inv_flow with an unattainable flow and it will return the speed/headway
+        corresponding to the maximum possible flow. Then you can call get_flow on the returned equilibrium.
 
         Args:
             x: Input, either headway or speed
             leadlen: When converting an equilibrium solution to a flow, we must use a vehicle length. leadlen
-                is that vehicle length. If None, we will infer the vehicle length.
+                is that vehicle length. If None, we will use the vehicle's own length.
             input_type: if input_type is 'v' (v for velocity), then x is a speed. Otherwise x is a headway.
                 If x is a speed, we return a headway. Otherwise we return a speed.
 
@@ -651,6 +660,10 @@ class Vehicle:
         if call_model:
             models.mobil(self, lc_actions, *args, timeind, dt)
         return
+    
+    def reset_lc_state(self):
+        """After a lc is completed successfully, reset the lc model state (e.g. reset cooperation)"""
+        self.lc_side = self.coop_veh = self.lc_urgency = None
 
     def acc_bounds(self, acc):
         """Apply acceleration bounds."""

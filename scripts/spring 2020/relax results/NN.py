@@ -134,17 +134,17 @@ for veh in veh_list:
 merge_ind = len(lc_list)
 lc_list.extend(merge_list)
 
-#%%
+
 nolc_ds, unused = deep_learning.make_dataset(meas, platooninfo, nolc_list)
 lc_ds, unused = deep_learning.make_dataset(meas, platooninfo, lc_list)
-
+#%%
 nolc_res = deep_learning.generate_trajectories(model, list(nolc_ds.keys()), nolc_ds)
 nolc_nor_res_list = make_into_analyze_res_format(nolc_res,  list(nolc_ds.keys()), meas, platooninfo)
 out1 = analyze_res_NN(nolc_nor_res_list, meas, platooninfo, .1)
 
 
 lc_nor_res = deep_learning.generate_trajectories(model, list(lc_ds.keys()), lc_ds)
-lc_res_list = make_into_analyze_res_format(lc_nor_res, list(lc_ds.keys()), meas, platooninfo)
+lc_nor_res_list = make_into_analyze_res_format(lc_nor_res, list(lc_ds.keys()), meas, platooninfo)
 out2 = analyze_res_NN(lc_nor_res_list, meas, platooninfo, .1, mergeind = merge_ind)
 
 #%% results for applying relaxation to model

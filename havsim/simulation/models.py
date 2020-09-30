@@ -7,9 +7,9 @@ import numpy as np
 def IDM(p, state):
     """Intelligent Driver Model (IDM), second order ODE.
 
-    Note that if the headway is negative, model will begin accelerating; therefore if collisions occur,
-    very bad things can potentially happen. If velocity is negative, model will begin decelerating; so if
-    negative speeds occur, very bad things will happen.
+    Note that if the headway is negative, model will begin accelerating; If velocity is negative, 
+    model will begin decelerating. Therefore you must take care to avoid any collisions or negative speeds
+    in the simulation.
 
     Args:
         p: parameters - [max speed, comfortable time headway, jam spacing, comfortable acceleration,
@@ -113,7 +113,8 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
           userelax_cur=True, userelax_new=False, use_coop=True, use_tact=True):
     """Minimizing total braking during lane change (MOBIL) lane changing decision model.
 
-    parameters: 0 - safety criteria (maximum deceleration allowed after LC, more negative = less strict),
+    parameters:
+        0 - safety criteria (maximum deceleration allowed after LC, more negative = less strict),
         1 - safety criteria for maximum deceleration allowed, when velocity is 0
         2 - incentive criteria (>0, larger = more strict. smaller = discretionary changes more likely),
         3 - politeness (taking other vehicles into account, 0 = ignore other vehicles, ~.1-.2 = realistic),
@@ -201,17 +202,18 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
         selfsafe = newla
         lcsidefolsafe = newlfola
 
-    # determine if LC can be completed, and if not, determine if we want to enter cooperative or
-    # tactical states
-
     # safety criteria formulations
-    # safe = p[0]   # default value of safety
-    # safe = veh.speed/veh.maxspeed
-    # safe = safe*p[0] + (1-safe)*p[1]  # safety changes with relative velocity
-    if lctype == 'discretionary':  # different safeties for discretionary/mandatory
-        safe = p[0]
-    else:
-        safe = p[1]
+    # default value of safety -
+    # safe = p[0] (or use the maximum safety, p[1])
+    
+    # safety changes with relative velocity (implemented in treiber, kesting' traffic-simulation.de) -
+    safe = veh.speed/veh.maxspeed
+    safe = safe*p[0] + (1-safe)*p[1]
+    
+    # if lctype == 'discretionary':  # different safeties for discretionary/mandatory
+    #     safe = p[0]
+    # else:
+    #     safe = p[1]  # or use the relative velocity safety
 
     # safeguards for negative headway (necessary for IDM)
     if newhd is not None and newhd < 0:
@@ -219,6 +221,8 @@ def mobil(veh, lc_actions, lside, rside, newlfolhd, newlhd, newrfolhd, newrhd, n
     if newlcsidefolhd is not None and newlcsidefolhd < 0:
         lcsidefolsafe = safe - 5
 
+    # determine if LC can be completed, and if not, determine if we want to enter cooperative or
+    # tactical states
     if lctype == 'discretionary':
         if incentive > p[2]:
             if selfsafe > safe and lcsidefolsafe > safe:
@@ -440,9 +444,9 @@ def coop_tact_model(veh, newlcsidefolhd, lcsidefolsafe, selfsafe, safe, side, lc
 
 def IDM_parameters(*args):
     """Suggested parameters for the IDM/MOBIL."""
-    cf_parameters = [30, 1.5, 2, 1.1, 1.5]  # note speed is supposed to be in m/s
-    # cf_parameters[0] += 3-np.random.rand()*6
-    # cf_parameters[0] += np.random.rand()*25-15 #give vehicles very different speeds for testing purposes
+    # time headway parameter = 1 -> always unstable in congested regime. 
+    # time headway = 1.5 -> restabilizes at high density
+    cf_parameters = [33.3, 1., 2, 1.1, 1.5]  # note speed is supposed to be in m/s
     lc_parameters = [-4, -10, .4, .1, 0, .2, .5]
 
     return cf_parameters, lc_parameters
