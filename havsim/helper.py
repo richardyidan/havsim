@@ -27,22 +27,27 @@ def extract_lc_data(dataset):
     """
     Questions
     1. where does dt come from?
-    2. global_x is in direction of where cars are going right?
-    3. where does the position info in meas come from?
-        The global_x, local_x, etc. don't seem to match position
+    2. global_y is in direction of where cars are going right?
+    3. When should starttime begin if you're doing MA for position?
+    4. Why should ever vehicle save dt?
     """
 
     def _get_vehid(lane_id):
         if lane_id in lane_id_to_column:
-            idx_of_lfol = lane_id_to_column[lane_id].searchsorted(global_y, side = 'left') - 1
-            return lane_id_to_veh_id[lane_id].iloc[idx_of_lfol]
-        return np.nan
+            lane_df = lane_id_to_column[lane_id]
 
-    columns = ['veh_id', 'frame_id', 'lane_id', 'global_x', 'global_y', \
-                'local_x', 'local_y', 'veh_length', 'veh_class', 'leader']
+            ordered_y = lane_df.loc[:, 'global_y']
+            idx_of_lfol = ordered_y.searchsorted(global_y, side = 'left') - 1
+
+            return lane_df.loc[:, 'veh_id'].iloc[idx_of_lfol], \
+                    lane_df.iloc[idx_of_lfol]['lead']
+        return np.nan, np.nan
+
+    columns = ['veh_id', 'frame_id', 'lane', 'global_x', 'global_y', \
+                'local_x', 'local_y', 'veh_length', 'veh_class', 'lead']
     col_idx = [0, 1, 13, 6, 7, 4, 5, 8, 10, 14]
     res = pd.DataFrame(dataset[:, col_idx], columns = columns)
-    res.sort_values(['frame_id', 'lane_id', 'global_y'], inplace = True, ascending = True)
+    res.sort_values(['frame_id', 'lane', 'global_y'], inplace = True, ascending = True)
     res['lfol'] = np.nan
 
     unique_frame_ids = res['frame_id'].unique()
@@ -51,28 +56,65 @@ def extract_lc_data(dataset):
         curr_frame = res.loc[res['frame_id'] == frame_id, :].copy()
 
         lane_id_to_column = {}
-        lane_id_to_veh_id = {}
-        # generate dictionaries from lane id to the ordered vehicle ids (by global y)
-        for lane_id in curr_frame['lane_id'].unique():
-            global_x_vals = curr_frame.loc[curr_frame['lane_id'] == lane_id, 'global_y']
-
-            # just double-checking for sanity check that global_x is increasing
-            if global_x_vals.shape[0] > 1:
-                assert((np.diff(global_x_vals) >= 0).all())
-
-            lane_id_to_column[lane_id] = global_x_vals
-            lane_id_to_veh_id[lane_id] = curr_frame.loc[curr_frame['lane_id'] == lane_id, 'veh_id']
+        # generate dictionaries from lane id to the subset of dataframe
+        for lane_id in curr_frame['lane'].unique():
+            curr_lane_sel = curr_frame['lane'] == lane_id
+            lane_id_to_column[lane_id] = curr_frame.loc[curr_lane_sel, :].copy()
 
         for idx, row in curr_frame.iterrows():
-            lane_id, global_y = row['lane_id'], row['global_y']
+            lane_id, global_y = row['lane'], row['global_y']
             if (lane_id >= 2 and lane_id <= 6) or \
                     (lane_id == 7 and global_y >= 400 and global_y <= 750):
                 left_lane_id = lane_id - 1
-                res.loc[idx, 'lfol'] = _get_vehid(lane_id - 1)
+
+                vehid, leader = _get_vehid(left_lane_id)
+                res.loc[idx, 'lfol'] = vehid
+                res.loc[idx, 'llead'] = leader
             if (lane_id >= 1 and lane_id <= 5) or \
                     (lane_id == 6 and global_y >= 400 and global_y <= 750):
-                res.loc[idx, 'rfol'] = _get_vehid(lane_id + 1)
-    return res
+                right_lane_id = lane_id + 1
+                vehid, leader = _get_vehid(right_lane_id)
+                res.loc[idx, 'rfol'] = vehid
+                res.loc[idx, 'rlead'] = leader
+
+    def convert_to_mem(veh_df, veh_dict):
+        colnames = ['lanemem', 'leadmem', 'lfolmem', 'rfolmem', 'lleadmem', 'rleadmem']
+        curr_vals = {col: None for col in colnames}
+        final_mems = [[] for col in colnames]
+        for idx, row in veh_df.iterrows():
+            for idx, col in enumerate(colnames):
+                val = row[col.replace("mem", "")]
+                if not pd.isna(val) and curr_vals[col] is None:
+                    curr_vals[col] = val
+                    final_mems[idx].append((val, row['frame_id']))
+                elif not pd.isna(val) and curr_vals[col] != val:
+                    curr_vals[col] = val
+                    final_mems[idx].append((val, row['frame_id']))
+        for idx, col in enumerate(colnames):
+            veh_dict[col] = final_mems[idx]
+
+    dt = 0.1
+    all_veh_dict = {}
+    for veh_id in tqdm(res['veh_id'].unique(), desc = "generating veh dicts"):
+        veh_dict = {}
+        veh_df = res.loc[res['veh_id'] == veh_id, :]
+        pos_mem = list(veh_df['local_y'].rolling(3).mean())
+        veh_dict['pos_mem'] = list(pos_mem)[2:]
+
+        speed_mem = [(pos_mem[i + 1] - pos_mem[i]) / dt for i in range(len(pos_mem) - 1)]
+        speed_mem.append(speed_mem[-1])
+        veh_dict['speed_mem'] = speed_mem
+
+        veh_dict['start_time'] = veh_df['frame_id'].min()
+        veh_dict['end_time'] = veh_df['frame_id'].max()
+        veh_dict['len'] = veh_dict['end_time'] - veh_dict['start_time']
+        veh_dict['dt'] = dt
+        veh_dict['vehid'] = veh_id
+
+        convert_to_mem(veh_df, veh_dict)
+        all_veh_dict[veh_id] = veh_dict
+        
+    return res, all_veh_dict
 
 def get_lead_data(veh, meas, platooninfo, rp=None, dt=.1):
     """Returns lead vehicle trajectory and possibly relaxation
