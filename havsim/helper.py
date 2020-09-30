@@ -13,17 +13,7 @@ from tqdm import tqdm
 # TODO - fix code style and documentation
 # TODO - want to update format for meas/platooninfo - have a single consolidated data structure with
 # no redundant information
-def extract_lc_data(dataset):
-
-    # questions
-    # 1. where does dt come from?
-    # 2. use global_x (in direction of lane right??)
-
-    """
-    Notes:
-    meas: "time" -> frame in raw dataset
-    """
-
+def extract_lc_data(dataset, dt = 0.1):
     """
     Questions
     1. where does dt come from?
@@ -93,13 +83,12 @@ def extract_lc_data(dataset):
         for idx, col in enumerate(colnames):
             veh_dict[col] = final_mems[idx]
 
-    dt = 0.1
     all_veh_dict = {}
     for veh_id in tqdm(res['veh_id'].unique(), desc = "generating veh dicts"):
         veh_dict = {}
         veh_df = res.loc[res['veh_id'] == veh_id, :]
-        pos_mem = list(veh_df['local_y'].rolling(3).mean())
-        veh_dict['pos_mem'] = list(pos_mem)[2:]
+        pos_mem = list(veh_df['local_y'].ewm(0.5).mean())
+        veh_dict['pos_mem'] = list(pos_mem)
 
         speed_mem = [(pos_mem[i + 1] - pos_mem[i]) / dt for i in range(len(pos_mem) - 1)]
         speed_mem.append(speed_mem[-1])
@@ -107,7 +96,7 @@ def extract_lc_data(dataset):
 
         veh_dict['start_time'] = veh_df['frame_id'].min()
         veh_dict['end_time'] = veh_df['frame_id'].max()
-        veh_dict['len'] = veh_dict['end_time'] - veh_dict['start_time']
+        veh_dict['len'] = ve_df['veh_len'].iloc[0]
         veh_dict['dt'] = dt
         veh_dict['vehid'] = veh_id
 
