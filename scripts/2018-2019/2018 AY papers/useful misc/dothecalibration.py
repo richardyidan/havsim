@@ -13,7 +13,10 @@ with sensitivity, and so you get an extra kick to the total gradient when this h
 of the extra timestep.
 @author: rlk268
 """
-
+print('----------------------------')
+print('note to self')
+print('----------------------------')
+print('I think there is a bug in the IDMadjsys coupling term')
 
 from havsim.old.opt import platoonobjfn_obj, platoonobjfn_objder, platoonobjfn_fder
 from havsim.helper import makeleadfolinfo
