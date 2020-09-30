@@ -5,11 +5,74 @@ helper functions
 import numpy as np
 import heapq
 import math
+import pandas as pd
 from collections import defaultdict
+from IPython import embed
+from tqdm import tqdm
 
 # TODO - fix code style and documentation
 # TODO - want to update format for meas/platooninfo - have a single consolidated data structure with
 # no redundant information
+def extract_lc_data(dataset):
+
+    # questions
+    # 1. where does dt come from?
+    # 2. use global_x (in direction of lane right??)
+
+    """
+    Notes:
+    meas: "time" -> frame in raw dataset
+    """
+
+    """
+    Questions
+    1. where does dt come from?
+    2. global_x is in direction of where cars are going right?
+    3. where does the position info in meas come from?
+        The global_x, local_x, etc. don't seem to match position
+    """
+
+    def _get_vehid(lane_id):
+        if lane_id in lane_id_to_column:
+            idx_of_lfol = lane_id_to_column[lane_id].searchsorted(global_y, side = 'left') - 1
+            return lane_id_to_veh_id[lane_id].iloc[idx_of_lfol]
+        return np.nan
+
+    columns = ['veh_id', 'frame_id', 'lane_id', 'global_x', 'global_y', \
+                'local_x', 'local_y', 'veh_length', 'veh_class', 'leader']
+    col_idx = [0, 1, 13, 6, 7, 4, 5, 8, 10, 14]
+    res = pd.DataFrame(dataset[:, col_idx], columns = columns)
+    res.sort_values(['frame_id', 'lane_id', 'global_y'], inplace = True, ascending = True)
+    res['lfol'] = np.nan
+
+    unique_frame_ids = res['frame_id'].unique()
+
+    for frame_id in tqdm(unique_frame_ids):
+        curr_frame = res.loc[res['frame_id'] == frame_id, :].copy()
+
+        lane_id_to_column = {}
+        lane_id_to_veh_id = {}
+        # generate dictionaries from lane id to the ordered vehicle ids (by global y)
+        for lane_id in curr_frame['lane_id'].unique():
+            global_x_vals = curr_frame.loc[curr_frame['lane_id'] == lane_id, 'global_y']
+
+            # just double-checking for sanity check that global_x is increasing
+            if global_x_vals.shape[0] > 1:
+                assert((np.diff(global_x_vals) >= 0).all())
+
+            lane_id_to_column[lane_id] = global_x_vals
+            lane_id_to_veh_id[lane_id] = curr_frame.loc[curr_frame['lane_id'] == lane_id, 'veh_id']
+
+        for idx, row in curr_frame.iterrows():
+            lane_id, global_y = row['lane_id'], row['global_y']
+            if (lane_id >= 2 and lane_id <= 6) or \
+                    (lane_id == 7 and global_y >= 400 and global_y <= 750):
+                left_lane_id = lane_id - 1
+                res.loc[idx, 'lfol'] = _get_vehid(lane_id - 1)
+            if (lane_id >= 1 and lane_id <= 5) or \
+                    (lane_id == 6 and global_y >= 400 and global_y <= 750):
+                res.loc[idx, 'rfol'] = _get_vehid(lane_id + 1)
+    return res
 
 def get_lead_data(veh, meas, platooninfo, rp=None, dt=.1):
     """Returns lead vehicle trajectory and possibly relaxation

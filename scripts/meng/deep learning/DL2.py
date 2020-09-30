@@ -6,10 +6,10 @@ import tensorflow as tf
 import math
 
 try:
-    with open('C:/Users/rlk268/OneDrive - Cornell University/havsim/data/recon-ngsim.pkl', 'rb') as f:
+    with open('/home/jiwonkim/github/havsim/data/recon-ngsim.pkl', 'rb') as f:
         meas, platooninfo = pickle.load(f) #load data
 except:
-    with open('/home/rlk268/havsim/data/recon-ngsim.pkl', 'rb') as f:
+    with open('/home/jiwonkim/github/havsim/data/recon-ngsim.pkl', 'rb') as f:
         meas, platooninfo = pickle.load(f) #load data
 
 try:
@@ -44,7 +44,7 @@ loss = deep_learning.masked_MSE_loss
 opt = tf.keras.optimizers.Adam(learning_rate = .0008)
 
 #%% train and save results
-early_stopping = False
+early_stopping = True
 
 # no early stopping -
 if not early_stopping:
